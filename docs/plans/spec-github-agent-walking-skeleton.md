@@ -259,8 +259,9 @@ https://<NGROK_DOMAIN>/webhooks/github` or `NGROK_DOMAIN not set: no tunnel`.
 **Scope:** XS
 
 ### Checkpoint 3 — Real round trip (needs your GitHub App)
-- [ ] `npm run tunnel` + `npm run dev`; open an issue in the sandbox repo → one hello within ~5 s, row `DONE`
-- [ ] The hello's own `issue_comment` → `IGNORED` `not-handled`, no reply
+- [x] `npm run tunnel` + `npm run dev`; open an issue in the sandbox repo → one hello within ~5 s, row `DONE`
+  (2026-11-10, sandbox issue #2: `DONE`, attempts 1, comment ~3.7 s after receipt)
+- [x] The hello's own `issue_comment` → `IGNORED` `not-handled`, no reply
 - [ ] All tests green; you review and commit
 
 ---
@@ -274,8 +275,8 @@ commands. Root `README.md` (short purpose + link to the guide). `AGENTS.md`: fil
 `package.json` and update "State" (no longer greenfield).
 
 **Acceptance criteria:**
-- [ ] Every command in the guide exists in `package.json`; labels are listed for reference only
-- [ ] Includes the data-persistence note and the troubleshooting section (Recent deliveries, `:4040`, `401`, `502`)
+- [x] Every command in the guide exists in `package.json`; labels are listed for reference only
+- [x] Includes the data-persistence note and the troubleshooting section (Recent deliveries, `:4040`, `401`, `502`)
 
 **Verification:**
 - [ ] Manual: you (or a fresh clone) follow the guide from zero up to the hello comment

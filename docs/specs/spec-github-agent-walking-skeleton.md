@@ -362,8 +362,8 @@ curl -i -X POST "http://localhost:$PORT/webhooks/github" -H 'Content-Type: appli
 - [ ] In "Recent deliveries", redeliver the `issues.opened` delivery → `202`; still one row; NO second hello.
 
 **Worker and hello**
-- [ ] Open an issue → within ~5 s one hello comment naming the delivery ID; row `DONE`, `attempts = 1`.
-- [ ] The hello comment's own `issue_comment` webhook → row `IGNORED` `not-handled`; NO reply: the bot never
+- [x] Open an issue → within ~5 s one hello comment naming the delivery ID; row `DONE`, `attempts = 1`.
+- [x] The hello comment's own `issue_comment` webhook → row `IGNORED` `not-handled`; NO reply: the bot never
   triggers itself.
 - [ ] Add a label or a comment to an issue → row `IGNORED` `not-handled`; nothing posted.
 - [ ] Point `GITHUB_APP_PRIVATE_KEY_PATH` to another valid PEM (`openssl genrsa -out /tmp/other.pem 2048`),

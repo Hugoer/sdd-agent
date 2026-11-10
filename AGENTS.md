@@ -6,8 +6,10 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
 - **Source of truth:** the specs in `docs/specs/`, starting with `spec-github-agent-architecture-overview.md`.
   The idea doc `docs/idea/github-ai-agent-master-technical-spec.md` still rules for parts not yet moved
   (moved parts are marked "→ moved to …"). Load only the section relevant to the task, not the whole doc.
-- **State:** greenfield — docs only, no code, no `package.json` yet. Repo: `Hugoer/sdd-agent`; target (sandbox)
-  repo: `Hugoer/sdd-agent-sandbox`.
+- **State:** spec #1 (walking skeleton) built: NestJS 12 app (ESM) with Zod env config, Prisma 7 + PostgreSQL,
+  `POST /webhooks/github` (HMAC guard, delivery dedupe), a polling worker and a hello comment. Next in the build
+  order: spec 3 (`github-providers`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+- **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
 
@@ -19,8 +21,32 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
 
 ## Commands
 
-TBD — fill in once the project is scaffolded (build, test, lint, typecheck, `prisma migrate`).
-Do not guess commands until they exist in `package.json`.
+Node 24: run `nvm use` first (`.nvmrc`). Source: `package.json` scripts.
+
+```text
+npm run dev               start the app with watch (needs .env and npm run db:up)
+npm run build             compile to dist/ (nest build)
+npm start                 run dist/main.js
+npm run typecheck         tsc --noEmit
+npm run lint              eslint . (typescript-eslint, type-checked)
+npm run format            prettier --write .
+npm test                  unit tests (src/**/*.spec.ts)
+npm run test:integration  integration tests (test/**/*.integration.spec.ts); needs npm run db:test:up
+npm run db:up             dev Postgres on 127.0.0.1:5432 (named volume, data persists)
+npm run db:down           stop dev Postgres (keeps data)
+npm run db:migrate        prisma migrate dev (create/apply migrations)
+npm run db:reset          prisma migrate reset (wipes dev data; asks first)
+npm run db:events         last 20 webhook_events rows
+npm run db:test:up        test Postgres on 127.0.0.1:5434 (in-memory data)
+npm run db:test:down      remove the test Postgres
+npm run tunnel            ngrok on NGROK_DOMAIN → PORT
+```
+
+Before declaring work done: `npm run typecheck && npm run lint && npm test && npm run test:integration`.
+
+Code conventions: ESM (`"type": "module"`, `nodenext`): relative imports end in `.js`. Config only through
+`ConfigService<Env, true>`, never `process.env`. The Prisma client is generated into `src/generated/prisma`
+(gitignored; `npm ci` runs `prisma generate`).
 
 ## Domain Rules
 
