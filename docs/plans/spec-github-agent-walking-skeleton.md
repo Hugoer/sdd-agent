@@ -192,7 +192,7 @@ per the spec's "Contracts".
 ### Checkpoint 2 — Intake
 - [x] All tests green; matrix rows "Webhook authenticity and dedupe" 1–6 pass locally with `curl` (rows stay
   `PENDING` until T8)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -208,11 +208,11 @@ per the spec's "Contracts".
 import.
 
 **Acceptance criteria:**
-- [ ] The decision table matches the spec; the comment body is exactly the spec's text
-- [ ] `grep -r "octokit" src` matches only `src/events/hello/`
+- [x] The decision table matches the spec; the comment body is exactly the spec's text
+- [x] `grep -r "octokit" src` matches only `src/events/hello/`
 
 **Verification:**
-- [ ] Unit: `event-processor.spec.ts` with a faked hello client (four cases + a client error that propagates)
+- [x] Unit: `event-processor.spec.ts` with a faked hello client (four cases + a client error that propagates)
 
 **Dependencies:** T6
 **Files:** `src/events/event-processor.ts`, `src/events/event-processor.spec.ts`,
@@ -228,11 +228,11 @@ failure → `FAILED` with `lastError` truncated to 2,000 characters. The loop ne
 before retrying on the next tick. Shutdown: stop claiming, finish the current event, then Prisma closes.
 
 **Acceptance criteria:**
-- [ ] One event at a time, oldest due first; the state transitions match spec W3
-- [ ] A failed event never stops the next one from being processed
+- [x] One event at a time, oldest due first; the state transitions match spec W3
+- [x] A failed event never stops the next one from being processed
 
 **Verification:**
-- [ ] Integration (`test/worker.integration.spec.ts`, faked hello per P7): oldest first; retry →
+- [x] Integration (`test/worker.integration.spec.ts`, faked hello per P7): oldest first; retry →
   `availableAt` ≈ +5 s / +30 s → `FAILED` after 3 with `lastError`; startup reset of `PROCESSING`; two concurrent
   `drainOnce()` → each event processed exactly once; end to end: signed `issues.opened` POST → fake called once
   with the delivery ID, row `DONE`, `attempts = 1`
@@ -248,10 +248,10 @@ otherwise runs `ngrok http --url=<domain> <PORT>`, inheriting stdio). `main.ts` 
 https://<NGROK_DOMAIN>/webhooks/github` or `NGROK_DOMAIN not set: no tunnel`.
 
 **Acceptance criteria:**
-- [ ] Both log variants appear as written; the empty-domain tunnel never starts ngrok
+- [x] Both log variants appear as written; the empty-domain tunnel never starts ngrok
 
 **Verification:**
-- [ ] Manual: `NGROK_DOMAIN=` → `npm run tunnel` fails naming the variable; with your domain → ngrok runs, and the
+- [~] Manual: `NGROK_DOMAIN=` → `npm run tunnel` fails naming the variable; with your domain → ngrok runs, and the
   app log URL matches the App's webhook URL
 
 **Dependencies:** T8
