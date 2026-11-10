@@ -1,0 +1,8 @@
+node_modules/
+dist/
+src/generated/
+coverage/
+*.tsbuildinfo
+.env
+*.pem
+.DS_Store

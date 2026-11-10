@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSING
+  DONE
+  IGNORED
+  FAILED
+
+  @@map("webhook_event_status")
+}
+
+/// One row per GitHub webhook delivery (deduplicated by delivery ID).
+model WebhookEvent {
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deliveryId   String             @unique @map("delivery_id")
+  eventName    String             @map("event_name")
+  action       String?
+  payload      Json               @db.JsonB
+  status       WebhookEventStatus @default(PENDING)
+  ignoreReason String?            @map("ignore_reason")
+  attempts     Int                @default(0)
+  availableAt  DateTime           @default(now()) @map("available_at") @db.Timestamptz
+  lastError    String?            @map("last_error")
+  receivedAt   DateTime           @default(now()) @map("received_at") @db.Timestamptz
+  processedAt  DateTime?          @map("processed_at") @db.Timestamptz
+
+  @@index([status, availableAt, receivedAt])
+  @@map("webhook_events")
+}

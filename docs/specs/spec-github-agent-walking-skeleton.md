@@ -47,15 +47,21 @@ takes a new developer from zero to that comment.
 - **W3 Worker:** one app instance, one event at a time, oldest first. States
   `PENDING → PROCESSING → DONE | IGNORED | FAILED`. Atomic claim; leftover `PROCESSING` rows are reset to
   `PENDING` at startup (they come from a crash). Bounded retries with backoff, then `FAILED` with the error.
-- **W4 Test runner:** Vitest 4 + `unplugin-swc` (decorator metadata), not Jest.
+- **W4 Test runner:** Vitest 5, not Jest. No `unplugin-swc`: Vite 8's built-in transformer emits decorator
+  metadata (proven by a DI unit test, 2026-11-10), as in NestJS 12's official `ts-esm` template.
 - **W5 PostgreSQL in Docker:** `docker-compose.yml` (`postgres:16-alpine`, named volume: data survives
   `stop`/`start`, `restart`, `down`/`up` and a Docker restart; only `down -v` deletes it) and a separate
-  `docker-compose.test.yml` (port 5433, no volume) so tests can never touch dev data.
+  `docker-compose.test.yml` (port 5434, no volume) so tests can never touch dev data. Host ports are bound to
+  `127.0.0.1`; 5434, not 5433, because the reference project's test DB already uses 5433 (changed 2026-11-10).
 - **W6 GitHub App created once with the final permissions and events** (overview §2), so it is never
   re-approved: permissions `issues`, `pull_requests`, `contents`, `checks` (write) + `metadata` (read); events
   `issues`, `issue_comment`, `pull_request`.
-- **W7 Stack:** Node 24 LTS, npm, TypeScript 5.9 strict, NestJS 11, Prisma 7 (`prisma-client` generator +
-  `@prisma/adapter-pg`), Zod 4, Vitest 4, `octokit` 5, ESLint 9 flat + `typescript-eslint` 8, Prettier. No Nx.
+- **W7 Stack:** Node 24 LTS, npm, TypeScript 6.0 strict, NestJS 12, Prisma 7 (`prisma-client` generator +
+  `@prisma/adapter-pg`), Zod 4, Vitest 5, `octokit` 5, ESLint 10 flat + `typescript-eslint` 8, Prettier. No Nx.
+  Majors bumped at build time (2026-11-10, approved): NestJS 11 → 12, TypeScript 5.9 → 6.0, Vitest 4 → 5,
+  ESLint 9 → 10. Not TypeScript 7: `typescript-eslint` 8 supports `<6.1` and Nest CLI 12 ships 6.0. Prisma stays
+  on 7 (8 is only a release candidate). NestJS 12 is ESM-only, so the project is ESM (`"type": "module"`,
+  `nodenext`, relative imports end in `.js`), following NestJS 12's `ts-esm` app template.
 - **W8 Zod only:** env validation with Zod; no class-validator. Request DTOs (none in this spec) would use a Zod
   schema + `ZodValidationPipe` (rule recorded in the overview, "Tech stack, commands, code style, tests").
 - **W9 `NGROK_DOMAIN`** (new env var, overview §5): the developer's free static ngrok domain; `npm run tunnel`
@@ -171,12 +177,12 @@ Approving this spec approves these packages (overview: new dependencies are "ask
 major at build time; `package-lock.json` is committed by the developer. If a major has moved on, the build stops
 and asks.
 
-- **Runtime:** `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `@nestjs/config` (11 / config 4),
+- **Runtime:** `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `@nestjs/config` (12),
   `reflect-metadata`, `rxjs`, `@prisma/client` + `@prisma/adapter-pg` + `pg` (7), `zod` (4), `octokit` (5).
-- **Dev:** `@nestjs/cli`, `@nestjs/schematics`, `@nestjs/testing`, `typescript` (5.9), `@types/node` (24),
-  `@types/express`, `@types/pg`, `prisma` (7), `vitest` (4), `unplugin-swc`, `@swc/core`, `eslint` (9),
+- **Dev:** `@nestjs/cli`, `@nestjs/schematics`, `@nestjs/testing`, `typescript` (6.0), `@types/node` (24),
+  `@types/express`, `@types/pg`, `prisma` (7), `vitest` (5), `eslint` (10),
   `@eslint/js`, `typescript-eslint` (8), `eslint-config-prettier`, `prettier`.
-- **Not added:** `dotenv`, `supertest` (tests use `fetch` against `app.listen(0)`), class-validator, Nx.
+- **Not added:** `unplugin-swc` / `@swc/core` (W4), `dotenv`, `supertest` (tests use `fetch` against `app.listen(0)`), class-validator, Nx.
 - **Tools installed by the developer:** Node 24 (`.nvmrc`), Docker Desktop, ngrok CLI, `openssl` (macOS default).
 
 ## Commands (`package.json` scripts)
@@ -214,8 +220,8 @@ src/
   webhook/  webhook.module.ts, webhook.controller.ts, github-webhook.guard.ts (+ .spec.ts)
   events/   events.module.ts, events.service.ts (enqueue), events.worker.ts, event-processor.ts
             hello/hello-comment.service.ts (the only Octokit import until spec 3)
+  generated/prisma/             Prisma client output (gitignored; inside src/ so `nest build` compiles it)
 prisma/     schema.prisma, migrations/
-generated/  Prisma client output (gitignored)
 scripts/    tunnel.mjs
 test/       *.integration.spec.ts, global-setup.ts (migrate deploy against the test DB)
 docker-compose.yml, docker-compose.test.yml, prisma.config.ts, vitest.config.ts,
@@ -258,7 +264,7 @@ export class GitHubWebhookGuard implements CanActivate {
 - **Unit** (`src/**/*.spec.ts`, `npm test`): env schema (each rule, defaults, error lists names not values);
   guard (valid, missing, malformed, wrong secret, length mismatch, empty body); `EventProcessor` decisions
   (`ping`, `issues.opened`, no installation, other events) with the hello client faked.
-- **Integration** (`test/*.integration.spec.ts`, real PostgreSQL on 5433, no DB mocks): the Nest app on a random
+- **Integration** (`test/*.integration.spec.ts`, real PostgreSQL on 5434, no DB mocks): the Nest app on a random
   port, called with `fetch` and signed bodies — `401` not stored; `202` stored; duplicate delivery → one row; 5 MB
   signed payload accepted; worker claims oldest first; retry backoff then `FAILED`; startup reset of
   `PROCESSING`; only one claim wins when two run concurrently. The hello client is faked at its class boundary

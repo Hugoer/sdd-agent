@@ -1,0 +1,3 @@
+-----BEGIN PRIVATE KEY-----
+not-a-real-key: passes the env schema's PEM check only; tests fake the GitHub client
+-----END PRIVATE KEY-----

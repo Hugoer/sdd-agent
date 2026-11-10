@@ -1,0 +1,6 @@
+docs/
+generated/
+dist/
+package-lock.json
+*.md
+src/generated/

@@ -1,0 +1,20 @@
+# Test database for integration tests: separate project, port 5434, data in
+# tmpfs (no volume), so tests can never touch dev data.
+name: sdd-agent-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sdd_agent
+      POSTGRES_PASSWORD: sdd_agent
+      POSTGRES_DB: sdd_agent_test
+    ports:
+      - '127.0.0.1:5434:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sdd_agent -d sdd_agent_test']
+      interval: 2s
+      timeout: 5s
+      retries: 15
