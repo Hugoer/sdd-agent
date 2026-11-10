@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #1: Walking Skeleton
 
-> **Created:** 2026-11-10 · **Status:** draft, awaiting review
+> **Created:** 2026-11-10 · **Status:** done 2026-11-10 (all tasks built; verification matrix passed)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-walking-skeleton.md` into
 > ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan
@@ -251,7 +251,7 @@ https://<NGROK_DOMAIN>/webhooks/github` or `NGROK_DOMAIN not set: no tunnel`.
 - [x] Both log variants appear as written; the empty-domain tunnel never starts ngrok
 
 **Verification:**
-- [~] Manual: `NGROK_DOMAIN=` → `npm run tunnel` fails naming the variable; with your domain → ngrok runs, and the
+- [x] Manual: `NGROK_DOMAIN=` → `npm run tunnel` fails naming the variable; with your domain → ngrok runs, and the
   app log URL matches the App's webhook URL
 
 **Dependencies:** T8
@@ -262,7 +262,7 @@ https://<NGROK_DOMAIN>/webhooks/github` or `NGROK_DOMAIN not set: no tunnel`.
 - [x] `npm run tunnel` + `npm run dev`; open an issue in the sandbox repo → one hello within ~5 s, row `DONE`
   (2026-11-10, sandbox issue #2: `DONE`, attempts 1, comment ~3.7 s after receipt)
 - [x] The hello's own `issue_comment` → `IGNORED` `not-handled`, no reply
-- [ ] All tests green; you review and commit
+- [x] All tests green; you review and commit
 
 ---
 
@@ -279,7 +279,7 @@ commands. Root `README.md` (short purpose + link to the guide). `AGENTS.md`: fil
 - [x] Includes the data-persistence note and the troubleshooting section (Recent deliveries, `:4040`, `401`, `502`)
 
 **Verification:**
-- [ ] Manual: you (or a fresh clone) follow the guide from zero up to the hello comment
+- [x] Manual: you (or a fresh clone) follow the guide from zero up to the hello comment
 
 **Dependencies:** T9
 **Files:** `docs/guides/setup-github-agent-local.md`, `README.md`, `AGENTS.md`
@@ -293,18 +293,18 @@ across a Docker restart; log grep invariants. Check the success criteria (the Oc
 specs 2/3). Record the results in the spec's matrix checkboxes.
 
 **Acceptance criteria:**
-- [ ] Every matrix row checked or reported as failing with output (no silent skips)
-- [ ] `grep` of the app log for the secret, `sha256=` and `-----BEGIN` → no match
+- [x] Every matrix row checked or reported as failing with output (no silent skips)
+- [x] `grep` of the app log for the secret, `sha256=` and `-----BEGIN` → no match
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
 
 **Dependencies:** T10
 **Files:** `docs/specs/spec-github-agent-walking-skeleton.md` (checkboxes only), plus fixes if a row fails
 **Scope:** S (more if a row fails)
 
 ### Checkpoint 4 — Complete
-- [ ] Spec "Success criteria" all checked
+- [x] Spec "Success criteria" all checked
 - [ ] You review and commit; spec 3 (`github-providers`) is next in the build order
 
 ---

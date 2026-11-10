@@ -245,6 +245,9 @@ npm run db:migrate   # applies the migrations
 restart`, `docker compose down` / `up` and a Docker Desktop restart. Only `docker compose down -v` or
 `npm run db:reset` deletes it (`db:reset` asks first).
 
+After a Docker Desktop restart (or a reboot), the Postgres container may stay stopped. Run `npm run db:up` again
+before `npm run dev`. Your data is still there.
+
 ## 7. Run
 
 Two terminals in the bot repo (`nvm use` in each):
@@ -282,6 +285,7 @@ You can also redeliver the App's earlier failed `ping` (step 9): it's stored as 
 | Delivery shows `202`, but no comment, and the row goes `FAILED` after ~35 s | `npm run db:events` (`last_error`) | Wrong App ID or private key, or the App isn't installed on the repo |
 | `npm run dev` exits at startup listing variables | the error lists names and reasons, never values | Fix those variables in `.env` |
 | `npm run tunnel` says `NGROK_DOMAIN is not set` | `.env` | Set it to your static domain (bare hostname) |
+| `npm run dev` fails with a database connection error, or a delivery shows `500` | `docker compose ps` | Postgres isn't running (e.g. after a Docker Desktop restart). Run `npm run db:up`, then restart the app / **Redeliver** |
 | `npm run db:up` fails: port 5432 already allocated | `docker ps` | Another Postgres is using 5432. Stop it |
 
 GitHub never retries a failed delivery automatically. While the app is down, deliveries are lost until you

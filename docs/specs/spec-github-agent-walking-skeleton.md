@@ -1,6 +1,6 @@
 # Spec #1 — GitHub AI Agent: Walking Skeleton
 
-> **Created:** 2026-11-10 · **Status:** approved 2026-11-10
+> **Created:** 2026-11-10 · **Status:** approved 2026-11-10 · built and verified 2026-11-10 (every matrix row passed)
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox) (public)
@@ -339,56 +339,56 @@ curl -i -X POST "http://localhost:$PORT/webhooks/github" -H 'Content-Type: appli
 ```
 
 **Setup guide**
-- [ ] Fresh clone, nothing installed but the prerequisites — follow the guide from zero → an issue opened in the
+- [x] Fresh clone, nothing installed but the prerequisites — follow the guide from zero → an issue opened in the
   sandbox repo gets exactly one hello comment from `<app>[bot]`; its row is `DONE`.
-- [ ] App running — the startup log shows `Webhook URL: https://<NGROK_DOMAIN>/webhooks/github`, identical to the
+- [x] App running — the startup log shows `Webhook URL: https://<NGROK_DOMAIN>/webhooks/github`, identical to the
   App's webhook URL.
-- [ ] `NGROK_DOMAIN` empty — `npm run tunnel` exits with a message naming `NGROK_DOMAIN`; ngrok does not start.
+- [x] `NGROK_DOMAIN` empty — `npm run tunnel` exits with a message naming `NGROK_DOMAIN`; ngrok does not start.
 
 **Configuration**
-- [ ] Remove `GITHUB_WEBHOOK_SECRET` from `.env` — `npm run dev` exits; the message names the variable; no secret
+- [x] Remove `GITHUB_WEBHOOK_SECRET` from `.env` — `npm run dev` exits; the message names the variable; no secret
   value appears in the output.
-- [ ] `GITHUB_APP_PRIVATE_KEY_PATH` points to a missing file — the app refuses to start, naming the variable.
-- [ ] `PORT=70000` — the app refuses to start, naming `PORT`.
-- [ ] `NGROK_DOMAIN=https://x.ngrok-free.app/` — the app refuses to start (scheme not allowed).
+- [x] `GITHUB_APP_PRIVATE_KEY_PATH` points to a missing file — the app refuses to start, naming the variable.
+- [x] `PORT=70000` — the app refuses to start, naming `PORT`.
+- [x] `NGROK_DOMAIN=https://x.ngrok-free.app/` — the app refuses to start (scheme not allowed).
 
 **Webhook authenticity and dedupe**
-- [ ] `curl` without `X-Hub-Signature-256` → `401`; `db:events` shows NO new row.
-- [ ] The signed request above with one character of the body changed after signing → `401`; no new row.
-- [ ] The signed request above → `202`; one new row `IGNORED` `ping`.
-- [ ] The same request again with the same `X-GitHub-Delivery` → `202`; still one row for that delivery.
-- [ ] Signed request without `X-GitHub-Delivery` → `400`; no new row.
-- [ ] A signed ~5 MB body → `202`; the row is stored (no `413`).
-- [ ] In "Recent deliveries", redeliver the `issues.opened` delivery → `202`; still one row; NO second hello.
+- [x] `curl` without `X-Hub-Signature-256` → `401`; `db:events` shows NO new row.
+- [x] The signed request above with one character of the body changed after signing → `401`; no new row.
+- [x] The signed request above → `202`; one new row `IGNORED` `ping`.
+- [x] The same request again with the same `X-GitHub-Delivery` → `202`; still one row for that delivery.
+- [x] Signed request without `X-GitHub-Delivery` → `400`; no new row.
+- [x] A signed ~5 MB body → `202`; the row is stored (no `413`).
+- [x] In "Recent deliveries", redeliver the `issues.opened` delivery → `202`; still one row; NO second hello.
 
 **Worker and hello**
 - [x] Open an issue → within ~5 s one hello comment naming the delivery ID; row `DONE`, `attempts = 1`.
 - [x] The hello comment's own `issue_comment` webhook → row `IGNORED` `not-handled`; NO reply: the bot never
   triggers itself.
-- [ ] Add a label or a comment to an issue → row `IGNORED` `not-handled`; nothing posted.
-- [ ] Point `GITHUB_APP_PRIVATE_KEY_PATH` to another valid PEM (`openssl genrsa -out /tmp/other.pem 2048`),
+- [x] Add a label or a comment to an issue → row `IGNORED` `not-handled`; nothing posted.
+- [x] Point `GITHUB_APP_PRIVATE_KEY_PATH` to another valid PEM (`openssl genrsa -out /tmp/other.pem 2048`),
   restart, open an issue → no comment; after ~35 s the row is `FAILED`, `attempts = 3`, `lastError` set; the app
   keeps running and processes the next event.
-- [ ] Stop the app, open an issue (delivery fails, ngrok `502`), start the app, redeliver → one hello.
-- [ ] With the app stopped, set a row to `PROCESSING` via `psql`, start the app → the row is processed again
+- [x] Stop the app, open an issue (delivery fails, ngrok `502`), start the app, redeliver → one hello.
+- [x] With the app stopped, set a row to `PROCESSING` via `psql`, start the app → the row is processed again
   (reset at startup).
 
 **Persistence**
-- [ ] `npm run db:down` then `npm run db:up` (and separately a Docker Desktop restart) → `db:events` still shows the
+- [x] `npm run db:down` then `npm run db:up` (and separately a Docker Desktop restart) → `db:events` still shows the
   earlier rows.
-- [ ] `npm run db:test:down` → dev rows unaffected (separate container).
+- [x] `npm run db:test:down` → dev rows unaffected (separate container).
 
 **Invariants**
-- [ ] After all rows above, `grep` the app log for the webhook secret, `sha256=` and `-----BEGIN` → no match.
-- [ ] No path ever produces two hello comments for one delivery ID, except the accepted crash window (W2).
-- [ ] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
+- [x] After all rows above, `grep` the app log for the webhook secret, `sha256=` and `-----BEGIN` → no match.
+- [x] No path ever produces two hello comments for one delivery ID, except the accepted crash window (W2).
+- [x] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
 
 ## Success criteria
 
-- [ ] Every row of the verification matrix passes on the developer's machine.
-- [ ] `AGENTS.md` → Commands and "State" reflect the scaffolded project; `README.md` links to the guide.
-- [ ] Only `src/events/hello/` imports Octokit; the controller makes no outbound call.
-- [ ] Specs 2 and 3 can replace `EventProcessor` and the hello client without changing the controller, the guard
+- [x] Every row of the verification matrix passes on the developer's machine.
+- [x] `AGENTS.md` → Commands and "State" reflect the scaffolded project; `README.md` links to the guide.
+- [x] Only `src/events/hello/` imports Octokit; the controller makes no outbound call.
+- [x] Specs 2 and 3 can replace `EventProcessor` and the hello client without changing the controller, the guard
   or the `WebhookEvent` columns defined here.
 
 ## Open questions
