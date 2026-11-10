@@ -20,7 +20,7 @@ Scaffold the NestJS bot and prove the round trip GitHub → ngrok → `POST /web
 
 | # | Decision | Why |
 |---|---|---|
-| P1 | `src/app.setup.ts` exports `createApp()` (NestFactory with `rawBody: true`, 25 MB JSON limit via `app.useBodyParser('json', { limit: '25mb' })`, shutdown hooks). `main.ts` and the integration tests both use it. | Tests then exercise the real raw-body and size-limit config instead of a copy. One extra file not listed in the spec's "Project structure". |
+| P1 | `src/app.setup.ts` exports `appOptions` (`rawBody: true`) and `configureApp(app)` (25 MB JSON limit via `app.useBodyParser('json', …)`, shutdown hooks). `main.ts` uses them with `NestFactory.create`; integration tests use them with `Test.createTestingModule(…).overrideProvider(…)` (built in T6: a single `createApp()` could not take provider overrides). | Tests then exercise the real raw-body and size-limit config instead of a copy (mutation-checked in T6). One extra file not listed in the spec's "Project structure". |
 | P2 | `enqueue()` = `createMany({ data: [row], skipDuplicates: true })`; `duplicate = count === 0`. | `INSERT … ON CONFLICT DO NOTHING`: no exception handling, the first row stays unchanged (spec row 4). |
 | P3 | Claim = `findFirst` (oldest due `PENDING`) + `updateMany({ where: { id, status: 'PENDING' } })`; if `count === 0`, try the next one. | This is the spec's "one atomic update that only succeeds if still `PENDING`", with no raw SQL. The concurrent-claim integration test proves it. |
 | P4 | The worker exposes `drainOnce()` (claims and processes until nothing is due). The `setTimeout` loop calls it. Tests call it directly and move `availableAt` into the past instead of waiting 5 s / 30 s. | Fast, deterministic integration tests with no fake timers on top of a real DB. |
@@ -145,7 +145,7 @@ tests. One smoke integration test: boot `AppModule`, write and read one row.
 ### Checkpoint 1 — Foundation
 - [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [x] Config matrix rows (4) pass manually
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -157,11 +157,11 @@ tests. One smoke integration test: boot `AppModule`, write and read one row.
 `ConfigService`, the `sha256=` prefix, length checked before `timingSafeEqual`, otherwise `401`.
 
 **Acceptance criteria:**
-- [ ] `401` for a missing, malformed or wrong-secret signature, a length mismatch, or an empty body with a wrong signature
-- [ ] The secret and header are never logged
+- [x] `401` for a missing, malformed or wrong-secret signature, a length mismatch, or an empty body with a wrong signature
+- [x] The secret and header are never logged
 
 **Verification:**
-- [ ] Unit: `github-webhook.guard.spec.ts`, every case from the spec's "Testing strategy"
+- [x] Unit: `github-webhook.guard.spec.ts`, every case from the spec's "Testing strategy"
 
 **Dependencies:** T2
 **Files:** `src/webhook/github-webhook.guard.ts`, `src/webhook/github-webhook.guard.spec.ts`
@@ -175,14 +175,14 @@ the delivery ID, event, action and outcome, never the payload). `EventsModule` +
 per the spec's "Contracts".
 
 **Acceptance criteria:**
-- [ ] The four rows of the spec's request table behave exactly as written
-- [ ] A signed 5 MB body is accepted (no `413`)
-- [ ] The controller makes no outbound call; DB down → `500`
+- [x] The four rows of the spec's request table behave exactly as written
+- [x] A signed 5 MB body is accepted (no `413`)
+- [x] The controller makes no outbound call; DB down → `500`
 
 **Verification:**
-- [ ] Integration (`test/webhook.integration.spec.ts`, `app.listen(0)` + `fetch` + signed bodies): `401` not
+- [x] Integration (`test/webhook.integration.spec.ts`, `app.listen(0)` + `fetch` + signed bodies): `401` not
   stored; `400` not stored; `202` stored `PENDING`; duplicate → one row, first row unchanged; 5 MB accepted
-- [ ] Manual: the spec's `curl` (no tunnel) → `202`, row visible in `db:events`
+- [x] Manual: the spec's `curl` (no tunnel) → `202`, row visible in `db:events`
 
 **Dependencies:** T4, T5
 **Files:** `src/app.setup.ts`, `src/main.ts`, `src/webhook/webhook.module.ts`, `src/webhook/webhook.controller.ts`,
@@ -190,7 +190,7 @@ per the spec's "Contracts".
 **Scope:** M (7 files, mostly small)
 
 ### Checkpoint 2 — Intake
-- [ ] All tests green; matrix rows "Webhook authenticity and dedupe" 1–6 pass locally with `curl` (rows stay
+- [x] All tests green; matrix rows "Webhook authenticity and dedupe" 1–6 pass locally with `curl` (rows stay
   `PENDING` until T8)
 - [ ] You review and commit
 

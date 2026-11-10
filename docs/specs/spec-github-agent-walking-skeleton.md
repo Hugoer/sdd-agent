@@ -239,15 +239,16 @@ export class GitHubWebhookGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<RawBodyRequest<Request>>();
-    const header = req.header('x-hub-signature-256') ?? '';
-    const expected =
+    const received = Buffer.from(req.header('x-hub-signature-256') ?? '');
+    const expected = Buffer.from(
       'sha256=' +
-      createHmac('sha256', this.config.get('GITHUB_WEBHOOK_SECRET'))
-        .update(req.rawBody ?? Buffer.alloc(0))
-        .digest('hex');
-    const ok =
-      header.length === expected.length &&
-      timingSafeEqual(Buffer.from(header), Buffer.from(expected));
+        createHmac('sha256', this.config.get('GITHUB_WEBHOOK_SECRET'))
+          .update(req.rawBody ?? Buffer.alloc(0))
+          .digest('hex'),
+    );
+    // Byte lengths, not string lengths: a non-ASCII header of the right string length would make
+    // timingSafeEqual throw (500) instead of returning 401 (found in the build, 2026-11-10).
+    const ok = received.length === expected.length && timingSafeEqual(received, expected);
     if (!ok) throw new UnauthorizedException();
     return true;
   }
