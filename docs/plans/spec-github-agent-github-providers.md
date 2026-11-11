@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #3: GitHub Providers
 
-> **Created:** 2026-11-10 · **Status:** approved 2026-11-11 (including P1–P9) · building
+> **Created:** 2026-11-10 · **Status:** approved 2026-11-11 (including P1–P9) · built and verified 2026-11-11
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-github-providers.md` into
 > ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan
@@ -191,7 +191,7 @@ integration harness boots offline (P3). The old hello client still posts the hel
 - [x] The 11 labels exist in the sandbox with the spec's colors and descriptions; the repo's own labels unchanged
 - [x] `TARGET_REPO=Hugoer/sdd-agent` → the app exits with the "not installed" message; port closed
 - [x] Opening an issue still gets the hello (old client)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -231,7 +231,7 @@ tests move from the fake hello service to the in-memory provider; the payload fi
 
 **Verification:**
 - [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: open a sandbox issue → one hello from `<app>[bot]`; row `DONE`
+- [x] Manual: open a sandbox issue → one hello from `<app>[bot]`; row `DONE`
 
 **Dependencies:** T7
 **Files:** `src/events/event-processor.ts` (+ `.spec.ts`), `src/events/events.module.ts`, `test/app.ts`,
@@ -261,7 +261,7 @@ other error keep spec 1's retries; `retryAfterSeconds` sets a minimum wait (A2).
 - [x] Open a sandbox issue → one hello; the hello's own webhook → `IGNORED` `not-handled`
 - [x] Signed request for `someone/other-repo` → `IGNORED` `other-repo`, no comment
 - [x] Signed request with `N=999999` → `FAILED` at once, `attempts = 1`, `last_error` shows the `404`
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -369,7 +369,7 @@ gains the PR checks (`--branch`, `--sha`).
 - [x] All four commands green
 - [x] Every smoke group prints `PASS`; exit code 0; a second run opens no second PR and adds no second check run
 - [x] `grep` the smoke output for `ghs_` → no match
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -383,8 +383,8 @@ first start and its failure messages, the labels reference, the smoke section, t
 changed.
 
 **Acceptance criteria:**
-- [ ] Every command in the guide exists in `package.json`; the labels table matches `labels.ts`
-- [ ] `AGENTS.md` says spec 3 is built and names the next spec (2, `intake-authorization`)
+- [x] Every command in the guide exists in `package.json`; the labels table matches `labels.ts`
+- [x] `AGENTS.md` says spec 3 is built and names the next spec (2, `intake-authorization`)
 
 **Verification:**
 - [ ] Manual: you read the changed guide sections once
@@ -401,11 +401,11 @@ GitHub UI steps and the redelivery, one step per message. Results are ticked in 
 lines are set.
 
 **Acceptance criteria:**
-- [ ] Every matrix row is ticked or reported as failing with its output (no silent skips)
-- [ ] The spec's success criteria are checked, including the Octokit import `grep`
+- [x] Every matrix row is ticked or reported as failing with its output (no silent skips)
+- [x] The spec's success criteria are checked, including the Octokit import `grep`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
 
 **Dependencies:** T15
 **Files:** `docs/specs/spec-github-agent-github-providers.md` and this plan (checkboxes and status only), plus
@@ -413,7 +413,7 @@ fixes if a row fails
 **Scope:** S (more if a row fails)
 
 ### Checkpoint 4 — Complete
-- [ ] The spec's "Success criteria" are all checked
+- [x] The spec's "Success criteria" are all checked
 - [ ] You review and commit; spec 2 (`intake-authorization`) is next in the build order
 
 ---

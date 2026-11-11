@@ -4,8 +4,9 @@ A GitHub App bot that receives issue webhooks and moves issues through a
 Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by labels. It works on a separate sandbox
 (target) repo, never on this one.
 
-**Status:** walking skeleton (spec #1). The bot receives signed webhooks, stores each delivery once, and posts
-a hello comment when an issue is opened in the sandbox repo.
+**Status:** specs #1 (walking skeleton) and #3 (GitHub providers) built. The bot receives signed webhooks,
+stores each delivery once, checks its GitHub App at startup (and creates its labels), and posts a hello comment
+when an issue is opened in the sandbox repo.
 
 ## Get started
 

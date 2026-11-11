@@ -7,8 +7,11 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   The idea doc `docs/idea/github-ai-agent-master-technical-spec.md` still rules for parts not yet moved
   (moved parts are marked "→ moved to …"). Load only the section relevant to the task, not the whole doc.
 - **State:** spec #1 (walking skeleton) built: NestJS 12 app (ESM) with Zod env config, Prisma 7 + PostgreSQL,
-  `POST /webhooks/github` (HMAC guard, delivery dedupe), a polling worker and a hello comment. Next in the build
-  order: spec 3 (`github-providers`): spec approved 2026-11-10, plan and build pending. Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  `POST /webhooks/github` (HMAC guard, delivery dedupe), a polling worker and a hello comment. Spec 3
+  (`github-providers`) built 2026-11-11: `GitHubModule` (App auth on `TARGET_REPO`, startup checks, label
+  bootstrap), the `IssueProvider` / `RepoProvider` adapters behind `ISSUE_PROVIDER` / `REPO_PROVIDER`, in-memory
+  fakes in `test/fakes/`, and `npm run github:smoke`. Next in the build order: spec 2 (`intake-authorization`):
+  spec not written yet. Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
@@ -40,6 +43,7 @@ npm run db:events         last 20 webhook_events rows
 npm run db:test:up        test Postgres on 127.0.0.1:5434 (in-memory data)
 npm run db:test:down      remove the test Postgres
 npm run tunnel            ngrok on NGROK_DOMAIN → PORT
+npm run github:smoke      every GitHub method once on TARGET_REPO (-- --issue <n>; stop npm run dev first)
 ```
 
 Before declaring work done: `npm run typecheck && npm run lint && npm test && npm run test:integration`.

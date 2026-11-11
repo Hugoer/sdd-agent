@@ -1,6 +1,6 @@
 # Spec #3 — GitHub AI Agent: GitHub Providers
 
-> **Created:** 2026-11-10 · **Status:** approved 2026-11-10 (including A1–A5) · not built yet
+> **Created:** 2026-11-10 · **Status:** approved 2026-11-10 (including A1–A5) · built and verified 2026-11-11 (every matrix row passed)
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -420,78 +420,78 @@ curl -i -X POST "http://localhost:$PORT/webhooks/github" -H 'Content-Type: appli
 ```
 
 **Startup and labels**
-- [ ] Sandbox repo without the bot's labels — start the app → the 11 labels exist with the spec's colors and
+- [x] Sandbox repo without the bot's labels — start the app → the 11 labels exist with the spec's colors and
   descriptions; the log names `<app>[bot]`, `TARGET_REPO` and "11 created".
-- [ ] All 11 present, one recolored by hand — restart → log says 0 created; the hand-set color is kept.
-- [ ] Delete only `status: grilling` in the Labels page — restart → only that label is recreated.
-- [ ] In all rows above the repo's own labels (`bug`, `enhancement`, …) are unchanged.
-- [ ] `TARGET_REPO` removed from `.env` → the app refuses to start, naming `TARGET_REPO`. `TARGET_REPO=foo` → same.
-- [ ] `TARGET_REPO=Hugoer/sdd-agent` (App not installed there) → the app exits with code 1 within seconds; the
+- [x] All 11 present, one recolored by hand — restart → log says 0 created; the hand-set color is kept.
+- [x] Delete only `status: grilling` in the Labels page — restart → only that label is recreated.
+- [x] In all rows above the repo's own labels (`bug`, `enhancement`, …) are unchanged.
+- [x] `TARGET_REPO` removed from `.env` → the app refuses to start, naming `TARGET_REPO`. `TARGET_REPO=foo` → same.
+- [x] `TARGET_REPO=Hugoer/sdd-agent` (App not installed there) → the app exits with code 1 within seconds; the
   message says the App is not installed on that repo; the port is NOT listening (`curl` → connection refused).
-- [ ] `GITHUB_APP_PRIVATE_KEY_PATH` → another valid PEM (`openssl genrsa -out /tmp/other.pem 2048`) → the app
+- [x] `GITHUB_APP_PRIVATE_KEY_PATH` → another valid PEM (`openssl genrsa -out /tmp/other.pem 2048`) → the app
   exits; the message names `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY_PATH`.
-- [ ] Wi-Fi off → `npm start` exits with the "GitHub is unreachable" message; it does NOT keep retrying.
+- [x] Wi-Fi off → `npm start` exits with the "GitHub is unreachable" message; it does NOT keep retrying.
 
 **Hello through the provider**
-- [ ] Open an issue in the sandbox repo → within ~5 s one hello comment from `<app>[bot]`; row `DONE`,
+- [x] Open an issue in the sandbox repo → within ~5 s one hello comment from `<app>[bot]`; row `DONE`,
   `attempts = 1`.
-- [ ] Signed request with `REPO=someone/other-repo` → `202`; row `IGNORED` `other-repo`; NO comment anywhere.
-- [ ] Signed request with `N=999999` (no such issue) → row `FAILED` at once with `attempts = 1`; `last_error`
+- [x] Signed request with `REPO=someone/other-repo` → `202`; row `IGNORED` `other-repo`; NO comment anywhere.
+- [x] Signed request with `N=999999` (no such issue) → row `FAILED` at once with `attempts = 1`; `last_error`
   shows the `404`; the app keeps running and handles the next event.
-- [ ] Wi-Fi off, signed request for an existing issue; when the log shows "attempt 1/3 failed", Wi-Fi on →
+- [x] Wi-Fi off, signed request for an existing issue; when the log shows "attempt 1/3 failed", Wi-Fi on →
   exactly one hello; row `DONE` with `attempts` 2 or 3.
-- [ ] Wi-Fi off for the whole time, signed request → after ~35 s row `FAILED`, `attempts = 3`.
-- [ ] Redeliver the `issues.opened` delivery from "Recent deliveries" → still one row; NO second hello.
-- [ ] The hello's own `issue_comment` webhook → row `IGNORED` `not-handled`; NO reply.
+- [x] Wi-Fi off for the whole time, signed request → after ~35 s row `FAILED`, `attempts = 3`.
+- [x] Redeliver the `issues.opened` delivery from "Recent deliveries" → still one row; NO second hello.
+- [x] The hello's own `issue_comment` webhook → row `IGNORED` `not-handled`; NO reply.
 
 **Smoke script — issue** (precondition: a new sandbox issue `#N` with the labels `grill: skip` and `bug` added by
 hand)
-- [ ] `npm run github:smoke -- --issue N` → every line `PASS`, exit code 0.
-- [ ] On GitHub afterwards: one smoke comment from `<app>[bot]`; exactly one `status: *` label
+- [x] `npm run github:smoke -- --issue N` → every line `PASS`, exit code 0.
+- [x] On GitHub afterwards: one smoke comment from `<app>[bot]`; exactly one `status: *` label
   (`status: spec-review`); `grill: skip` is gone; `bug` is still there.
-- [ ] The output shows `hasWriteAccess` `true` for you, `false` for `octocat` and `false` for the invented login.
-- [ ] The output shows the content of `.github-agent/workflow.json`, `null` for the missing file, an error for
+- [x] The output shows `hasWriteAccess` `true` for you, `false` for `octocat` and `false` for the invented login.
+- [x] The output shows the content of `.github-agent/workflow.json`, `null` for the missing file, an error for
   the missing ref, the listing of `.github-agent`, and `null` for the missing directory.
-- [ ] Run it again → `PASS`; the issue still has exactly one `status: *` label; one more smoke comment.
+- [x] Run it again → `PASS`; the issue still has exactly one `status: *` label; one more smoke comment.
 
 **Smoke script — skill directory** (precondition: from your sandbox clone, push to `main` a directory
 `smoke-skill/` with `SKILL.md`, `references/a.md` and `scripts/run.sh` made executable with
 `git update-index --chmod=+x`)
-- [ ] `npm run github:smoke -- --issue N --dir smoke-skill` → the listing shows exactly those three files with
+- [x] `npm run github:smoke -- --issue N --dir smoke-skill` → the listing shows exactly those three files with
   their nested paths and sizes; `executable` is `true` only for `scripts/run.sh`.
 
 **Smoke script — push credentials**
-- [ ] The output shows `authorName` `<app>[bot]`, `authorEmail` `<id>+<app>[bot]@users.noreply.github.com`,
+- [x] The output shows `authorName` `<app>[bot]`, `authorEmail` `<id>+<app>[bot]@users.noreply.github.com`,
   `remoteUrl` `https://github.com/<TARGET_REPO>.git`, an expiry about 1 h ahead, two different tokens (lengths
   only), and `PASS` for "push token cannot comment (403)".
 
 **Smoke script — PR and check run** (precondition: in the GitHub UI, create branch `smoke/spec-3` from `main` and
 commit one small edit on it; `SHA` = that commit)
-- [ ] `npm run github:smoke -- --issue N --branch smoke/spec-3 --sha SHA` → a PR from `smoke/spec-3` into `main`
+- [x] `npm run github:smoke -- --issue N --branch smoke/spec-3 --sha SHA` → a PR from `smoke/spec-3` into `main`
   opened by `<app>[bot]`; one PR comment from the bot; the Checks tab shows exactly one `Quality Gate` check run,
   conclusion `success`.
-- [ ] Run the same command again → NO second PR; still exactly one `Quality Gate` check run on that commit.
+- [x] Run the same command again → NO second PR; still exactly one `Quality Gate` check run on that commit.
 
 **Invariants**
-- [ ] `grep -rnE "from '(octokit|@octokit)" src --include='*.ts' --exclude-dir=generated` → matches only under
+- [x] `grep -rnE "from '(octokit|@octokit)" src --include='*.ts' --exclude-dir=generated` → matches only under
   `src/github/`; `src/events/hello/` doesn't exist.
-- [ ] After all rows: `grep` the app log and the smoke output for `ghs_`, `-----BEGIN` and the webhook secret → no
+- [x] After all rows: `grep` the app log and the smoke output for `ghs_`, `-----BEGIN` and the webhook secret → no
   match.
-- [ ] After all rows: no issue timeline shows the bot adding a `workflow: *` or `grill: skip` label, and no label
+- [x] After all rows: no issue timeline shows the bot adding a `workflow: *` or `grill: skip` label, and no label
   of the repo was edited or deleted by the bot.
-- [ ] No path sends a GitHub write twice inside one attempt (unit test: a `500` on `postComment` → one request).
-- [ ] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
+- [x] No path sends a GitHub write twice inside one attempt (unit test: a `500` on `postComment` → one request).
+- [x] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
 
 Not checked by hand: the missing-permission startup message (changing the App's permissions would need a new
 approval of the installation); it is covered by a unit test.
 
 ## Success criteria
 
-- [ ] Every row of the verification matrix passes on the developer's machine.
-- [ ] `src/contracts` matches overview §4 signature by signature; only `src/github` imports Octokit.
-- [ ] Specs 2, 4 and 5 can be built against `ISSUE_PROVIDER`, `REPO_PROVIDER` and `test/fakes/` without changing
+- [x] Every row of the verification matrix passes on the developer's machine.
+- [x] `src/contracts` matches overview §4 signature by signature; only `src/github` imports Octokit.
+- [x] Specs 2, 4 and 5 can be built against `ISSUE_PROVIDER`, `REPO_PROVIDER` and `test/fakes/` without changing
   `src/github`.
-- [ ] The setup guide, `.env.example`, `AGENTS.md` (State, Commands) and the overview reflect this spec.
+- [x] The setup guide, `.env.example`, `AGENTS.md` (State, Commands) and the overview reflect this spec.
 
 ## Open questions
 

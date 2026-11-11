@@ -3,6 +3,8 @@
 > **Created:** 2026-11-10 · **Why this file exists:** setup guide for spec #1
 > (`docs/specs/spec-github-agent-walking-skeleton.md`, "Setup & configuration"). It takes a new developer from
 > zero to the bot's first comment on a sandbox issue. Living doc: each later spec that changes setup updates it.
+> **Updated:** 2026-11-11 for spec #3 (`docs/specs/spec-github-agent-github-providers.md`): `TARGET_REPO`, the
+> startup checks, the labels, the smoke script.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds `<your-app>[bot]` comments:
 
@@ -13,10 +15,11 @@
 **How the pieces connect:** GitHub sends a webhook → your ngrok static domain → the NestJS app on
 `localhost:3000` → PostgreSQL (Docker) → a background worker → a comment through the GitHub App.
 
-You will collect four values on the way. They all go into `.env` in step 5:
+You will collect five values on the way. They all go into `.env` in step 5:
 
 | Value | From | `.env` variable |
 |---|---|---|
+| Sandbox repo, as `owner/name` | step 3 | `TARGET_REPO` |
 | ngrok static domain | step 2 | `NGROK_DOMAIN` |
 | Webhook secret | step 4 (`openssl`) | `GITHUB_WEBHOOK_SECRET` |
 | App ID | step 4 (App settings page) | `GITHUB_APP_ID` |
@@ -128,7 +131,7 @@ The bot works only on this repo, never on the bot repo itself.
    });
    ```
 
-   `.github-agent/workflow.json` (step skills; empty for now, nothing reads it yet. From spec 4 on, every step a
+   `.github-agent/workflow.json` (step skills; empty for now, only `npm run github:smoke` reads it. From spec 4 on, every step a
    workflow label uses needs a skill mapped here: there is no built-in fallback prompt):
 
    ```json
@@ -207,8 +210,8 @@ Create it once with its final permissions and events, so it never needs re-appro
    ```
 
 5. **Install App** (left sidebar of the App's settings) → your account → **Only select repositories** → pick the
-   sandbox repo **only**. Until a later spec adds a target-repo filter, the bot greets every repo the App is
-   installed on. To check: the sandbox repo's **Settings → Integrations → GitHub Apps** lists your App.
+   sandbox repo **only**. The bot works only on `TARGET_REPO` (step 5): an event from any other repo is stored
+   as `IGNORED` / `other-repo`. To check: the sandbox repo's **Settings → Integrations → GitHub Apps** lists your App.
 
 When you create the App, GitHub sends a `ping` webhook. It fails because the app isn't running yet. That's
 expected.
@@ -222,7 +225,7 @@ npm ci                 # also generates the Prisma client
 cp .env.example .env
 ```
 
-Fill in `.env` with the four values above. `DATABASE_URL` and `PORT` can stay as in `.env.example`:
+Fill in `.env` with the five values above. `DATABASE_URL` and `PORT` can stay as in `.env.example`:
 
 ```sh
 PORT=3000
@@ -230,6 +233,7 @@ DATABASE_URL=postgresql://sdd_agent:sdd_agent@localhost:5432/sdd_agent
 GITHUB_WEBHOOK_SECRET=<step 4.1>
 GITHUB_APP_ID=<step 4.3>
 GITHUB_APP_PRIVATE_KEY_PATH=/Users/<you>/.config/sdd-agent/github-app.pem
+TARGET_REPO=<you>/sdd-agent-sandbox
 NGROK_DOMAIN=<step 2>
 ```
 
@@ -261,6 +265,27 @@ npm run dev      # terminal 2: the app, restarts on file changes
 Check the app log line `Webhook URL: https://<NGROK_DOMAIN>/webhooks/github`. It must match the App's webhook
 URL exactly.
 
+**First start.** Before it listens, the app checks GitHub: it finds the App's installation on `TARGET_REPO`,
+checks its permissions, looks up the bot user and creates the bot labels that are missing. The first start
+creates the 11 labels of "Reference: labels"; later starts find them:
+
+```text
+Labels on <you>/sdd-agent-sandbox: 11 created, 0 already present
+GitHub ready: <your-app>[bot] on <you>/sdd-agent-sandbox (installation <id>)
+```
+
+If a check fails, the app prints one message and exits with code 1; the port is never opened. Fix the cause,
+then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
+
+| Message starts with | Cause | Fix |
+|---|---|---|
+| `GitHub rejected the App credentials` | `GITHUB_APP_ID` and the private key don't belong to the same App | Check both (steps 4.3 and 4.4); generate a new key if needed |
+| `The GitHub App is not installed on <repo>` | The App isn't installed on `TARGET_REPO`, or the name is wrong | Install it (step 4.5) or fix `TARGET_REPO` |
+| `The GitHub App is missing permissions on <repo>` | A permission of step 4.2 is missing (the message names it) | App settings → **Permissions & events**: fix and save. Then accept the new permissions on the installation (your account's **Settings → Applications → Installed GitHub Apps → Configure**) |
+| `GitHub refused to create a label` | The App lacks **Issues: Read and write** | As above |
+| `GitHub is unreachable` | No network, or GitHub is down | Check the connection, then start again |
+| `GitHub startup failed:` | Any other GitHub answer (the message holds it) | Read GitHub's message |
+
 ## 8. Smoke test
 
 1. Open an issue in the sandbox repo.
@@ -283,7 +308,11 @@ You can also redeliver the App's earlier failed `ping` (step 9): it's stored as 
 | No comment, nothing in the app log | App settings → **Advanced → Recent deliveries** (status, response, **Redeliver**) | Is the webhook URL right? Are the tunnel and the app both running? |
 | Delivery shows `502` | ngrok inspector <http://localhost:4040> | The app isn't running on `PORT`. Start `npm run dev`, then **Redeliver** |
 | Delivery shows `401` | app log | `GITHUB_WEBHOOK_SECRET` doesn't match the App's webhook secret. Fix it, restart, redeliver |
-| Delivery shows `202`, but no comment, and the row goes `FAILED` after ~35 s | `npm run db:events` (`last_error`) | Wrong App ID or private key, or the App isn't installed on the repo |
+| Delivery shows `202`, no comment, and the row is `FAILED` with attempts `1` | `npm run db:events` (`last_error`) | A permanent GitHub error, e.g. `404` (the issue was deleted or transferred) or `403` (a missing permission). It is not retried; fix the cause. Redelivering the same delivery is ignored |
+| Delivery shows `202`, no comment, and the row goes `FAILED` with attempts `3` | `npm run db:events` (`last_error`) | GitHub was unreachable, answered `5xx` or rate-limited three times (about 35 s, longer after a rate limit). Check the connection |
+| The row is `IGNORED` / `other-repo` | the delivery's repository | The App is installed on another repo too; the bot only works on `TARGET_REPO` |
+| `npm run dev` exits at startup with a GitHub message | the message | See the table in step 7 |
+| `npm run github:smoke` prints `FAIL` | the `FAIL` line (method and what it saw) | Check the preconditions in step 11 |
 | `npm run dev` exits at startup listing variables | the error lists names and reasons, never values | Fix those variables in `.env` |
 | `npm run tunnel` says `NGROK_DOMAIN is not set` | `.env` | Set it to your static domain (bare hostname) |
 | `npm run dev` fails with a database connection error, or a delivery shows `500` | `docker compose ps` | Postgres isn't running (e.g. after a Docker Desktop restart). Run `npm run db:up`, then restart the app / **Redeliver** |
@@ -304,10 +333,52 @@ npm run db:test:down
 
 Before handing over a change, also run `npm run typecheck` and `npm run lint`.
 
+## 11. Check the GitHub App with the smoke script
+
+`npm run github:smoke` calls every GitHub method of the bot once against `TARGET_REPO` and prints one `PASS` /
+`FAIL` line per check; the exit code is 0 only if all pass. It writes to the sandbox: comments, status labels
+and, with `--branch`, a pull request and a check run. It never closes or deletes anything: close the issue and the
+pull request by hand when you're done. Tokens are printed as their length only.
+
+Stop `npm run dev` first: the script rebuilds `dist/` (`nest build`).
+
+**Preconditions**
+
+1. A test issue in the sandbox, opened by you, with the labels `grill: skip` and `bug` added by hand.
+2. `.github-agent/workflow.json` on `main` (step 3).
+3. Only for the pull request checks: a branch one commit ahead of `main`. In the GitHub UI, create `smoke/spec-3`
+   from `main` and commit a small README edit on it. You need that commit's full 40-character SHA.
+
+```sh
+npm run github:smoke -- --issue <n>                                        # issue, file and push-token checks
+npm run github:smoke -- --issue <n> --dir <directory>                      # list another directory, e.g. a skill
+npm run github:smoke -- --issue <n> --branch smoke/spec-3 --sha <head SHA> # plus the pull request checks
+```
+
+`--base` (default `main`) is the branch the file checks read; `--dir` (default `.github-agent`) is the directory
+listed.
+
+**After a passing run:** the issue has exactly one `status: *` label (`status: spec-review`), `grill: skip` is
+gone, `bug` stays, and there is one more smoke comment. With `--branch`: one pull request from that branch (a
+second run finds it instead of opening another) and one `Quality Gate` check run on the commit, conclusion
+`success`.
+
 ## Reference: labels
 
-Labels are not created during this setup. Spec 3 creates them when the bot starts, if they're missing.
+The bot creates these labels when it starts, if they're missing (names compared case-insensitively). Don't create
+them by hand. The bot never edits or deletes a label, so a color or description you change stays. `status: *`
+labels are set by the bot only; `workflow: *` and `grill: skip` by humans only.
 
-- `status: draft | grilling | spec-review | ready-for-dev | executing | in-review | needs-human`: set by the
-  bot only.
-- `workflow: full-sdd | spec-code | code-only` and `grill: skip`: set by humans only.
+| Label | Color | Description |
+|---|---|---|
+| `status: draft` | `ededed` | Bot-managed: not started. Add a workflow label to start. |
+| `status: grilling` | `fbca04` | Bot-managed: asking clarifying questions. |
+| `status: spec-review` | `c5def5` | Bot-managed: Spec posted, waiting for /approve. |
+| `status: ready-for-dev` | `0e8a16` | Bot-managed: waiting for /approve to start the Coder. |
+| `status: executing` | `1d76db` | Bot-managed: the Coder is running. |
+| `status: in-review` | `5319e7` | Bot-managed: PR opened; Quality Gate and human review. |
+| `status: needs-human` | `b60205` | Bot-managed: stopped. Remove and re-add the workflow label to restart. |
+| `workflow: full-sdd` | `0052cc` | Human-assigned: Grill Me → Spec → Plan → Coder → Quality Gate. |
+| `workflow: spec-code` | `0052cc` | Human-assigned: Grill Me → Spec → Coder → Quality Gate. |
+| `workflow: code-only` | `0052cc` | Human-assigned: Coder → Quality Gate, after /approve. |
+| `grill: skip` | `d4c5f9` | Human-assigned: skip Grill Me (full-sdd, spec-code). |

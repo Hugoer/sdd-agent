@@ -164,6 +164,7 @@ export interface RepoProvider {
 ## 7. LangGraph Graph Diagram
 
 > → superseded by the state machine in `docs/specs/spec-github-agent-architecture-overview.md` §3 on 2026-11-09; kept for history. Differences flagged there: lease placement (F1), sender check in the worker (F2), `status: draft` (F3), the `WAITING_WORKSPACE` retry path (F4), setup order (F5), routing in plain NestJS (D3), skills read through the API (D9).
+> **Also not drawn (added 2026-11-11):** 1..K questions per round (D8); cancel and restart through the lane label (D5, D6); two lane labels → one comment, nothing starts (overview "Transition table", row 3); `/approve` counts once and only after its document (D10); the hidden marker on every bot comment and PR (D13); events from other repos ignored (D14, built in spec 3); `needs-human` after any step failure (D16, overview "Rules applied before the table" R4) and after an interrupted Coder job (D12). The diagram is not updated: the overview's transition table is the only normative version.
 
 ```mermaid
 graph TD
