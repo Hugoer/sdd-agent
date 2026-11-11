@@ -96,3 +96,8 @@ export function isHumanControlLabel(name: string): boolean {
 export function sameLabel(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
+
+/** The lane a label name stands for (`workflow: <lane>`, any letter case); null for any other label. */
+export function laneOfLabel(name: string): Lane | null {
+  return LANES.find((lane) => sameLabel(name, laneLabel(lane))) ?? null;
+}

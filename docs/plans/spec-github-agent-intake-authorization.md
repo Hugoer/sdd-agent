@@ -293,16 +293,16 @@ requests through the controller.
 `unauthorized` until T10.
 
 **Acceptance criteria:**
-- [ ] One test per label row: a lane label → `LANE_ADDED(lane)` / `LANE_REMOVED(lane)`; `grill: skip` →
+- [x] One test per label row: a lane label → `LANE_ADDED(lane)` / `LANE_REMOVED(lane)`; `grill: skip` →
   `SKIP_ADDED` / `skip-removed`; `status: *` → `status-label`; any other label and an unknown `workflow: *` →
   `other-label`; names in any letter case
-- [ ] No `label` object → `label-deleted` (the builder is the sandbox's real delivery); the bot's own `status: *`
+- [x] No `label` object → `label-deleted` (the builder is the sandbox's real delivery); the bot's own `status: *`
   label event → `own-event`, not `status-label`
-- [ ] Integration: an Approver adds `workflow: full-sdd` → `DONE`, the issue's labels unchanged, nothing posted;
+- [x] Integration: an Approver adds `workflow: full-sdd` → `DONE`, the issue's labels unchanged, nothing posted;
   the same for a Participant; a sender with no access removes a lane label → `unauthorized`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T8
 **Files:** `src/github/labels.ts`, `src/intake/github-payload.ts` (+ `.spec.ts`),
@@ -316,31 +316,31 @@ requests through the controller.
 revert comment unless its marker is already there (spec "Label revert", AW2, IA11).
 
 **Acceptance criteria:**
-- [ ] The calls in this order: `getAccessLevel`, `removeLabel` (canonical label name), `findCommentByMarker`,
+- [x] The calls in this order: `getAccessLevel`, `removeLabel` (canonical label name), `findCommentByMarker`,
   `postComment`; result `label-reverted`; the comment is the spec's text with the marker, the label and the login
   in backticks, without `@`
-- [ ] A second event for the same issue and label → the label is removed again, no second comment; another label
+- [x] A second event for the same issue and label → the label is removed again, no second comment; another label
   gets its own comment; after the comment was deleted it is posted again
-- [ ] A `ProviderError` from any of the three calls comes out unchanged, and running the event again ends with
+- [x] A `ProviderError` from any of the three calls comes out unchanged, and running the event again ends with
   exactly one comment (unit, and integration with a failing `postComment`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: Checkpoint 3
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual: Checkpoint 3
 
 **Dependencies:** T9
 **Files:** `src/intake/intake.service.ts` (+ `.spec.ts`), `test/intake.integration.spec.ts`
 **Scope:** S
 
 ### Checkpoint 3 — Labels on real GitHub
-- [ ] All four commands green
-- [ ] You add `workflow: full-sdd` → row `DONE`, log `accepted LANE_ADDED full-sdd`, the label stays. You remove
+- [x] All four commands green
+- [x] You add `workflow: full-sdd` → row `DONE`, log `accepted LANE_ADDED full-sdd`, the label stays. You remove
   it → `accepted LANE_REMOVED full-sdd`. You add `bug` → `IGNORED` `other-label`
-- [ ] You add `workflow: code-only`; I send the signed `labeled` request with sender `octocat` → the label
+- [x] You add `workflow: code-only`; I send the signed `labeled` request with sender `octocat` → the label
   disappears; one bot comment naming `workflow: code-only` and `octocat` (no `@`); row `IGNORED` `label-reverted`
-- [ ] The bot's own `issues.unlabeled` and `issue_comment.created` rows are `IGNORED` `own-event`; nothing else
+- [x] The bot's own `issues.unlabeled` and `issue_comment.created` rows are `IGNORED` `own-event`; nothing else
   follows
-- [ ] The same once more → the label disappears again; NO second comment
+- [x] The same once more → the label disappears again; NO second comment
 - [ ] You review and commit
 
 ---

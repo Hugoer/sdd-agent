@@ -4,10 +4,23 @@ import { z } from 'zod';
 import type { TaskRef } from '../contracts/issue-provider.js';
 import type { WorkflowInput } from '../contracts/workflow-input.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
+import {
+  GRILL_SKIP,
+  isStatusLabel,
+  laneLabel,
+  laneOfLabel,
+  sameLabel,
+} from '../github/labels.js';
 import type { IgnoreReason } from './ignore-reason.js';
 
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
 export type Needs = 'participant' | 'approver' | 'self';
+
+/** A label to revert: its canonical name and the key of its marker (spec 2, AW2). */
+export interface Revert {
+  label: string; // `workflow: <lane>` or `grill: skip`
+  key: string; // `<lane>` or `grill-skip`
+}
 
 /** An ignore decided from the payload alone, or an input that still needs the sender's level. */
 export type Classified =
@@ -18,8 +31,8 @@ export type Classified =
       needs: Needs;
       /** What the level is asked on (a PR event: the ref of AW6). */
       subject: TaskRef;
-      /** Canonical label name, for LANE_ADDED and SKIP_ADDED: removed when the sender has no access. */
-      revertLabel?: string;
+      /** LANE_ADDED and SKIP_ADDED: the label to remove when the sender has no access (D21). */
+      revert?: Revert;
     };
 
 /** 1–100 letters, digits, `-` and `_`, with an optional `[bot]` suffix. */
@@ -40,6 +53,11 @@ const envelope = z.object({
 
 const issuePayload = z.object({
   issue: z.object({ id, number: id }),
+});
+
+/** No `label` (or null): the label was deleted from the repo (AW3). */
+const labelPayload = z.object({
+  label: z.object({ name: z.string().min(1) }).nullish(),
 });
 
 type Envelope = z.infer<typeof envelope>;
@@ -101,16 +119,79 @@ function classifyIssues(
   payload: unknown,
   common: Common,
 ): Classified {
-  if (env.action !== 'opened') return ignored('unsupported-event');
+  switch (env.action) {
+    case 'opened':
+      return withIssue(env, payload, (task) =>
+        candidate(
+          { ...common, type: 'ISSUE_OPENED', task },
+          'participant',
+          task,
+        ),
+      );
+    case 'labeled':
+    case 'unlabeled':
+      return classifyLabel(env.action === 'labeled', env, payload, common);
+    default:
+      return ignored('unsupported-event');
+  }
+}
+
+/** The label rows. Label names are compared case-insensitively (spec 3 "Labels created"). */
+function classifyLabel(
+  added: boolean,
+  env: Envelope,
+  payload: unknown,
+  common: Common,
+): Classified {
+  const parsed = labelPayload.safeParse(payload);
+  if (!parsed.success) return ignored('invalid-payload');
+  const label = parsed.data.label;
+  if (!label) return ignored('label-deleted');
+
+  const lane = laneOfLabel(label.name);
+  if (lane) {
+    return withIssue(env, payload, (task) =>
+      candidate(
+        { ...common, type: added ? 'LANE_ADDED' : 'LANE_REMOVED', task, lane },
+        'participant',
+        task,
+        added ? { label: laneLabel(lane), key: lane } : undefined,
+      ),
+    );
+  }
+  if (sameLabel(label.name, GRILL_SKIP)) {
+    if (!added) return ignored('skip-removed');
+    return withIssue(env, payload, (task) =>
+      candidate({ ...common, type: 'SKIP_ADDED', task }, 'participant', task, {
+        label: GRILL_SKIP,
+        key: 'grill-skip',
+      }),
+    );
+  }
+  if (isStatusLabel(label.name)) return ignored('status-label');
+  return ignored('other-label'); // also an unknown `workflow: *`
+}
+
+/** The rows that build an input from the issue: `issue.id` and `issue.number` must be valid. */
+function withIssue(
+  env: Envelope,
+  payload: unknown,
+  build: (task: TaskRef) => Classified,
+): Classified {
   const parsed = issuePayload.safeParse(payload);
   if (!parsed.success) return ignored('invalid-payload');
-  const task = taskOf(env, parsed.data.issue);
-  return {
-    outcome: 'candidate',
-    input: { ...common, type: 'ISSUE_OPENED', task },
-    needs: 'participant',
-    subject: task,
-  };
+  return build(taskOf(env, parsed.data.issue));
+}
+
+function candidate(
+  input: WorkflowInput,
+  needs: Needs,
+  subject: TaskRef,
+  revert?: Revert,
+): Classified {
+  return revert
+    ? { outcome: 'candidate', input, needs, subject, revert }
+    : { outcome: 'candidate', input, needs, subject };
 }
 
 function taskOf(env: Envelope, issue: { id: number; number: number }): TaskRef {

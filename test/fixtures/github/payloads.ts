@@ -66,6 +66,47 @@ export function issuesClosed(options: IssueOptions = {}): Delivery {
   return { eventName: 'issues', payload: base('closed', options) };
 }
 
+/** The label object as GitHub sends it (real delivery: issues.labeled with `grill: skip`). */
+function labelObject(name: string) {
+  return {
+    id: 13038037927,
+    node_id: 'LA_kwDOVpLrB88AAAADCSCrpw',
+    url: `https://api.github.com/repos/${TARGET_REPO}/labels/${encodeURIComponent(name)}`,
+    name,
+    color: 'd4c5f9',
+    default: false,
+    description: null,
+  };
+}
+
+export interface LabelOptions extends IssueOptions {
+  label: string;
+}
+
+/** Real delivery: issues.labeled. */
+export function issuesLabeled(options: LabelOptions): Delivery {
+  return {
+    eventName: 'issues',
+    payload: { ...base('labeled', options), label: labelObject(options.label) },
+  };
+}
+
+/** Derived from issues.labeled (the sandbox has no unlabeled delivery with a label). */
+export function issuesUnlabeled(options: LabelOptions): Delivery {
+  return {
+    eventName: 'issues',
+    payload: {
+      ...base('unlabeled', options),
+      label: labelObject(options.label),
+    },
+  };
+}
+
+/** Real delivery: issues.unlabeled sent when a label is deleted from the repo: no `label` (AW3). */
+export function issuesLabelDeleted(options: IssueOptions = {}): Delivery {
+  return { eventName: 'issues', payload: base('unlabeled', options) };
+}
+
 /** GitHub's webhook test: no repository, no sender. */
 export function ping(): Delivery {
   return {

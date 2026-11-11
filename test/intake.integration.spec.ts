@@ -1,10 +1,22 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import { ProviderError } from '../src/contracts/provider-error.js';
 import { resetDatabase } from './db.js';
 import { newDeliveryId, postWebhook, startApp, type TestApp } from './app.js';
 import {
   HUMAN,
   TARGET_REPO,
+  issuesLabeled,
   issuesOpened,
+  issuesUnlabeled,
   ping,
   type Delivery,
 } from './fixtures/github/payloads.js';
@@ -38,6 +50,7 @@ describe('intake (signed webhooks → rows)', () => {
     t.issues.calls.length = 0;
     t.issues.setAccessLevel(HUMAN, 'none');
   });
+  afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
     await t.app.close();
   });
@@ -133,5 +146,140 @@ describe('intake (signed webhooks → rows)', () => {
         body: '{"action":"created"}',
       }),
     ).toMatchObject({ status: 'IGNORED', ignoreReason: 'unsupported-event' });
+  });
+
+  describe('label events', () => {
+    it.each(['approver', 'participant'] as const)(
+      'an %s adds workflow: full-sdd → DONE; the issue keeps its labels; nothing posted',
+      async (level) => {
+        t.issues.setAccessLevel(HUMAN, level);
+        const task = t.issues.seedIssue({
+          number: 21,
+          labels: ['workflow: full-sdd'],
+        });
+
+        const row = await deliver(
+          issuesLabeled({ number: 21, label: 'workflow: full-sdd' }),
+        );
+
+        expect(row).toMatchObject({ status: 'DONE', ignoreReason: null });
+        expect(t.issues.labelsOf(task)).toEqual(['workflow: full-sdd']);
+        expect(t.issues.commentsOf(task)).toEqual([]);
+        expect(t.issues.calls.map((call) => call.method)).toEqual([
+          'getAccessLevel',
+        ]);
+      },
+    );
+
+    it('a sender with no access removes a lane label → IGNORED unauthorized, nothing changed', async () => {
+      const task = t.issues.seedIssue({ number: 22, labels: ['bug'] });
+
+      const row = await deliver(
+        issuesUnlabeled({
+          number: 22,
+          label: 'workflow: code-only',
+          sender: 'octocat',
+        }),
+      );
+
+      expect(row).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'unauthorized',
+      });
+      expect(t.issues.labelsOf(task)).toEqual(['bug']);
+      expect(t.issues.commentsOf(task)).toEqual([]);
+    });
+
+    it.each([
+      [issuesLabeled({ label: 'bug' }), 'other-label'],
+      [issuesLabeled({ label: 'status: grilling' }), 'status-label'],
+      [issuesUnlabeled({ label: 'grill: skip' }), 'skip-removed'],
+    ])('%# → IGNORED %s, no provider call', async (delivery, reason) => {
+      expect(await deliver(delivery)).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: reason,
+      });
+      expect(t.issues.calls).toEqual([]);
+    });
+
+    it('a sender with no access adds workflow: code-only → label removed, one comment, IGNORED label-reverted', async () => {
+      const task = t.issues.seedIssue({
+        number: 23,
+        labels: ['workflow: code-only', 'bug'],
+      });
+
+      const row = await deliver(
+        issuesLabeled({
+          number: 23,
+          label: 'workflow: code-only',
+          sender: 'octocat',
+        }),
+      );
+
+      expect(row).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'label-reverted',
+        attempts: 1,
+      });
+      expect(t.issues.labelsOf(task)).toEqual(['bug']);
+      expect(t.issues.commentsOf(task)).toEqual([
+        expect.objectContaining({
+          byBot: true,
+          body: expect.stringContaining(
+            'The `workflow: code-only` label was removed. It was added by `octocat`,',
+          ) as string,
+        }),
+      ]);
+    });
+
+    it('postComment fails once → the retry removes the label again and ends with exactly one comment', async () => {
+      const task = t.issues.seedIssue({
+        number: 24,
+        labels: ['grill: skip'],
+      });
+      vi.spyOn(t.issues, 'postComment').mockRejectedValueOnce(
+        new ProviderError('GitHub POST … → 502: Bad Gateway', 'transient', {
+          status: 502,
+        }),
+      );
+
+      const first = await deliver(
+        issuesLabeled({ number: 24, label: 'grill: skip', sender: 'octocat' }),
+      );
+      expect(first).toMatchObject({
+        status: 'PENDING',
+        attempts: 1,
+        lastError: 'GitHub POST … → 502: Bad Gateway',
+      });
+      expect(t.issues.labelsOf(task)).toEqual([]);
+      expect(t.issues.commentsOf(task)).toEqual([]);
+
+      await t.prisma.webhookEvent.update({
+        where: { id: first.id },
+        data: { availableAt: new Date(Date.now() - 1) },
+      });
+      await t.worker.drainOnce();
+
+      expect(
+        await t.prisma.webhookEvent.findUniqueOrThrow({
+          where: { id: first.id },
+        }),
+      ).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'label-reverted',
+        attempts: 2,
+      });
+      expect(t.issues.commentsOf(task)).toHaveLength(1);
+      // The failing postComment is the spy's, so the fake did not record it.
+      expect(t.issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+        'removeLabel',
+        'findCommentByMarker',
+        'getAccessLevel',
+        'removeLabel',
+        'findCommentByMarker',
+        'postComment',
+      ]);
+    });
   });
 });

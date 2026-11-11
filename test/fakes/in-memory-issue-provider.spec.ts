@@ -115,6 +115,19 @@ describe('InMemoryIssueProvider', () => {
     expect(issues.labelsOf(task)).toEqual(['bug']);
   });
 
+  it('deleteComment removes a comment, so the marker search no longer finds it', async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const task = issues.seedIssue({ number: 1 });
+    const posted = await issues.postComment(task, '<!-- m --> hi');
+
+    issues.deleteComment(posted.id);
+
+    expect(issues.commentsOf(task)).toEqual([]);
+    await expect(
+      issues.findCommentByMarker(task, '<!-- m -->'),
+    ).resolves.toBeNull();
+  });
+
   it('answers the access level that was set, none by default, whatever the case', async () => {
     const issues = new InMemoryIssueProvider(REPO);
     issues.setAccessLevel('Alice', 'approver');

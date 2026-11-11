@@ -90,6 +90,14 @@ export class InMemoryIssueProvider implements IssueProvider {
     return this.addComment(task, comment.body, comment.byBot);
   }
 
+  /** A human deletes a comment (not a provider method; not recorded). */
+  deleteComment(commentId: string): void {
+    const index = this.comments.findIndex(
+      (comment) => comment.id === commentId,
+    );
+    if (index >= 0) this.comments.splice(index, 1);
+  }
+
   /** What getAccessLevel answers for this login (default: 'none'). */
   setAccessLevel(login: string, level: AccessLevel): void {
     this.accessLevels.set(login.toLowerCase(), level);

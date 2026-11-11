@@ -8,14 +8,16 @@ import {
   TARGET_REPO,
   checkSuiteRequested,
   issuesClosed,
+  issuesLabeled,
   issuesOpened,
+  issuesUnlabeled,
   ping,
   storedEvent,
 } from '../../test/fixtures/github/payloads.js';
 import type { Env } from '../config/env.schema.js';
 import type { AccessLevel } from '../contracts/issue-provider.js';
 import { ProviderError } from '../contracts/provider-error.js';
-import { IntakeService } from './intake.service.js';
+import { IntakeService, labelRevertComment } from './intake.service.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -84,6 +86,231 @@ describe('IntakeService: ISSUE_OPENED (needs a Participant)', () => {
       );
     }
     expect(log).not.toHaveBeenCalled(); // the worker logs the failure
+  });
+});
+
+describe('IntakeService: label inputs (need a Participant)', () => {
+  const cases = [
+    ['LANE_ADDED', issuesLabeled({ label: 'workflow: full-sdd' })],
+    ['LANE_REMOVED', issuesUnlabeled({ label: 'workflow: full-sdd' })],
+    ['SKIP_ADDED', issuesLabeled({ label: 'grill: skip' })],
+  ] as const;
+
+  it.each(
+    cases.flatMap(([type, delivery]) =>
+      (['approver', 'participant'] as const).map(
+        (level) => [type, level, delivery] as const,
+      ),
+    ),
+  )(
+    '%s from %s → accepted, one lookup, no label change',
+    async (type, level, delivery) => {
+      const { issues, intake } = setup();
+      issues.setAccessLevel(HUMAN, level);
+
+      const result = await intake.intake(storedEvent(delivery));
+
+      expect(result.outcome === 'accepted' && result.input.type).toBe(type);
+      expect(issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+      ]);
+    },
+  );
+
+  it('LANE_REMOVED from a sender with no access → unauthorized, nothing changed', async () => {
+    const { issues, intake } = setup();
+
+    await expect(
+      intake.intake(
+        storedEvent(
+          issuesUnlabeled({ label: 'workflow: code-only', sender: 'octocat' }),
+        ),
+      ),
+    ).resolves.toEqual({ outcome: 'ignored', reason: 'unauthorized' });
+    expect(issues.calls.map((call) => call.method)).toEqual(['getAccessLevel']);
+  });
+
+  it.each([
+    [
+      'grill: skip removed',
+      issuesUnlabeled({ label: 'grill: skip' }),
+      'skip-removed',
+    ],
+    [
+      'a status label',
+      issuesLabeled({ label: 'status: draft' }),
+      'status-label',
+    ],
+    ['another label', issuesLabeled({ label: 'bug' }), 'other-label'],
+  ])(
+    '%s → ignored %s with zero provider calls',
+    async (_name, delivery, reason) => {
+      const { issues, intake } = setup();
+      await expect(intake.intake(storedEvent(delivery))).resolves.toEqual({
+        outcome: 'ignored',
+        reason,
+      });
+      expect(issues.calls).toEqual([]);
+    },
+  );
+
+  it('logs the lane and the issue: accepted LANE_ADDED full-sdd <ref>', async () => {
+    const { issues, intake, log } = setup();
+    issues.setAccessLevel(HUMAN, 'approver');
+
+    await intake.intake(
+      storedEvent(issuesLabeled({ label: 'workflow: full-sdd', number: 3 }), {
+        deliveryId: 'd-9',
+      }),
+    );
+
+    expect(lines(log)).toEqual([
+      `delivery=d-9 event=issues action=labeled sender=${HUMAN} accepted LANE_ADDED full-sdd ${TARGET_REPO}#3`,
+    ]);
+  });
+});
+
+describe('IntakeService: label revert (a sender with no access adds a lane or skip label)', () => {
+  /** Issue #5 carrying the label, so the revert can be observed. */
+  function seeded(labels: string[]) {
+    const ctx = setup();
+    const task = ctx.issues.seedIssue({ number: 5, id: '6335695005', labels });
+    return { ...ctx, task };
+  }
+  const added = (label: string, sender = 'octocat') =>
+    storedEvent(issuesLabeled({ number: 5, label, sender }));
+
+  it('getAccessLevel → removeLabel (canonical name) → findCommentByMarker → postComment; label-reverted', async () => {
+    const { issues, intake, task } = seeded(['workflow: code-only', 'bug']);
+
+    await expect(intake.intake(added('Workflow: Code-Only'))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'label-reverted',
+    });
+
+    const text =
+      '<!-- sdd-agent:label-revert:code-only -->\n' +
+      'The `workflow: code-only` label was removed. It was added by `octocat`, who is not allowed to start or ' +
+      'change a workflow on this repository (on GitHub that needs the Triage role or higher).';
+    expect(issues.calls).toEqual([
+      { method: 'getAccessLevel', args: [task, 'octocat'] },
+      { method: 'removeLabel', args: [task, 'workflow: code-only'] },
+      {
+        method: 'findCommentByMarker',
+        args: [task, '<!-- sdd-agent:label-revert:code-only -->'],
+      },
+      { method: 'postComment', args: [task, text] },
+    ]);
+    expect(issues.labelsOf(task)).toEqual(['bug']);
+    expect(issues.commentsOf(task)).toEqual([
+      { id: expect.any(String) as string, body: text, byBot: true },
+    ]);
+    expect(text).not.toContain('@');
+  });
+
+  it('grill: skip → removed, its own marker key grill-skip', async () => {
+    const { intake, issues, task } = seeded(['grill: skip']);
+
+    await intake.intake(added('grill: skip'));
+
+    expect(issues.labelsOf(task)).toEqual([]);
+    expect(issues.commentsOf(task).map((c) => c.body)).toEqual([
+      labelRevertComment(
+        { label: 'grill: skip', key: 'grill-skip' },
+        'octocat',
+      ),
+    ]);
+    expect(issues.commentsOf(task)[0].body).toMatch(
+      /^<!-- sdd-agent:label-revert:grill-skip -->\nThe `grill: skip` label was removed\./,
+    );
+  });
+
+  it('the same label again → removed again, NO second comment; another label → its own comment', async () => {
+    const { intake, issues, task } = seeded(['workflow: code-only']);
+    await intake.intake(added('workflow: code-only'));
+
+    issues.calls.length = 0;
+    issues.seedIssue({
+      number: 5,
+      id: '6335695005',
+      labels: ['workflow: code-only'],
+    });
+    await expect(intake.intake(added('workflow: code-only'))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'label-reverted',
+    });
+    expect(issues.calls.map((call) => call.method)).toEqual([
+      'getAccessLevel',
+      'removeLabel',
+      'findCommentByMarker',
+    ]);
+    expect(issues.commentsOf(task)).toHaveLength(1);
+
+    await intake.intake(added('workflow: full-sdd'));
+    expect(issues.commentsOf(task).map((c) => c.body)).toEqual([
+      expect.stringContaining('label-revert:code-only') as string,
+      expect.stringContaining('label-revert:full-sdd') as string,
+    ]);
+  });
+
+  it('a label already gone is "removed" and the comment still comes once', async () => {
+    const { intake, issues, task } = seeded([]);
+    await intake.intake(added('workflow: full-sdd'));
+    expect(issues.commentsOf(task)).toHaveLength(1);
+  });
+
+  it('after a human deleted the comment, the next revert posts it again, once', async () => {
+    const { intake, issues, task } = seeded(['workflow: code-only']);
+    await intake.intake(added('workflow: code-only'));
+    issues.deleteComment(issues.commentsOf(task)[0].id);
+
+    await intake.intake(added('workflow: code-only'));
+    await intake.intake(added('workflow: code-only'));
+
+    expect(issues.commentsOf(task)).toHaveLength(1);
+  });
+
+  it("a Participant's lane label is accepted and stays", async () => {
+    const { intake, issues, task } = seeded(['workflow: full-sdd']);
+    issues.setAccessLevel('octocat', 'participant');
+
+    const result = await intake.intake(added('workflow: full-sdd'));
+
+    expect(result.outcome).toBe('accepted');
+    expect(issues.labelsOf(task)).toEqual(['workflow: full-sdd']);
+  });
+
+  it.each(['removeLabel', 'findCommentByMarker', 'postComment'] as const)(
+    'a ProviderError from %s comes out unchanged; running the event again ends with exactly one comment',
+    async (method) => {
+      const { intake, issues, task } = seeded(['workflow: code-only']);
+      const error = new ProviderError(`GitHub ${method} → 503`, 'transient');
+      vi.spyOn(issues, method).mockRejectedValueOnce(error);
+      const event = added('workflow: code-only');
+
+      await expect(intake.intake(event)).rejects.toBe(error);
+      await expect(intake.intake(event)).resolves.toEqual({
+        outcome: 'ignored',
+        reason: 'label-reverted',
+      });
+      await expect(intake.intake(event)).resolves.toEqual({
+        outcome: 'ignored',
+        reason: 'label-reverted',
+      });
+
+      expect(issues.labelsOf(task)).toEqual([]);
+      expect(issues.commentsOf(task)).toHaveLength(1);
+    },
+  );
+
+  it('a crash after the comment: the retry finds the marker and posts nothing', async () => {
+    const { intake, issues, task } = seeded(['workflow: code-only']);
+    const event = added('workflow: code-only');
+    await intake.intake(event);
+
+    await intake.intake(event);
+
+    expect(issues.commentsOf(task)).toHaveLength(1);
   });
 });
 

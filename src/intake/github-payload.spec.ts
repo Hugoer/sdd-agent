@@ -5,7 +5,10 @@ import {
   TARGET_REPO,
   checkSuiteRequested,
   issuesClosed,
+  issuesLabelDeleted,
+  issuesLabeled,
   issuesOpened,
+  issuesUnlabeled,
   ping,
   storedEvent,
   type Delivery,
@@ -243,9 +246,195 @@ describe('classifyGitHubEvent: issues', () => {
   );
 });
 
+describe('classifyGitHubEvent: issues labeled / unlabeled', () => {
+  const task = (number = 7) => ({
+    platform: 'GITHUB',
+    id: String(6335695000 + number),
+    externalRef: `${TARGET_REPO}#${number}`,
+  });
+
+  it.each([
+    ['workflow: full-sdd', 'full-sdd'],
+    ['workflow: spec-code', 'spec-code'],
+    ['workflow: code-only', 'code-only'],
+    ['Workflow: Full-SDD', 'full-sdd'],
+  ] as const)(
+    'labeled %j → LANE_ADDED(%s), Participant, revert the canonical name with its key',
+    (label, lane) => {
+      const event = storedEvent(issuesLabeled({ label }));
+      expect(classifyGitHubEvent(event, TARGET_REPO, isSelf)).toEqual({
+        outcome: 'candidate',
+        input: {
+          type: 'LANE_ADDED',
+          lane,
+          task: task(),
+          deliveryId: event.deliveryId,
+          receivedAt: event.receivedAt,
+          sender: HUMAN,
+        },
+        needs: 'participant',
+        subject: task(),
+        revert: { label: `workflow: ${lane}`, key: lane },
+      });
+    },
+  );
+
+  it.each([
+    ['workflow: full-sdd', 'full-sdd'],
+    ['WORKFLOW: CODE-ONLY', 'code-only'],
+  ] as const)(
+    'unlabeled %j → LANE_REMOVED(%s), Participant, nothing to revert',
+    (label, lane) => {
+      const event = storedEvent(issuesUnlabeled({ label }));
+      expect(classifyGitHubEvent(event, TARGET_REPO, isSelf)).toEqual({
+        outcome: 'candidate',
+        input: {
+          type: 'LANE_REMOVED',
+          lane,
+          task: task(),
+          deliveryId: event.deliveryId,
+          receivedAt: event.receivedAt,
+          sender: HUMAN,
+        },
+        needs: 'participant',
+        subject: task(),
+      });
+    },
+  );
+
+  it.each(['grill: skip', 'Grill: Skip'])(
+    'labeled %j → SKIP_ADDED, Participant, revert `grill: skip`',
+    (label) => {
+      const event = storedEvent(issuesLabeled({ label }));
+      expect(classifyGitHubEvent(event, TARGET_REPO, isSelf)).toEqual({
+        outcome: 'candidate',
+        input: {
+          type: 'SKIP_ADDED',
+          task: task(),
+          deliveryId: event.deliveryId,
+          receivedAt: event.receivedAt,
+          sender: HUMAN,
+        },
+        needs: 'participant',
+        subject: task(),
+        revert: { label: 'grill: skip', key: 'grill-skip' },
+      });
+    },
+  );
+
+  it.each(['grill: skip', 'GRILL: SKIP'])(
+    'unlabeled %j → skip-removed',
+    (label) => {
+      expect(classify(issuesUnlabeled({ label }))).toEqual({
+        outcome: 'ignored',
+        reason: 'skip-removed',
+      });
+    },
+  );
+
+  it.each([
+    [issuesLabeled, 'status: grilling'],
+    [issuesUnlabeled, 'status: draft'],
+    [issuesLabeled, 'Status: Needs-Human'],
+  ])('%o %j → status-label', (build, label) => {
+    expect(classify(build({ label }))).toEqual({
+      outcome: 'ignored',
+      reason: 'status-label',
+    });
+  });
+
+  it.each([
+    [issuesLabeled, 'bug'],
+    [issuesUnlabeled, 'bug'],
+    [issuesLabeled, 'workflow: other'],
+    [issuesUnlabeled, 'workflow: unknown'],
+    [issuesLabeled, 'workflow:full-sdd'],
+    [issuesLabeled, 'grill: skip please'],
+  ])('%o %j → other-label', (build, label) => {
+    expect(classify(build({ label }))).toEqual({
+      outcome: 'ignored',
+      reason: 'other-label',
+    });
+  });
+
+  it("no label object (the sandbox's real delivery) → label-deleted", () => {
+    expect(classify(issuesLabelDeleted())).toEqual({
+      outcome: 'ignored',
+      reason: 'label-deleted',
+    });
+    expect(
+      classify(withField(issuesLabeled({ label: 'bug' }), 'label', null)),
+    ).toEqual({ outcome: 'ignored', reason: 'label-deleted' });
+  });
+
+  it.each<[string, Delivery]>([
+    [
+      'label.name missing',
+      withField(issuesLabeled({ label: 'bug' }), 'label.name', undefined),
+    ],
+    [
+      'label.name a number',
+      withField(issuesLabeled({ label: 'bug' }), 'label.name', 7),
+    ],
+    [
+      'label.name empty',
+      withField(issuesLabeled({ label: 'bug' }), 'label.name', ''),
+    ],
+    [
+      'label a string',
+      withField(issuesLabeled({ label: 'bug' }), 'label', 'bug'),
+    ],
+    [
+      'a lane label without issue.id',
+      withField(
+        issuesLabeled({ label: 'workflow: full-sdd' }),
+        'issue.id',
+        undefined,
+      ),
+    ],
+    [
+      'a skip label with a string issue.number',
+      withField(issuesLabeled({ label: 'grill: skip' }), 'issue.number', '7'),
+    ],
+  ])('%s → invalid-payload', (_name, delivery) => {
+    expect(classify(delivery)).toEqual({
+      outcome: 'ignored',
+      reason: 'invalid-payload',
+    });
+  });
+
+  it("the bot's own status label event → own-event, not status-label", () => {
+    for (const build of [issuesLabeled, issuesUnlabeled]) {
+      expect(
+        classify(build({ label: 'status: grilling', sender: BOT_LOGIN })),
+      ).toEqual({ outcome: 'ignored', reason: 'own-event' });
+    }
+  });
+
+  it("the bot's own revert (unlabeled lane) → own-event, not LANE_REMOVED", () => {
+    expect(
+      classify(
+        issuesUnlabeled({ label: 'workflow: code-only', sender: BOT_LOGIN }),
+      ),
+    ).toEqual({ outcome: 'ignored', reason: 'own-event' });
+  });
+});
+
 describe('every builder that gives an input', () => {
   it.each<[string, Delivery]>([
     ['issues.opened', issuesOpened({ number: 31 })],
+    [
+      'issues.labeled lane',
+      issuesLabeled({ number: 32, label: 'workflow: full-sdd' }),
+    ],
+    [
+      'issues.unlabeled lane',
+      issuesUnlabeled({ number: 33, label: 'workflow: code-only' }),
+    ],
+    [
+      'issues.labeled skip',
+      issuesLabeled({ number: 34, label: 'grill: skip' }),
+    ],
   ])(
     '%s: externalRefOf(payload) equals the input reference',
     (_name, delivery) => {
