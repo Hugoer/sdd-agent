@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
-import { GitHubModule } from '../github/github.module.js';
-import { EventProcessor } from './event-processor.js';
 import { EventsService } from './events.service.js';
 import { EventsWorker } from './events.worker.js';
 
+/** Storing and the worker. Imports no feature module: the processor registers itself (spec 2, AW5). */
 @Module({
-  imports: [GitHubModule],
-  providers: [EventsService, EventsWorker, EventProcessor],
-  exports: [EventsService],
+  providers: [EventsService, EventsWorker],
+  exports: [EventsService, EventsWorker],
 })
 export class EventsModule {}

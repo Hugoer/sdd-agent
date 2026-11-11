@@ -186,15 +186,15 @@ class stays for now and registers itself (P9). The test harness can register a s
 the worker's integration tests use it (P3).
 
 **Acceptance criteria:**
-- [ ] No registered processor → the app does not start and the error says why; a second registration is refused
+- [x] No registered processor → the app does not start and the error says why; a second registration is refused
   (unit)
-- [ ] Every worker rule (oldest first, due time, retries after 5 s and 30 s, permanent error, rate-limit wait,
+- [x] Every worker rule (oldest first, due time, retries after 5 s and 30 s, permanent error, rate-limit wait,
   `lastError` length, two drains at once, crash reset, shutdown) passes with a scripted processor; no worker test
   mentions the hello
-- [ ] The hello's unit tests and one signed-webhook test still pass
+- [x] The hello's unit tests and one signed-webhook test still pass
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/events/event-processor.ts` (+ `.spec.ts`), `src/events/events.worker.ts` (+ new `.spec.ts`),
@@ -208,17 +208,17 @@ the worker's integration tests use it (P3).
 first payload builders (P4).
 
 **Acceptance criteria:**
-- [ ] One test per check 1–5 and per order case: a `ping` from another repo → `ping`; an unsupported event from
+- [x] One test per check 1–5 and per order case: a `ping` from another repo → `ping`; an unsupported event from
   another repo → `other-repo`; an unsupported event without a sender → `unsupported-event`; the bot's own `issues`
   event → `own-event`; a bad `sender.login` or no `action` → `invalid-payload`
-- [ ] `issues` · `opened` → `ISSUE_OPENED` with `task`, `deliveryId`, `receivedAt` and `sender`, needing a
+- [x] `issues` · `opened` → `ISSUE_OPENED` with `task`, `deliveryId`, `receivedAt` and `sender`, needing a
   Participant; `issue.id` or `issue.number` missing or wrongly typed → `invalid-payload`; another action →
   `unsupported-event`
-- [ ] The file is pure (no NestJS, no provider; `isSelf` comes in as a function), and for every builder that
+- [x] The file is pure (no NestJS, no provider; `isSelf` comes in as a function), and for every builder that
   gives an input, `externalRefOf(payload)` equals the input's reference
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T1
 **Files:** `src/contracts/workflow-input.ts`, `src/intake/ignore-reason.ts`, `src/intake/github-payload.ts`
@@ -233,15 +233,15 @@ of the spec's "Authorize" table (the revert and the reply come in T10 and T12). 
 `IntakeModule` provides both; nothing imports it yet.
 
 **Acceptance criteria:**
-- [ ] `ISSUE_OPENED`: `approver` or `participant` → accepted; `none` → `unauthorized`; exactly one
+- [x] `ISSUE_OPENED`: `approver` or `participant` → accepted; `none` → `unauthorized`; exactly one
   `getAccessLevel(task, sender)` call
-- [ ] An event decided by classify (`ping`, another repo, …) → zero provider calls; a `ProviderError` from the
+- [x] An event decided by classify (`ping`, another repo, …) → zero provider calls; a `ProviderError` from the
   lookup comes out unchanged
-- [ ] One log line per event with delivery, event, action, sender and `accepted ISSUE_OPENED <ref>` or
+- [x] One log line per event with delivery, event, action, sender and `accepted ISSUE_OPENED <ref>` or
   `ignored <reason>`; the processor returns `DONE` for accepted and `IGNORED` + reason for ignored
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T3, T5, T6
 **Files:** `src/intake/intake.service.ts` (+ `.spec.ts`), `src/intake/intake-event.processor.ts` (+ `.spec.ts`),
@@ -256,16 +256,16 @@ of the spec's "Authorize" table (the revert and the reply come in T10 and T12). 
 requests through the controller.
 
 **Acceptance criteria:**
-- [ ] Signed `issues.opened` from an Approver → row `DONE`, no comment; from a sender with no access → `IGNORED`
+- [x] Signed `issues.opened` from an Approver → row `DONE`, no comment; from a sender with no access → `IGNORED`
   `unauthorized`; another repo → `other-repo` with zero provider calls; a body without `sender` →
   `invalid-payload` with `attempts = 1`; `ping` → `ping`
-- [ ] `src/events` imports nothing from `src/github` or `src/intake`;
+- [x] `src/events` imports nothing from `src/github` or `src/intake`;
   `grep -rn "helloCommentBody\|not-handled" src test` → no match
-- [ ] The app boots with the fakes, and a failing GitHub startup still stops it (spec 3's startup tests pass
+- [x] The app boots with the fakes, and a failing GitHub startup still stops it (spec 3's startup tests pass
   unchanged)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 - [ ] Manual: Checkpoint 2
 
 **Dependencies:** T7
@@ -274,12 +274,12 @@ requests through the controller.
 **Scope:** M
 
 ### Checkpoint 2 — First real event through intake
-- [ ] All four commands green
-- [ ] You open a sandbox issue → row `DONE`; the log shows `accepted ISSUE_OPENED`; NO comment appears
-- [ ] Signed `issues.opened` with sender `octocat` → row `IGNORED` `unauthorized`; nothing posted
-- [ ] Signed request for `someone/other-repo` → `IGNORED` `other-repo`. `send issues '{"action":"opened"}'` →
+- [x] All four commands green
+- [x] You open a sandbox issue → row `DONE`; the log shows `accepted ISSUE_OPENED`; NO comment appears
+- [x] Signed `issues.opened` with sender `octocat` → row `IGNORED` `unauthorized`; nothing posted
+- [x] Signed request for `someone/other-repo` → `IGNORED` `other-repo`. `send issues '{"action":"opened"}'` →
   `IGNORED` `invalid-payload`, `attempts = 1`
-- [ ] Adding a label gives `unsupported-event` for now (P9)
+- [x] Adding a label gives `unsupported-event` for now (P9)
 - [ ] You review and commit
 
 ---

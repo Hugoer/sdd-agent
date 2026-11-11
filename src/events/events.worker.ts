@@ -7,7 +7,7 @@ import {
 import { ProviderError } from '../contracts/provider-error.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { EventProcessor } from './event-processor.js';
+import type { EventProcessor } from './event-processor.js';
 
 const POLL_INTERVAL_MS = 1_000;
 const MAX_ATTEMPTS = 3;
@@ -25,15 +25,38 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private stopping = false;
   private currentTick: Promise<void> = Promise.resolve();
+  private processor: EventProcessor | undefined;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly processor: EventProcessor,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Spec 2, AW5 / plan P1: the module that owns processing registers itself (in its onModuleInit), so
+   * `src/events` imports no feature module. Exactly one: a second registration is a wiring mistake.
+   */
+  registerProcessor(processor: EventProcessor): void {
+    if (this.processor) {
+      throw new Error(
+        'EventsWorker: an event processor is already registered; exactly one module may register one',
+      );
+    }
+    this.processor = processor;
+  }
 
   async onApplicationBootstrap(): Promise<void> {
+    this.requireProcessor();
     await this.resetInterrupted();
     this.schedule(0);
+  }
+
+  /** The app does not start without a processor: events would be claimed and never decided. */
+  protected requireProcessor(): EventProcessor {
+    if (!this.processor) {
+      throw new Error(
+        'EventsWorker: no event processor registered; the module that processes events must call ' +
+          'EventsWorker.registerProcessor() in its onModuleInit',
+      );
+    }
+    return this.processor;
   }
 
   /** Stop claiming, let the current event finish (runs before Prisma disconnects). */
@@ -108,7 +131,7 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private async handle(event: WebhookEvent): Promise<void> {
     const label = `delivery=${event.deliveryId} event=${event.eventName} action=${event.action ?? '-'}`;
     try {
-      const result = await this.processor.process(event);
+      const result = await this.requireProcessor().process(event);
       await this.prisma.webhookEvent.update({
         where: { id: event.id },
         data: {

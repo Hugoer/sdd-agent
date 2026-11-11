@@ -5,8 +5,14 @@ import { AppModule } from '../src/app.module.js';
 import { appOptions, configureApp } from '../src/app.setup.js';
 import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
 import { REPO_PROVIDER } from '../src/contracts/repo-provider.js';
+import type {
+  EventProcessor,
+  ProcessResult,
+} from '../src/events/event-processor.js';
 import { EventsWorker } from '../src/events/events.worker.js';
+import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
+import { IntakeEventProcessor } from '../src/intake/intake-event.processor.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
@@ -53,7 +59,42 @@ export function offlineGitHub(
 /** Same worker without the polling loop: tests call `drainOnce()` themselves. */
 class ManualEventsWorker extends EventsWorker {
   override async onApplicationBootstrap(): Promise<void> {
+    this.requireProcessor();
     await this.resetInterrupted();
+  }
+}
+
+type Step = (event: WebhookEvent) => Promise<ProcessResult>;
+
+/**
+ * A processor the test scripts (plan P3): the worker's rules are tested without any real processor.
+ * Each call takes the next scripted step; with none left it answers DONE.
+ */
+export class ScriptedProcessor implements EventProcessor {
+  /** Delivery IDs in the order they were processed. */
+  readonly processed: string[] = [];
+  private readonly steps: Step[] = [];
+
+  /** The next calls run these steps, in order. */
+  then(...steps: Step[]): this {
+    this.steps.push(...steps);
+    return this;
+  }
+
+  /** The next call throws this error. */
+  failNext(error: Error): this {
+    return this.then(() => Promise.reject(error));
+  }
+
+  /** The next call answers IGNORED with this reason. */
+  ignoreNext(reason: string): this {
+    return this.then(() => Promise.resolve({ status: 'IGNORED', reason }));
+  }
+
+  process(event: WebhookEvent): Promise<ProcessResult> {
+    this.processed.push(event.deliveryId);
+    const step = this.steps.shift();
+    return step ? step(event) : Promise.resolve({ status: 'DONE' });
   }
 }
 
@@ -75,6 +116,8 @@ export interface StartOptions {
   issues?: InMemoryIssueProvider;
   /** The fake behind REPO_PROVIDER (default: a new one for TARGET_REPO). */
   repo?: InMemoryRepoProvider;
+  /** Registered with the worker in place of the app's own processor (plan P3). */
+  processor?: EventProcessor;
 }
 
 /** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
@@ -91,6 +134,16 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     builder = builder
       .overrideProvider(EventsWorker)
       .useClass(ManualEventsWorker);
+  }
+  if (options.processor) {
+    const processor = options.processor;
+    // The app's processor is replaced by one that registers the scripted one through the same seam.
+    builder = builder.overrideProvider(IntakeEventProcessor).useFactory({
+      factory: (worker: EventsWorker) => ({
+        onModuleInit: () => worker.registerProcessor(processor),
+      }),
+      inject: [EventsWorker],
+    });
   }
   const moduleRef = await builder.compile();
   const app = configureApp(
@@ -152,13 +205,16 @@ export function postWebhook(
   });
 }
 
-/** A minimal `issues.opened` payload for issue #7 (its fake: `issues.seedIssue({ number: 7 })`). */
-export function issuesOpenedPayload(fullName = testEnv.TARGET_REPO) {
+/** A minimal signed-test `issues.opened` body (the spec's `common` helper): repo, sender and issue. */
+export function issuesOpenedPayload(
+  options: { repo?: string; sender?: string; number?: number } = {},
+) {
+  const number = options.number ?? 7;
   return {
     action: 'opened',
-    installation: { id: 42 },
-    repository: { full_name: fullName },
-    issue: { id: 1007, number: 7 },
+    repository: { full_name: options.repo ?? testEnv.TARGET_REPO },
+    sender: { login: options.sender ?? 'dev-user' },
+    issue: { id: 1000 + number, number },
   };
 }
 
