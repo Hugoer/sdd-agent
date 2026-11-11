@@ -282,7 +282,8 @@ Written by the build session (commands must exist first, `AGENTS.md`). From zero
 3. **Sandbox target repo:** create a **public** GitHub repo (e.g. `<you>/sdd-agent-sandbox`; public because GitHub
    Free only protects branches of public repos, needed for spec 10's optional required check), clone it, scaffold a tiny
    TypeScript project (one function + one Vitest test, ESLint), add `.github-agent/workflow.json` with
-   `{ "skills": {} }` (every step uses the built-in prompt until skills are written; read from spec 4 on), push to
+   `{ "skills": {} }` (every step uses the built-in prompt until skills are written; read from spec 4 on;
+   changed 2026-11-10: skills are required, there is no built-in prompt, overview D18), push to
    `main`.
 4. **GitHub App** (W6): Settings → Developer settings → GitHub Apps → New. Webhook active, URL
    `https://<NGROK_DOMAIN>/webhooks/github`, secret from `openssl rand -hex 32`; permissions and events as W6;

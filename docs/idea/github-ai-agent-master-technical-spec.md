@@ -214,7 +214,7 @@ graph TD
     K --> KV["PR comment + check run (success / neutral / failure) & END"]
 ```
 
-**Not drawn (applies to every LLM node: Grill Me, Spec, Plan, Coder, Quality Gate):** at the start of the step the bot reads its skill from `origin/<base>` via `.github-agent/workflow.json` (built-in default prompt if the step isn't mapped). An invalid `workflow.json` → `status: needs-human` + one comment & END (section 10, "Step skills").
+**Not drawn (applies to every LLM node: Grill Me, Spec, Plan, Coder, Quality Gate):** at the start of the step the bot reads its skill from `origin/<base>` via `.github-agent/workflow.json` (~~built-in default prompt if the step isn't mapped~~ 2026-11-10: skills are required, an unmapped step → `status: needs-human`, overview D18). An invalid `workflow.json` → `status: needs-human` + one comment & END (section 10, "Step skills").
 
 ---
 
@@ -349,6 +349,7 @@ Every Anthropic call returns usage data in the response metadata:
 
 ### Identity
 > → principles moved to overview §7 on 2026-11-09; the details below stay here until spec 8.
+> → the push credentials (bot name and email, HTTPS URL, token) and the App permission check moved to `docs/specs/spec-github-agent-github-providers.md` ("`RepoProvider` (GitHub)", "Startup") on 2026-11-10. Changed there: the push token is a separate one limited to the target repo and `contents: write` (G8).
 
 * **The agent always acts under its own non-human identity, never the developer's:**
   * Commits authored as `<app>[bot]`, set per command (`git -c user.name=… -c user.email=…`); the global git config is untouched.
@@ -384,7 +385,7 @@ Every Anthropic call returns usage data in the response metadata:
 * ~~**Read from git, not from the API:** the app already has the repo locally, so after `git fetch` it reads files with `git show origin/<base>:<path>` (no checkout; the developer's checkout and the bot worktree stay untouched).~~ **2026-11-09:** read through the GitHub API at the base branch (`RepoProvider.readFile`): skills work from Grill Me on and no `git fetch` runs before every step (overview D9).
 * **Always read from the base branch (~~`origin/<base>`~~, 2026-11-09), never from the agent's branch,** at the start of each step. Otherwise the Coder could edit the Quality Gate skill on its own branch and weaken the review of its own PR.
 * **The skill provides the instructions; the bot keeps the contract.** The skill text goes into the step's system prompt, but the bot owns each step's output schema (e.g. Grill Me `{confidence, questions, gaps}`, Quality Gate `{verdict, summary, findings}`), tools and guardrails. A skill changes *how* a step works, never *what it returns or what it's allowed to do*.
-* **A step missing from the map** uses the bot's built-in default prompt (the demo works before every skill is written).
+* ~~**A step missing from the map** uses the bot's built-in default prompt (the demo works before every skill is written).~~ **2026-11-10:** skills are required. A run whose lane needs an unmapped step goes to `status: needs-human` + one comment naming the missing steps, checked when the run starts; there is no built-in fallback prompt (overview D18).
 * **Invalid `workflow.json`** (bad JSON, unknown step, missing path) → `status: needs-human` + one comment naming the problem.
 
 ---
@@ -429,7 +430,7 @@ Every Anthropic call returns usage data in the response metadata:
 | 0 | `spec-github-agent-architecture-overview.md` (**written 2026-11-09**) | Capability map, module boundaries, status/lane **state machine** (event × state → action), shared contracts (`UnifiedTask`, `IssueProvider`, `RepoProvider`), full config schema (every env var, default, owning spec), **table ownership** per spec (settles the deferred Prisma models) | — | max |
 | 1 | `spec-github-agent-walking-skeleton.md` (**written 2026-11-10**) | Webhook → HMAC → events table → 202 → worker → bot posts a "hello" comment through a minimal App client. Proves ngrok, GitHub App and the round trip before any LLM | 0 | high |
 | 2 | `spec-github-agent-intake-authorization.md` | Payload → neutral input, sender check in the worker (incl. the App exception for its own PR events), target-repo filter, label revert for `triage` users, idempotency, ignored events with reasons | 1, 3 | xhigh |
-| 3 | `spec-github-agent-github-providers.md` | `IssueProvider` + `RepoProvider` (GitHub, incl. `readFile`), App auth, labels read from the API, label creation | 1 | high |
+| 3 | `spec-github-agent-github-providers.md` (**written 2026-11-10**) | `IssueProvider` + `RepoProvider` (GitHub, incl. `readFile` and `listFiles`), App auth, labels read from the API, label creation, `ProviderError` (transient / permanent), smoke script | 1 | high |
 | 4 | `spec-github-agent-llm-foundation.md` | Anthropic client, Zod structured output + retry, `ExecutionLog` tokens, input guardrails (injection, size), secret scanning, step-skill loading + prompt assembly | 1, 3 | xhigh |
 | 5 | `spec-github-agent-router-session-lease.md` | `Task` state + label projection, `decide()` + dispatcher, lanes, `grill: skip`, cancel/restart, stale events, session lease + heartbeat (shared lease code) | 2, 3 | xhigh |
 | 6 | `spec-github-agent-grill-me.md` | `GrillSession`/`GrillRound`, 1..K questions per round, two transactions + marker, recovery, bursts, limits, needs-human, skip, cancel comment | 4, 5 | max |
@@ -451,8 +452,8 @@ Every Anthropic call returns usage data in the response metadata:
 ### Every spec includes
 * Objective, scope / out of scope, contracts, owned tables, edge cases.
 * **Manual verification matrix** (mandatory, see `AGENTS.md`).
-* **Setup & configuration** section: what the feature needs (GitHub App permissions, webhook events, env vars, labels, commands). Examples: spec 1 → create/install the GitHub App, ngrok, PostgreSQL, `.env`, `prisma migrate`, npm scripts (→ moved to `docs/specs/spec-github-agent-walking-skeleton.md` "Setup & configuration" on 2026-11-10; the App is created once with the final permissions and events, W6); spec 2 → webhook events (`issues`, `issue_comment`, `pull_request`); spec 3 → App permissions (`issues`, `pull_requests`, `contents`, `checks`, `metadata`), labels and `TARGET_REPO`; spec 4 → `ANTHROPIC_API_KEY`, `TARGET_BASE_BRANCH`; spec 8 → worktree path, copying `.env`, setup command; spec 10 → sandbox copy of the `quality-gate` skill, optional required check in branch protection. Spec 1 also covers creating the **sandbox target repo** (section 10, "Repositories") and its `.github-agent/workflow.json`. Every env var and its owning spec: overview §5 (2026-11-09).
-* **Step skills ownership** (updated 2026-11-09, overview D9): spec 3 provides `RepoProvider.readFile`; spec 4 reads `workflow.json` and the skills at the base branch, validates the map and assembles each step's system prompt (skill text or built-in default, output schema kept by the bot).
+* **Setup & configuration** section: what the feature needs (GitHub App permissions, webhook events, env vars, labels, commands). Examples: spec 1 → create/install the GitHub App, ngrok, PostgreSQL, `.env`, `prisma migrate`, npm scripts (→ moved to `docs/specs/spec-github-agent-walking-skeleton.md` "Setup & configuration" on 2026-11-10; the App is created once with the final permissions and events, W6); spec 2 → webhook events (`issues`, `issue_comment`, `pull_request`); spec 3 → App permissions (`issues`, `pull_requests`, `contents`, `checks`, `metadata`), labels and `TARGET_REPO` (→ moved to `docs/specs/spec-github-agent-github-providers.md` "Startup", "Labels created" and "Configuration" on 2026-11-10); spec 4 → `ANTHROPIC_API_KEY`, `TARGET_BASE_BRANCH`; spec 8 → worktree path, copying `.env`, setup command; spec 10 → sandbox copy of the `quality-gate` skill, optional required check in branch protection. Spec 1 also covers creating the **sandbox target repo** (section 10, "Repositories") and its `.github-agent/workflow.json`. Every env var and its owning spec: overview §5 (2026-11-09).
+* **Step skills ownership** (updated 2026-11-09, overview D9): spec 3 provides `RepoProvider.readFile`; spec 4 reads `workflow.json` and the skills at the base branch, validates the map and assembles each step's system prompt (skill text ~~or built-in default~~, output schema kept by the bot; 2026-11-10: skills are required, overview D18; spec 3 also provides `RepoProvider.listFiles` for whole skill directories).
 * These sections feed the living guide **`docs/guides/setup-github-agent-local.md`** (linked from the root `README.md`), extended each time a spec is implemented. Spec 1's verification matrix includes "follow the guide from zero and get the hello comment". Once `package.json` exists, the real commands go into `AGENTS.md` → Commands.
 
 ### How each session runs

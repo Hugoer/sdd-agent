@@ -59,7 +59,8 @@ comments, without acting under the developer's identity or touching their checko
   `GrillRound` = one row per bot comment.
 - **D9 Step skills are read through the GitHub API** at the base branch (`RepoProvider.readFile`, spec 3);
   spec 4 loads, validates and assembles them. Replaces "read from git". `WORKSPACE_BASE_BRANCH` becomes
-  `TARGET_BASE_BRANCH`.
+  `TARGET_BASE_BRANCH`. **2026-11-10 (spec 3, G7):** a skill is its whole directory (references, scripts), so
+  `RepoProvider.listFiles` lists it; spec 4 decides how the files are used.
 - **D10 `/approve` counts once,** and only if posted after the document (or go-signal) it approves. Ignored
   during `grilling`.
 - **D11 Busy workspace:** the approval is recorded, the event waits (`WAITING_WORKSPACE`), one "queued" comment
@@ -73,6 +74,12 @@ comments, without acting under the developer's identity or touching their checko
 - **D16 Failures:** transient errors are retried a bounded number of times, then `needs-human` + comment.
   Never silent.
 - **D17 Bounded loops:** the Coder and Quality Gate agent loops have step caps from config.
+- **D18 Step skills are required (2026-11-10).** Every step a run uses needs a skill mapped in `workflow.json`;
+  there is no built-in fallback prompt. Checked when the run starts, so nothing is posted or approved first: a
+  missing skill → `needs-human` + one comment naming the missing steps (§3 R6). The bot keeps only its own
+  prompt frame (output schema, tools, guardrails). Replaces "missing → built-in default prompt". Reason: a silent
+  fallback gives weaker documents and can put a green Quality Gate check on a PR, and the steps no longer need a
+  second set of method prompts.
 
 ## Contradictions found in the idea doc
 
@@ -139,14 +146,15 @@ test/                               integration and e2e tests; unit tests sit ne
 docs/                               idea/, specs/, plans/, guides/
 ```
 
-Step modules ship their own built-in default prompts.
+Step modules ship only their bot-owned prompt frame (output schema, tools, guardrails); the method always comes
+from the target repo's skill (D18, 2026-11-10; was "their own built-in default prompts").
 
 ## 2. Repositories
 
 | | Bot repo [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo, was `cn_ai` until 2026-11-10) | Target repo (sandbox) [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox) |
 |---|---|---|
 | What | The NestJS app. The bot never writes code here. | New demo repo (small TypeScript project, ESLint + Vitest) where issues live and the bot codes. |
-| Contains | `src/`, `prisma/`, built-in default prompts, tests, `docs/`, `AGENTS.md`, `.env.example` (`.env` is gitignored) | Issues and labels, `.github-agent/workflow.json`, step skills (e.g. `.claude/skills/*`), the product code, `agent/*` branches, bot PRs and check runs, optional branch protection |
+| Contains | `src/`, `prisma/`, the steps' prompt frames (D18), tests, `docs/`, `AGENTS.md`, `.env.example` (`.env` is gitignored) | Issues and labels, `.github-agent/workflow.json`, step skills (e.g. `.claude/skills/*`), the product code, `agent/*` branches, bot PRs and check runs, optional branch protection |
 | On the developer's machine | The developer's checkout; runs the app | The developer's clone (`WORKSPACE_REPO_PATH`) and the bot worktree (`WORKSPACE_WORKTREE_PATH`: shares history, only the bot writes there) |
 | GitHub App | Not installed | Installed (only here) |
 | Created by | The developer, manually | The developer, manually; spec 1's setup covers it |
@@ -207,9 +215,14 @@ any other event type or action.
 - **R3 One job per task:** while a job holds the lease, the task's other events wait, then run against the new
   state.
 - **R4 Failures:** after bounded retries, any step failure becomes `FAILED(cause)`: invalid `workflow.json`,
-  guardrail block, API error, rejected push, ….
+  missing skill, guardrail block, API error, rejected push, ….
 - **R5 `needs-human`:** every entry posts exactly one comment with the cause and "restart: remove and re-add the
   `workflow:*` label". The restart is the only exit.
+- **R6 Skills check (D18, 2026-11-10):** a run goes on to rows 9–11 only if every step it will use has a skill in
+  `workflow.json`: `full-sdd` → `grill`, `spec`, `plan`, `code`, `qualityGate`; `spec-code` → the same without
+  `plan`; `code-only` → `code`, `qualityGate`; with `grill: skip` → without `grill`. Otherwise the run is created
+  and fails at once with `FAILED(missing skills: …)` (row 28); nothing else is posted. Each step checks again
+  when it loads its skill.
 
 ### Transition table (normative)
 
@@ -261,6 +274,7 @@ stateDiagram-v2
     draft --> grilling: lane label, full-sdd or spec-code
     draft --> specReview: lane label with grill skip, or issue already clear
     draft --> readyForDev: lane label, code-only
+    draft --> needsHuman: lane label, a needed skill is missing
     grilling --> grilling: answer, next round
     grilling --> specReview: confidence reached, Spec posted
     grilling --> needsHuman: round limit
@@ -332,13 +346,24 @@ export interface PushCredentials {
   authorEmail: string;
   remoteUrl: string;   // explicit HTTPS URL; the developer's `origin` is never used or changed
   token: string;       // short-lived installation token: passed per command, never persisted
+                       // (spec 3, G8: target repo only, contents: write only, new on every call)
   expiresAt: Date;
+}
+
+/** Added 2026-11-10 (spec 3, G7). */
+export interface RepoFile {
+  path: string;        // relative to the repo root
+  size: number;        // bytes
+  executable: boolean; // git mode 100755
 }
 
 export interface RepoProvider {
   getPushCredentials(): Promise<PushCredentials>;
   /** file content at a ref on the code host (step skills: always the base branch); null = missing */
   readFile(ref: string, path: string): Promise<string | null>;
+  /** every regular file under dir at a ref, at any depth (a step skill is its whole directory);
+   *  null = no such directory (added 2026-11-10, spec 3, G7) */
+  listFiles(ref: string, dir: string): Promise<RepoFile[] | null>;
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<PullRequestRef>;
   /** recovery after a crash between opening the PR and recording it */
   findPullRequest(branch: string): Promise<PullRequestRef | null>;
@@ -354,6 +379,14 @@ export interface StepSkill {
   step: StepName;
   path: string; // directory mapped in .github-agent/workflow.json
   text: string; // SKILL.md + the files it references, read at the base branch
+                // (2026-11-10: a skill is its whole directory; spec 4 revises this type)
+}
+
+/** Added 2026-11-10 (spec 3, G5). Every provider failure. The worker retries `transient` and fails
+ *  `permanent` at once; providers never retry a call themselves. */
+export class ProviderError extends Error {
+  constructor(message: string, readonly kind: 'transient' | 'permanent',
+    readonly detail: { status?: number; retryAfterSeconds?: number } = {}) { super(message); }
 }
 ```
 
@@ -369,12 +402,16 @@ export interface StepSkill {
 - **Map:** `.github-agent/workflow.json` in the target repo: `{ "skills": { "<step>": "<directory relative to the
   repo root>" } }`. Read with `RepoProvider.readFile` at `TARGET_BASE_BRANCH` at the start of every step run
   (every Grill round too), never from an agent branch.
-- **Missing** file → every step uses its built-in default prompt; a step missing from the map → that step's
-  default.
+- **Required (D18, 2026-11-10):** every step a run uses needs a skill in the map (per lane: §3 R6). There is no
+  built-in fallback. A missing file, or a needed step missing from the map → `FAILED(missing skills: <steps>)` →
+  `needs-human` + one comment naming them. Checked when the run starts and again when a step loads its skill.
+  ~~Missing file → every step uses its built-in default prompt; a step missing from the map → that step's
+  default.~~
 - **Invalid** map (bad JSON, unknown step, missing path) → `FAILED(invalid workflow.json)` → `needs-human` + one
   comment naming the problem.
 - **The skill only changes instructions.** Its text goes into the system prompt; output schema, tools, limits and
-  guardrails are enforced in code, so no prompt wording can widen them.
+  guardrails are enforced in code, so no prompt wording can widen them. The bot's own frame is always in the
+  prompt; the skill supplies the method.
 - **Trust:** skills on the base branch are trusted instructions. Everything else from GitHub (issue, comments,
   approved Spec/Plan text, diffs, repo files) is untrusted data.
 
@@ -461,7 +498,8 @@ earlier table through its own migration; it is then listed under "Extended by".
 14. **Bot identity only:** commits as `<app>[bot]` set per command; fetch and push with a per-command installation
     token over an explicit HTTPS URL, never written to `.git/config`; `origin` and the global git config stay
     untouched; comments, PRs and check runs through the App.
-15. **Skills shape instructions only** (§4) and are always read from the base branch.
+15. **Skills shape instructions only** (§4), are always read from the base branch, and are required: no step runs
+    on a built-in fallback prompt (D18).
 16. **No code without a human go:** only an `/approve` from a `write` user starts the Coder.
 17. **Never silent:** every `needs-human` posts exactly one comment with the cause and the next step; every ignored
     event is recorded with a reason.
@@ -474,12 +512,16 @@ earlier table through its own migration; it is then listed under "Extended by".
 - **2:** an unauthorized *removal* of a lane label is ignored (the bot never re-adds lane labels), so the run
   continues without its label and a later re-add restarts it; labels set at issue creation fire `opened` and
   `labeled` in any order; how the bot recognises its own sender.
-- **3:** caching `hasWriteAccess` results (at most per job); whether loading a skill directory needs a file
-  listing.
+- **3:** ~~caching `hasWriteAccess` results (at most per job); whether loading a skill directory needs a file
+  listing.~~ → resolved 2026-11-10 in `spec-github-agent-github-providers.md`: no cache (G6); `listFiles` (G7).
 - **4:** injection detected → `FAILED` or wrap and continue; truncate vs summarize oversized input; which files a
-  skill may reference and their size cap.
+  skill may reference and their size cap. **Added 2026-11-10 (spec 3, G7):** a skill is loaded as its whole
+  directory: how reference files reach the LLM; whether and where a skill's scripts run (this contradicts "The
+  skill only changes instructions" and the tools column in §4, so this overview changes first); binary files;
+  reading the listing and the files at one commit.
 - **5:** "received" = the time the controller stored the event; several lane labels added at once → one reminder
-  comment, not one per event; events on closed issues; worker concurrency cap.
+  comment, not one per event; events on closed issues; worker concurrency cap; the run-start skills check (R6)
+  calls spec 4's loader.
 - **6:** a comment that arrives while the final evaluation runs (merge it in before moving to the Spec?); partial
   answers to a batch; the cancel comment strips markers, escapes code fences and truncates long answers with a
   link.
@@ -557,6 +599,9 @@ nothing. Unauthorized rows need a second GitHub account with `triage` access to 
 - [ ] (2) An event from another repo (App installed there for the test) → ignored; no API call to that repo.
 - [ ] (5) Add `workflow: full-sdd` and `grill: skip` in one edit → skip comment + Spec, whatever the webhook order.
 - [ ] (5) A human changes a `status: *` label → nothing happens; the next transition restores the right label.
+- [ ] (4, 5) `workflow.json` maps no `plan` skill; add `workflow: full-sdd` → `needs-human` + exactly one comment
+  naming `plan`; NO Grill question is posted. `workflow: code-only` on another issue → the go-signal (that lane
+  doesn't use `plan`).
 - [ ] (5) Swap `workflow: full-sdd` for `workflow: code-only`, in either order → exactly one new run (one
   go-signal), no duplicate comments.
 - [ ] (5, 9) `workflow: code-only` → only the go-signal; worktree and branches unchanged until `/approve`.

@@ -8,7 +8,7 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (moved parts are marked "→ moved to …"). Load only the section relevant to the task, not the whole doc.
 - **State:** spec #1 (walking skeleton) built: NestJS 12 app (ESM) with Zod env config, Prisma 7 + PostgreSQL,
   `POST /webhooks/github` (HMAC guard, delivery dedupe), a polling worker and a hello comment. Next in the build
-  order: spec 3 (`github-providers`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  order: spec 3 (`github-providers`): spec approved 2026-11-10, plan and build pending. Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
@@ -68,6 +68,8 @@ Code conventions: ESM (`"type": "module"`, `nodenext`): relative imports end in 
 - Two repos: this one is the bot; the bot codes only in a separate **target (sandbox) repo**. Step skills
   come from the target repo's `.github-agent/workflow.json`, always read from the base branch (GitHub API),
   never from the agent's branch. Skills shape a step's instructions; the bot keeps its output schema, tools and guardrails.
+  Skills are required: there is no built-in fallback prompt, and a run that needs an unmapped step goes to
+  `status: needs-human` (overview D18).
 
 ## Boundaries
 

@@ -128,7 +128,8 @@ The bot works only on this repo, never on the bot repo itself.
    });
    ```
 
-   `.github-agent/workflow.json` (step skills; empty means every step uses the bot's built-in prompt):
+   `.github-agent/workflow.json` (step skills; empty for now, nothing reads it yet. From spec 4 on, every step a
+   workflow label uses needs a skill mapped here: there is no built-in fallback prompt):
 
    ```json
    {
