@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ProviderError } from '../src/contracts/provider-error.js';
+import { REPO_PROVIDER } from '../src/contracts/repo-provider.js';
 import { GitHubStartupError } from '../src/github/github-startup.js';
 import { startApp } from './app.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
@@ -13,6 +14,8 @@ describe('GitHub startup (spec 3, offline)', () => {
         'ensureLabels',
       ]);
       expect(t.issues.repoLabels).toHaveLength(11);
+      expect(t.app.get(REPO_PROVIDER)).toBe(t.repo);
+      expect(t.repo.calls).toEqual([]);
     } finally {
       await t.app.close();
     }

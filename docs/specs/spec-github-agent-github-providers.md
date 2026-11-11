@@ -93,7 +93,9 @@ succeeded.
    `read`.
 3. **Bot identity:** login `<slug>[bot]`; its user ID from `GET /users/<slug>[bot]` (needed for the commit email).
 4. **Labels:** `ensureLabels()` (below).
-5. Log one line: bot login, `TARGET_REPO`, installation ID, labels created / already present.
+5. Log two lines: the label counts (`Labels on <TARGET_REPO>: N created, M already present`), then the ready line
+   (`GitHub ready: <bot login> on <TARGET_REPO> (installation <ID>)`). Two lines because `ensureLabels()` returns
+   nothing, and startup calls it through `ISSUE_PROVIDER` so tests can swap in the fake.
 
 Any failure stops the process with exit code 1 and one message. Never printed: the token, the JWT, the key.
 

@@ -390,6 +390,192 @@ describe('GitHubIssueProvider.findCommentByMarker', () => {
   });
 });
 
+const ISSUE_5_LABELS = `${ISSUE_5}/labels`;
+
+/** Method and decoded path of each request to issue #5's labels. */
+function labelRequests(fake: FakeGitHubFetch): string[] {
+  return fake
+    .to(/\/issues\/5\/labels/)
+    .map((r) => `${r.method} ${decodeURIComponent(r.path)}`);
+}
+
+const labelsOn5 = (...names: string[]) => ({
+  body: names.map((name) => ({ name })),
+});
+
+describe('GitHubIssueProvider.setStatusLabel', () => {
+  it('adds the new status label first, then removes the other status labels only', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake
+      .on(
+        'GET',
+        ISSUE_5_LABELS,
+        labelsOn5('bug', 'status: draft', 'Status: Grilling'),
+      )
+      .on('POST', ISSUE_5_LABELS, { body: [] })
+      .on('DELETE', /\/issues\/5\/labels\/.+/, { body: [] });
+
+    await issues.setStatusLabel(task5, 'spec-review');
+
+    expect(labelRequests(fake)).toEqual([
+      `GET ${ISSUE_5_LABELS}`,
+      `POST ${ISSUE_5_LABELS}`,
+      `DELETE ${ISSUE_5_LABELS}/status: draft`,
+      `DELETE ${ISSUE_5_LABELS}/Status: Grilling`,
+    ]);
+    expect(fake.to(ISSUE_5_LABELS, 'POST')[0].body).toEqual({
+      labels: ['status: spec-review'],
+    });
+  });
+
+  it('writes nothing when the issue already has only that status (any case)', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', ISSUE_5_LABELS, labelsOn5('bug', 'Status: Executing'));
+
+    await issues.setStatusLabel(task5, 'executing');
+
+    expect(labelRequests(fake)).toEqual([`GET ${ISSUE_5_LABELS}`]);
+  });
+
+  it('reduces two status labels to one without adding (a crash left both)', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake
+      .on('GET', ISSUE_5_LABELS, labelsOn5('status: draft', 'status: grilling'))
+      .on('DELETE', /\/issues\/5\/labels\/.+/, { body: [] });
+
+    await issues.setStatusLabel(task5, 'grilling');
+
+    expect(labelRequests(fake)).toEqual([
+      `GET ${ISSUE_5_LABELS}`,
+      `DELETE ${ISSUE_5_LABELS}/status: draft`,
+    ]);
+  });
+
+  it('removes nothing when adding the label fails', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake
+      .on('GET', ISSUE_5_LABELS, labelsOn5('status: draft'))
+      .on('POST', ISSUE_5_LABELS, { status: 500, body: { message: 'boom' } });
+
+    await expect(
+      issues.setStatusLabel(task5, 'grilling'),
+    ).rejects.toMatchObject({ kind: 'transient' });
+    expect(labelRequests(fake)).toEqual([
+      `GET ${ISSUE_5_LABELS}`,
+      `POST ${ISSUE_5_LABELS}`,
+    ]);
+  });
+});
+
+describe('GitHubIssueProvider.removeLabel', () => {
+  it.each(['workflow: full-sdd', 'Workflow: Code-Only', 'grill: skip'])(
+    'removes "%s" with one request',
+    async (label) => {
+      const fake = new FakeGitHubFetch();
+      const issues = await providerWith(fake);
+      fake.on('DELETE', /\/issues\/5\/labels\/.+/, { body: [] });
+
+      await issues.removeLabel(task5, label);
+
+      expect(labelRequests(fake)).toEqual([
+        `DELETE ${ISSUE_5_LABELS}/${label}`,
+      ]);
+    },
+  );
+
+  it('succeeds when the label is not on the issue (404)', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('DELETE', /\/issues\/5\/labels\/.+/, {
+      status: 404,
+      body: { message: 'Label does not exist' },
+    });
+
+    await expect(
+      issues.removeLabel(task5, 'grill: skip'),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each(['status: draft', 'bug', 'workflow', 'grill: skipped'])(
+    'refuses "%s" without a request',
+    async (label) => {
+      const fake = new FakeGitHubFetch();
+      const issues = await providerWith(fake);
+
+      await expect(issues.removeLabel(task5, label)).rejects.toMatchObject({
+        kind: 'permanent',
+      });
+      expect(fake.to(/\/issues/)).toHaveLength(0);
+    },
+  );
+
+  it('throws on any other failure', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('DELETE', /\/issues\/5\/labels\/.+/, {
+      status: 403,
+      body: { message: 'Resource not accessible by integration' },
+    });
+
+    await expect(
+      issues.removeLabel(task5, 'grill: skip'),
+    ).rejects.toMatchObject({ kind: 'permanent', detail: { status: 403 } });
+  });
+});
+
+describe('GitHubIssueProvider.hasWriteAccess', () => {
+  const PERMISSION = `/repos/${TEST_REPO}/collaborators/octocat/permission`;
+
+  it.each([
+    ['admin', true],
+    ['write', true],
+    ['read', false],
+    ['none', false],
+  ])('%s → %s, with one request', async (permission, expected) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', PERMISSION, { body: { permission } });
+
+    await expect(issues.hasWriteAccess(task5, 'octocat')).resolves.toBe(
+      expected,
+    );
+    expect(fake.to(PERMISSION)).toHaveLength(1);
+  });
+
+  it('no such user (404) → false', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', PERMISSION, { status: 404, body: { message: 'Not Found' } });
+
+    await expect(issues.hasWriteAccess(task5, 'octocat')).resolves.toBe(false);
+  });
+
+  it('throws on a failure instead of answering false', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', PERMISSION, { status: 503, body: { message: 'down' } });
+
+    await expect(issues.hasWriteAccess(task5, 'octocat')).rejects.toMatchObject(
+      { kind: 'transient' },
+    );
+  });
+
+  it('asks again on every call (no cache)', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', PERMISSION, { body: { permission: 'write' } });
+
+    await issues.hasWriteAccess(task5, 'octocat');
+    await issues.hasWriteAccess(task5, 'octocat');
+
+    expect(fake.to(PERMISSION)).toHaveLength(2);
+  });
+});
+
 describe('GitHubIssueProvider on another repo', () => {
   const elsewhere: TaskRef = {
     platform: 'GITHUB',
@@ -405,6 +591,9 @@ describe('GitHubIssueProvider on another repo', () => {
       'findCommentByMarker',
       (issues) => issues.findCommentByMarker(elsewhere, 'm'),
     ],
+    ['setStatusLabel', (issues) => issues.setStatusLabel(elsewhere, 'draft')],
+    ['removeLabel', (issues) => issues.removeLabel(elsewhere, 'grill: skip')],
+    ['hasWriteAccess', (issues) => issues.hasWriteAccess(elsewhere, 'octocat')],
   ])('%s throws a permanent error and sends nothing', async (_name, call) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);

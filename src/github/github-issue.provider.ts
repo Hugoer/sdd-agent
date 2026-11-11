@@ -4,6 +4,7 @@ import type {
   IssueProvider,
   Lane,
   TaskRef,
+  TaskStatus,
   UnifiedTask,
 } from '../contracts/issue-provider.js';
 import { ProviderError } from '../contracts/provider-error.js';
@@ -12,8 +13,11 @@ import {
   BOT_LABELS,
   GRILL_SKIP,
   LANES,
+  isHumanControlLabel,
+  isStatusLabel,
   laneLabel,
   sameLabel,
+  statusLabel,
 } from './labels.js';
 
 /** IssueProvider on GitHub (spec 3). A defined "missing" result is a value; every other failure a ProviderError. */
@@ -103,16 +107,68 @@ export class GitHubIssueProvider implements IssueProvider {
     return found ? commentRef(found) : null;
   }
 
-  setStatusLabel(): Promise<void> {
-    return Promise.reject(new Error('not implemented yet (spec 3, T10)'));
+  /** G9: add first, then remove the other status labels, so the issue is never left without one. */
+  async setStatusLabel(task: TaskRef, status: TaskStatus): Promise<void> {
+    const target = this.github.target(task);
+    const wanted = statusLabel(status);
+    const current = await this.github.request((octokit) =>
+      octokit.paginate(
+        'GET /repos/{owner}/{repo}/issues/{issue_number}/labels',
+        { ...target, per_page: 100 },
+      ),
+    );
+    const names = current.map((label) => label.name);
+    if (!names.some((name) => sameLabel(name, wanted))) {
+      await this.github.request((octokit) =>
+        octokit.request(
+          'POST /repos/{owner}/{repo}/issues/{issue_number}/labels',
+          { ...target, labels: [wanted] },
+        ),
+      );
+      this.logger.log(`setStatusLabel ${task.externalRef} → added "${wanted}"`);
+    }
+    for (const name of names) {
+      if (!isStatusLabel(name) || sameLabel(name, wanted)) continue;
+      await this.github.request((octokit) =>
+        octokit.request(
+          'DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}',
+          { ...target, name },
+        ),
+      );
+      this.logger.log(`setStatusLabel ${task.externalRef} → removed "${name}"`);
+    }
   }
 
-  removeLabel(): Promise<void> {
-    return Promise.reject(new Error('not implemented yet (spec 3, T10)'));
+  /** A4: only lane and modifier labels; a label already gone counts as removed. */
+  async removeLabel(task: TaskRef, label: string): Promise<void> {
+    if (!isHumanControlLabel(label)) {
+      throw new ProviderError(
+        `removeLabel refuses "${label}": only workflow: * and grill: skip`,
+        'permanent',
+      );
+    }
+    const target = this.github.target(task);
+    await this.github.requestOrNull((octokit) =>
+      octokit.request(
+        'DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}',
+        { ...target, name: label },
+      ),
+    );
+    this.logger.log(`removeLabel ${task.externalRef} → "${label}"`);
   }
 
-  hasWriteAccess(): Promise<boolean> {
-    return Promise.reject(new Error('not implemented yet (spec 3, T10)'));
+  /** GitHub reports maintain as write and triage as read. No cache (G6). */
+  async hasWriteAccess(task: TaskRef, login: string): Promise<boolean> {
+    const { owner, repo } = this.github.target(task);
+    const found = await this.github.requestOrNull((octokit) =>
+      octokit.request(
+        'GET /repos/{owner}/{repo}/collaborators/{username}/permission',
+        { owner, repo, username: login },
+      ),
+    );
+    return (
+      found?.data.permission === 'admin' || found?.data.permission === 'write'
+    );
   }
 
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean } {

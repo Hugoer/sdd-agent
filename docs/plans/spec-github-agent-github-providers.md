@@ -149,7 +149,7 @@ are logged without bodies. Includes the scripted fake `fetch` helper for all lat
 ### Task 5: Startup checks and failure messages
 
 **Description:** `connect()` gains the permission check (A1) and the bot identity (login, user ID).
-`GitHubStartup.onModuleInit()` runs connect → `ensureLabels()` → one log line, and turns each failure into a
+`GitHubStartup.onModuleInit()` runs connect → `ensureLabels()` → the ready line (two log lines in all, spec updated 2026-11-11), and turns each failure into a
 `GitHubStartupError` with the spec's message (P9).
 
 **Acceptance criteria:**
@@ -272,14 +272,14 @@ other error keep spec 1's retries; `retryAfterSeconds` sets a minimum wait (A2).
 **Description:** `setStatusLabel`, `removeLabel` and `hasWriteAccess` on `GitHubIssueProvider`.
 
 **Acceptance criteria:**
-- [ ] `setStatusLabel`: the `POST` comes before any `DELETE`; no write when the issue is already right; other
+- [x] `setStatusLabel`: the `POST` comes before any `DELETE`; no write when the issue is already right; other
   labels untouched; two status labels are reduced to one
-- [ ] `removeLabel`: only `workflow: *` and `grill: skip` (anything else throws with zero requests); a `404` is
+- [x] `removeLabel`: only `workflow: *` and `grill: skip` (anything else throws with zero requests); a `404` is
   success
-- [ ] `hasWriteAccess`: `admin` / `write` → `true`; `read`, `none`, `404` → `false`; one request per call
+- [x] `hasWriteAccess`: `admin` / `write` → `true`; `read`, `none`, `404` → `false`; one request per call
 
 **Verification:**
-- [ ] `npm test` passes
+- [x] `npm test` passes
 
 **Dependencies:** T7
 **Files:** `src/github/github-issue.provider.ts` (+ `.spec.ts`)
@@ -292,14 +292,14 @@ argument parsing with `util.parseArgs`, one `PASS` / `FAIL` line per check, exit
 issue checks.
 
 **Acceptance criteria:**
-- [ ] `--issue N` runs the issue checks through the two tokens only (no Octokit import in the script); exit code 0
+- [x] `--issue N` runs the issue checks through the two tokens only (no Octokit import in the script); exit code 0
   only if every line is `PASS`
-- [ ] Without `--issue` → a usage message and exit code 1; no token is ever printed
-- [ ] `runSmoke` passes against the fakes and reports `FAIL` when a fake is made to misbehave (unit-tested)
+- [x] Without `--issue` → a usage message and exit code 1; no token is ever printed
+- [x] `runSmoke` passes against the fakes and reports `FAIL` when a fake is made to misbehave (unit-tested)
 
 **Verification:**
-- [ ] `npm test`, `npm run typecheck`, `npm run lint` pass
-- [ ] Manual (needs your test issue): the spec's "Smoke script — issue" rows
+- [x] `npm test`, `npm run typecheck`, `npm run lint` pass
+- [x] Manual (needs your test issue): the spec's "Smoke script — issue" rows
 
 **Dependencies:** T10
 **Files:** `src/github/smoke/github-smoke.ts`, `src/github/smoke/run-smoke.ts` (+ `.spec.ts`), `package.json`
@@ -311,15 +311,15 @@ issue checks.
 and the harness. The smoke gains the repo checks (`--base`, `--dir`).
 
 **Acceptance criteria:**
-- [ ] `readFile`: the text of a file; `null` for a missing path, a directory, a submodule; permanent error for an
+- [x] `readFile`: the text of a file; `null` for a missing path, a directory, a submodule; permanent error for an
   unknown ref, over 1 MB, invalid UTF-8 or an unsafe path
-- [ ] `listFiles`: nested regular files sorted by path, `executable` from mode `100755`, symlinks and submodules
+- [x] `listFiles`: nested regular files sorted by path, `executable` from mode `100755`, symlinks and submodules
   left out; `null` for a missing directory; permanent error for an unknown ref or a truncated tree
-- [ ] The smoke prints the file, the listing and the `null` / error cases
+- [x] The smoke prints the file, the listing and the `null` / error cases
 
 **Verification:**
-- [ ] `npm test`, `npm run test:integration` pass
-- [ ] Manual (needs your `smoke-skill/` push): the spec's "Smoke script — skill directory" row
+- [x] `npm test`, `npm run test:integration` pass
+- [x] Manual (needs your `smoke-skill/` push): the spec's "Smoke script — skill directory" row
 
 **Dependencies:** T11
 **Files:** `src/github/github-repo.provider.ts` (+ `.spec.ts`), `src/github/github.module.ts`, `test/app.ts`,
@@ -332,14 +332,14 @@ and the harness. The smoke gains the repo checks (`--base`, `--dir`).
 checks, including the comment attempt that must be refused.
 
 **Acceptance criteria:**
-- [ ] The request goes out as the App (JWT) with `repositories: [<repo>]` and `permissions: { contents: 'write' }`;
+- [x] The request goes out as the App (JWT) with `repositories: [<repo>]` and `permissions: { contents: 'write' }`;
   one request per call; name, noreply email, HTTPS URL and expiry as in the spec
-- [ ] The token appears in no log line and no error message (unit test on the captured logs)
-- [ ] Smoke: two different tokens (lengths only) and `PASS` for "push token cannot comment (403)"
+- [x] The token appears in no log line and no error message (unit test on the captured logs)
+- [x] Smoke: two different tokens (lengths only) and `PASS` for "push token cannot comment (403)"
 
 **Verification:**
-- [ ] `npm test` passes
-- [ ] Manual: the spec's "Smoke script — push credentials" row
+- [x] `npm test` passes
+- [x] Manual: the spec's "Smoke script — push credentials" row
 
 **Dependencies:** T12
 **Files:** `src/github/github-repo.provider.ts` (+ `.spec.ts`), `src/github/smoke/run-smoke.ts`
@@ -351,14 +351,14 @@ checks, including the comment attempt that must be refused.
 gains the PR checks (`--branch`, `--sha`).
 
 **Acceptance criteria:**
-- [ ] `openPullRequest` → a non-draft PR and its `PullRequestRef`; GitHub's `422` → permanent error, no lookup
-- [ ] `findPullRequest` → the newest PR of the branch opened by this App, any state; a human's PR → `null`
-- [ ] `setQualityResult` → creates `Quality Gate` the first time and updates the same check run for the same
+- [x] `openPullRequest` → a non-draft PR and its `PullRequestRef`; GitHub's `422` → permanent error, no lookup
+- [x] `findPullRequest` → the newest PR of the branch opened by this App, any state; a human's PR → `null`
+- [x] `setQualityResult` → creates `Quality Gate` the first time and updates the same check run for the same
   commit; `postPullRequestComment` behaves as `postComment`
 
 **Verification:**
-- [ ] `npm test` passes
-- [ ] Manual (needs your branch `smoke/spec-3`; I read its head SHA with a read-only `gh api`): the spec's "Smoke
+- [x] `npm test` passes
+- [x] Manual (needs your branch `smoke/spec-3`; I read its head SHA with a read-only `gh api`): the spec's "Smoke
   script — PR and check run" rows, including the second run
 
 **Dependencies:** T13
@@ -366,9 +366,9 @@ gains the PR checks (`--branch`, `--sha`).
 **Scope:** M
 
 ### Checkpoint 3 — Every method proven on the sandbox
-- [ ] All four commands green
-- [ ] Every smoke group prints `PASS`; exit code 0; a second run opens no second PR and adds no second check run
-- [ ] `grep` the smoke output for `ghs_` → no match
+- [x] All four commands green
+- [x] Every smoke group prints `PASS`; exit code 0; a second run opens no second PR and adds no second check run
+- [x] `grep` the smoke output for `ghs_` → no match
 - [ ] You review and commit
 
 ---

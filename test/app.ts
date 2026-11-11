@@ -4,11 +4,13 @@ import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { appOptions, configureApp } from '../src/app.setup.js';
 import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
+import { REPO_PROVIDER } from '../src/contracts/repo-provider.js';
 import { EventsWorker } from '../src/events/events.worker.js';
 import { GitHubClient } from '../src/github/github-client.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
+import { InMemoryRepoProvider } from './fakes/in-memory-repo-provider.js';
 import { testEnv } from './test-env.js';
 
 /** Stands in for GitHubClient (plan P3): answers the startup steps and sends nothing. */
@@ -37,12 +39,15 @@ class OfflineGitHubClient {
 export function offlineGitHub(
   builder: TestingModuleBuilder,
   issues = new InMemoryIssueProvider(testEnv.TARGET_REPO),
+  repo = new InMemoryRepoProvider(testEnv.TARGET_REPO),
 ): TestingModuleBuilder {
   return builder
     .overrideProvider(GitHubClient)
     .useClass(OfflineGitHubClient)
     .overrideProvider(ISSUE_PROVIDER)
-    .useValue(issues);
+    .useValue(issues)
+    .overrideProvider(REPO_PROVIDER)
+    .useValue(repo);
 }
 
 /** Same worker without the polling loop: tests call `drainOnce()` themselves. */
@@ -57,6 +62,7 @@ export interface TestApp {
   prisma: PrismaService;
   worker: EventsWorker;
   issues: InMemoryIssueProvider;
+  repo: InMemoryRepoProvider;
   baseUrl: string;
 }
 
@@ -67,15 +73,19 @@ export interface StartOptions {
   keepData?: boolean;
   /** The fake behind ISSUE_PROVIDER (default: a new one for TARGET_REPO). */
   issues?: InMemoryIssueProvider;
+  /** The fake behind REPO_PROVIDER (default: a new one for TARGET_REPO). */
+  repo?: InMemoryRepoProvider;
 }
 
 /** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
 export async function startApp(options: StartOptions = {}): Promise<TestApp> {
   const issues =
     options.issues ?? new InMemoryIssueProvider(testEnv.TARGET_REPO);
+  const repo = options.repo ?? new InMemoryRepoProvider(testEnv.TARGET_REPO);
   let builder = offlineGitHub(
     Test.createTestingModule({ imports: [AppModule] }),
     issues,
+    repo,
   );
   if (!options.pollingWorker) {
     builder = builder
@@ -102,6 +112,7 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     prisma,
     worker: app.get(EventsWorker),
     issues,
+    repo,
     baseUrl: await app.getUrl(),
   };
 }
