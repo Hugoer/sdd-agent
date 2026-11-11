@@ -7,5 +7,6 @@ export const testEnv = {
   GITHUB_WEBHOOK_SECRET: 'test-webhook-secret',
   GITHUB_APP_ID: '1',
   GITHUB_APP_PRIVATE_KEY_PATH: 'test/fixtures/fake-app-key.txt',
+  TARGET_REPO: 'test-owner/test-repo',
   NGROK_DOMAIN: '',
 };

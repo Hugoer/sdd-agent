@@ -1,15 +1,18 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { appOptions, configureApp } from '../src/app.setup.js';
+import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
 import { EventsWorker } from '../src/events/events.worker.js';
+import { GitHubClient } from '../src/github/github-client.js';
 import {
   HelloCommentService,
   type HelloTarget,
 } from '../src/events/hello/hello-comment.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
+import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
 import { testEnv } from './test-env.js';
 
 const succeed = (): Promise<void> => Promise.resolve();
@@ -30,6 +33,40 @@ export class FakeHelloCommentService {
   }
 }
 
+/** Stands in for GitHubClient (plan P3): answers the startup steps and sends nothing. */
+class OfflineGitHubClient {
+  readonly targetRepo = testEnv.TARGET_REPO;
+  connect() {
+    const write = 'write';
+    return Promise.resolve({
+      id: 1,
+      appSlug: 'test-app',
+      permissions: {
+        issues: write,
+        pull_requests: write,
+        contents: write,
+        checks: write,
+        metadata: 'read',
+      },
+    });
+  }
+  identifyBot() {
+    return Promise.resolve({ login: 'test-app[bot]', userId: 1 });
+  }
+}
+
+/** Replaces everything that could reach GitHub: the client (no request) and the provider ports (fakes). */
+export function offlineGitHub(
+  builder: TestingModuleBuilder,
+  issues = new InMemoryIssueProvider(testEnv.TARGET_REPO),
+): TestingModuleBuilder {
+  return builder
+    .overrideProvider(GitHubClient)
+    .useClass(OfflineGitHubClient)
+    .overrideProvider(ISSUE_PROVIDER)
+    .useValue(issues);
+}
+
 /** Same worker without the polling loop: tests call `drainOnce()` themselves. */
 class ManualEventsWorker extends EventsWorker {
   override async onApplicationBootstrap(): Promise<void> {
@@ -42,6 +79,7 @@ export interface TestApp {
   prisma: PrismaService;
   worker: EventsWorker;
   hello: FakeHelloCommentService;
+  issues: InMemoryIssueProvider;
   baseUrl: string;
 }
 
@@ -50,12 +88,19 @@ export interface StartOptions {
   pollingWorker?: boolean;
   /** Keep existing rows (default: empty the database before boot). */
   keepData?: boolean;
+  /** The fake behind ISSUE_PROVIDER (default: a new one for TARGET_REPO). */
+  issues?: InMemoryIssueProvider;
 }
 
-/** Boots the real app on a random local port; GitHub is always faked. */
+/** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
 export async function startApp(options: StartOptions = {}): Promise<TestApp> {
   const hello = new FakeHelloCommentService();
-  let builder = Test.createTestingModule({ imports: [AppModule] })
+  const issues =
+    options.issues ?? new InMemoryIssueProvider(testEnv.TARGET_REPO);
+  let builder = offlineGitHub(
+    Test.createTestingModule({ imports: [AppModule] }),
+    issues,
+  )
     .overrideProvider(HelloCommentService)
     .useValue(hello);
   if (!options.pollingWorker) {
@@ -72,12 +117,18 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
   );
   const prisma = app.get(PrismaService);
   if (!options.keepData) await resetDatabase(prisma);
-  await app.listen(0, '127.0.0.1');
+  try {
+    await app.listen(0, '127.0.0.1');
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
   return {
     app,
     prisma,
     worker: app.get(EventsWorker),
     hello,
+    issues,
     baseUrl: await app.getUrl(),
   };
 }

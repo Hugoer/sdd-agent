@@ -19,6 +19,7 @@ const valid = {
   GITHUB_WEBHOOK_SECRET: 'webhook-secret',
   GITHUB_APP_ID: '123456',
   GITHUB_APP_PRIVATE_KEY_PATH: pemPath,
+  TARGET_REPO: 'Hugoer/sdd-agent-sandbox',
 };
 
 function errorOf(config: Record<string, unknown>): string {
@@ -61,6 +62,14 @@ describe('validateEnv', () => {
     ['GITHUB_APP_PRIVATE_KEY_PATH', notPemPath],
     ['NGROK_DOMAIN', 'https://x.ngrok-free.app/'],
     ['NGROK_DOMAIN', 'x.ngrok-free.app/path'],
+    ['TARGET_REPO', 'foo'],
+    ['TARGET_REPO', 'owner/'],
+    ['TARGET_REPO', '/repo'],
+    ['TARGET_REPO', 'owner/repo/extra'],
+    ['TARGET_REPO', 'https://github.com/owner/repo'],
+    ['TARGET_REPO', 'own_er/repo'],
+    ['TARGET_REPO', 'owner/re po'],
+    ['TARGET_REPO', 'owner/..'],
   ])('rejects %s=%s naming the variable', (name, value) => {
     expect(errorOf({ ...valid, [name]: value })).toMatch(
       new RegExp(`- ${name}: `),
@@ -73,6 +82,15 @@ describe('validateEnv', () => {
     );
   });
 
+  it.each(['octo-org/my.repo_name-2', 'a/b', 'Owner/.github'])(
+    'accepts TARGET_REPO=%s',
+    (value) => {
+      expect(validateEnv({ ...valid, TARGET_REPO: value }).TARGET_REPO).toBe(
+        value,
+      );
+    },
+  );
+
   it('lists every failing variable at once', () => {
     const message = errorOf({ PORT: '70000' });
     for (const name of [
@@ -81,6 +99,7 @@ describe('validateEnv', () => {
       'GITHUB_WEBHOOK_SECRET',
       'GITHUB_APP_ID',
       'GITHUB_APP_PRIVATE_KEY_PATH',
+      'TARGET_REPO',
     ]) {
       expect(message).toContain(`- ${name}: `);
     }

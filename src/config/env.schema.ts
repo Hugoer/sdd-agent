@@ -4,6 +4,9 @@ import { z } from 'zod';
 const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 const HOSTNAME =
   /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+// GitHub's characters: owner = letters, digits, hyphens; repo = letters, digits, `.`, `_`, `-` (not `.` or `..`).
+const OWNER_SLASH_NAME =
+  /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?\/(?!\.\.?$)[a-z0-9._-]{1,100}$/i;
 
 function containsPrivateKey(path: string): boolean {
   try {
@@ -35,6 +38,9 @@ export const envSchema = z.object({
       containsPrivateKey,
       'must point to a readable file containing a PEM private key',
     ),
+  TARGET_REPO: z
+    .string()
+    .regex(OWNER_SLASH_NAME, 'must be owner/name (e.g. you/sdd-agent-sandbox)'),
   NGROK_DOMAIN: z
     .string()
     .refine(
