@@ -6,32 +6,10 @@ import { appOptions, configureApp } from '../src/app.setup.js';
 import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
 import { EventsWorker } from '../src/events/events.worker.js';
 import { GitHubClient } from '../src/github/github-client.js';
-import {
-  HelloCommentService,
-  type HelloTarget,
-} from '../src/events/hello/hello-comment.service.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
 import { testEnv } from './test-env.js';
-
-const succeed = (): Promise<void> => Promise.resolve();
-
-/** Stands in for GitHub: records every call; `behavior` makes it fail or hang. */
-export class FakeHelloCommentService {
-  readonly calls: HelloTarget[] = [];
-  behavior: (target: HelloTarget) => Promise<void> = succeed;
-
-  postHello(target: HelloTarget): Promise<void> {
-    this.calls.push(target);
-    return this.behavior(target);
-  }
-
-  reset(): void {
-    this.calls.length = 0;
-    this.behavior = succeed;
-  }
-}
 
 /** Stands in for GitHubClient (plan P3): answers the startup steps and sends nothing. */
 class OfflineGitHubClient {
@@ -78,7 +56,6 @@ export interface TestApp {
   app: NestExpressApplication;
   prisma: PrismaService;
   worker: EventsWorker;
-  hello: FakeHelloCommentService;
   issues: InMemoryIssueProvider;
   baseUrl: string;
 }
@@ -94,15 +71,12 @@ export interface StartOptions {
 
 /** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
 export async function startApp(options: StartOptions = {}): Promise<TestApp> {
-  const hello = new FakeHelloCommentService();
   const issues =
     options.issues ?? new InMemoryIssueProvider(testEnv.TARGET_REPO);
   let builder = offlineGitHub(
     Test.createTestingModule({ imports: [AppModule] }),
     issues,
-  )
-    .overrideProvider(HelloCommentService)
-    .useValue(hello);
+  );
   if (!options.pollingWorker) {
     builder = builder
       .overrideProvider(EventsWorker)
@@ -127,7 +101,6 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     app,
     prisma,
     worker: app.get(EventsWorker),
-    hello,
     issues,
     baseUrl: await app.getUrl(),
   };
@@ -168,15 +141,13 @@ export function postWebhook(
   });
 }
 
-/** A minimal `issues.opened` payload for the sandbox repo. */
-export function issuesOpenedPayload(installationId: number | null = 42) {
+/** A minimal `issues.opened` payload for issue #7 (its fake: `issues.seedIssue({ number: 7 })`). */
+export function issuesOpenedPayload(fullName = testEnv.TARGET_REPO) {
   return {
     action: 'opened',
-    ...(installationId === null
-      ? {}
-      : { installation: { id: installationId } }),
-    repository: { name: 'sdd-agent-sandbox', owner: { login: 'octo' } },
-    issue: { number: 7 },
+    installation: { id: 42 },
+    repository: { full_name: fullName },
+    issue: { id: 1007, number: 7 },
   };
 }
 

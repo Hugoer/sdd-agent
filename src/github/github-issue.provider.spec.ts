@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import type { UnifiedTask } from '../contracts/issue-provider.js';
+import { Logger } from '@nestjs/common';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { TaskRef, UnifiedTask } from '../contracts/issue-provider.js';
 import {
   FakeGitHubFetch,
+  TEST_APP_ID,
   TEST_REPO,
   connectedTestClient,
 } from '../../test/fakes/fake-github-fetch.js';
@@ -9,6 +11,15 @@ import { GitHubIssueProvider } from './github-issue.provider.js';
 import { BOT_LABELS } from './labels.js';
 
 const LABELS = `/repos/${TEST_REPO}/labels`;
+const ISSUE_5 = `/repos/${TEST_REPO}/issues/5`;
+const COMMENTS_5 = `${ISSUE_5}/comments`;
+const task5: TaskRef = {
+  platform: 'GITHUB',
+  id: '1005',
+  externalRef: `${TEST_REPO}#5`,
+};
+
+afterEach(() => vi.restoreAllMocks());
 
 async function providerWith(
   fake: FakeGitHubFetch,
@@ -155,5 +166,250 @@ describe('GitHubIssueProvider.readControls', () => {
 
   it('ignores an unknown workflow label', () => {
     expect(issues.readControls(task(['workflow: yolo'])).lanes).toEqual([]);
+  });
+});
+
+/** A comment as GitHub returns it; `app` is the App that wrote it (none for a human). */
+function comment(
+  id: number,
+  body: string | null,
+  { app, issue = 5 }: { app?: number; issue?: number } = {},
+) {
+  return {
+    id,
+    body,
+    html_url: `https://github.com/${TEST_REPO}/issues/${issue}#issuecomment-${id}`,
+    issue_url: `https://api.github.com/repos/${TEST_REPO}/issues/${issue}`,
+    created_at: `2026-11-11T10:00:${String(id % 60).padStart(2, '0')}Z`,
+    user: { login: app ? 'test-app[bot]' : 'someone' },
+    performed_via_github_app: app ? { id: app, slug: 'test-app' } : null,
+  };
+}
+
+describe('GitHubIssueProvider.getTaskDetails', () => {
+  it('maps the issue: ID as a string, label names, author and URL', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', ISSUE_5, {
+      body: {
+        id: 3456789012,
+        number: 5,
+        title: 'Add a dark mode',
+        body: 'Please.',
+        labels: [{ name: 'bug' }, { name: 'workflow: spec-code' }],
+        user: { login: 'octocat' },
+        html_url: `https://github.com/${TEST_REPO}/issues/5`,
+      },
+    });
+
+    await expect(issues.getTaskDetails(task5)).resolves.toEqual({
+      platform: 'GITHUB',
+      id: '3456789012',
+      externalRef: `${TEST_REPO}#5`,
+      title: 'Add a dark mode',
+      description: 'Please.',
+      labels: ['bug', 'workflow: spec-code'],
+      author: 'octocat',
+      url: `https://github.com/${TEST_REPO}/issues/5`,
+    });
+    expect(fake.to(ISSUE_5)).toHaveLength(1);
+  });
+
+  it("gives '' for an issue without a body", async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', ISSUE_5, {
+      body: {
+        id: 1,
+        title: 't',
+        body: null,
+        labels: [],
+        user: { login: 'octocat' },
+        html_url: 'u',
+      },
+    });
+
+    const details = await issues.getTaskDetails(task5);
+
+    expect(details.description).toBe('');
+  });
+
+  it('throws a permanent error for a missing issue', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', ISSUE_5, { status: 404, body: { message: 'Not Found' } });
+
+    await expect(issues.getTaskDetails(task5)).rejects.toMatchObject({
+      kind: 'permanent',
+      detail: { status: 404 },
+    });
+  });
+});
+
+describe('GitHubIssueProvider.postComment', () => {
+  it('sends the body unchanged and returns the new comment', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    const body = '<!-- sdd-agent:spec:v1 -->\n## Spec\n\n`code` & ünïcode ✓';
+    fake.on('POST', COMMENTS_5, { status: 201, body: comment(91, body) });
+
+    const posted = await issues.postComment(task5, body);
+
+    expect(posted).toEqual({
+      id: '91',
+      url: `https://github.com/${TEST_REPO}/issues/5#issuecomment-91`,
+      createdAt: new Date('2026-11-11T10:00:31Z'),
+    });
+    expect(fake.to(COMMENTS_5, 'POST').map((r) => r.body)).toEqual([{ body }]);
+  });
+
+  it('logs the issue and the comment ID, never the body', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', COMMENTS_5, {
+      status: 201,
+      body: comment(92, 'secret-ish body'),
+    });
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+
+    await issues.postComment(task5, 'secret-ish body');
+
+    const lines = log.mock.calls.map(([line]) => String(line));
+    expect(lines).toEqual([expect.stringMatching(/#5.*92/)]);
+    expect(lines.join()).not.toContain('secret-ish');
+  });
+
+  it('sends a comment that failed with a 500 only once', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', COMMENTS_5, { status: 500, body: { message: 'boom' } });
+
+    await expect(issues.postComment(task5, 'hi')).rejects.toMatchObject({
+      kind: 'transient',
+    });
+    expect(fake.to(COMMENTS_5, 'POST')).toHaveLength(1);
+  });
+});
+
+describe('GitHubIssueProvider.getComment', () => {
+  const COMMENT_91 = `/repos/${TEST_REPO}/issues/comments/91`;
+
+  it('returns the body and creation time of a comment on the issue', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENT_91, { body: comment(91, 'hello') });
+
+    await expect(issues.getComment(task5, '91')).resolves.toEqual({
+      body: 'hello',
+      createdAt: new Date('2026-11-11T10:00:31Z'),
+    });
+  });
+
+  it("gives '' for a comment without a body", async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENT_91, { body: comment(91, null) });
+
+    await expect(issues.getComment(task5, '91')).resolves.toMatchObject({
+      body: '',
+    });
+  });
+
+  it('returns null for a comment that does not exist', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENT_91, { status: 404, body: { message: 'Not Found' } });
+
+    await expect(issues.getComment(task5, '91')).resolves.toBeNull();
+  });
+
+  it('returns null for a comment of another issue', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENT_91, { body: comment(91, 'hello', { issue: 50 }) });
+
+    await expect(issues.getComment(task5, '91')).resolves.toBeNull();
+  });
+});
+
+describe('GitHubIssueProvider.findCommentByMarker', () => {
+  const MARKER = '<!-- sdd-agent:hello:v1 -->';
+
+  it("reads every page and returns the oldest of the App's own comments with the marker", async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENTS_5, (request) =>
+      request.query.get('page') === '2'
+        ? {
+            body: [
+              comment(140, `${MARKER} first`, { app: TEST_APP_ID }),
+              comment(141, `${MARKER} second`, { app: TEST_APP_ID }),
+            ],
+          }
+        : {
+            body: [
+              comment(101, `pasted by a human: ${MARKER}`),
+              comment(102, `${MARKER} by another App`, { app: 1 }),
+              comment(103, 'the App, no marker', { app: TEST_APP_ID }),
+            ],
+            headers: {
+              link: `<https://api.github.com${COMMENTS_5}?per_page=100&page=2>; rel="next"`,
+            },
+          },
+    );
+
+    await expect(issues.findCommentByMarker(task5, MARKER)).resolves.toEqual({
+      id: '140',
+      url: `https://github.com/${TEST_REPO}/issues/5#issuecomment-140`,
+      createdAt: new Date('2026-11-11T10:00:20Z'),
+    });
+    expect(fake.to(COMMENTS_5).map((r) => r.query.get('per_page'))).toEqual([
+      '100',
+      '100',
+    ]);
+  });
+
+  it('returns null when no App comment holds the marker', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', COMMENTS_5, {
+      body: [comment(101, `pasted by a human: ${MARKER}`)],
+    });
+
+    await expect(issues.findCommentByMarker(task5, MARKER)).resolves.toBeNull();
+  });
+
+  it('throws a permanent error for an empty marker, without a request', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+
+    await expect(issues.findCommentByMarker(task5, '')).rejects.toMatchObject({
+      kind: 'permanent',
+    });
+    expect(fake.to(/\/issues/)).toHaveLength(0);
+  });
+});
+
+describe('GitHubIssueProvider on another repo', () => {
+  const elsewhere: TaskRef = {
+    platform: 'GITHUB',
+    id: '1',
+    externalRef: 'someone/else#5',
+  };
+
+  it.each<[string, (issues: GitHubIssueProvider) => Promise<unknown>]>([
+    ['getTaskDetails', (issues) => issues.getTaskDetails(elsewhere)],
+    ['postComment', (issues) => issues.postComment(elsewhere, 'hi')],
+    ['getComment', (issues) => issues.getComment(elsewhere, '91')],
+    [
+      'findCommentByMarker',
+      (issues) => issues.findCommentByMarker(elsewhere, 'm'),
+    ],
+  ])('%s throws a permanent error and sends nothing', async (_name, call) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+
+    await expect(call(issues)).rejects.toMatchObject({ kind: 'permanent' });
+    expect(fake.to(/\/issues/)).toHaveLength(0);
   });
 });

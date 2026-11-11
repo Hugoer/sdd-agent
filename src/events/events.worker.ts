@@ -4,6 +4,7 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { ProviderError } from '../contracts/provider-error.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EventProcessor } from './event-processor.js';
@@ -120,30 +121,34 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
         `${label} ${result.status}${result.status === 'IGNORED' ? ` (${result.reason})` : ''}`,
       );
     } catch (error) {
-      await this.fail(
-        event,
-        messageOf(error).slice(0, MAX_ERROR_LENGTH),
-        label,
-      );
+      await this.fail(event, error, label);
     }
   }
 
+  /** Spec 3 worker rule: a permanent ProviderError fails at once; anything else retries (A2: rate-limit wait). */
   private async fail(
     event: WebhookEvent,
-    lastError: string,
+    error: unknown,
     label: string,
   ): Promise<void> {
-    if (event.attempts >= MAX_ATTEMPTS) {
+    const lastError = messageOf(error).slice(0, MAX_ERROR_LENGTH);
+    const permanent =
+      error instanceof ProviderError && error.kind === 'permanent';
+    if (permanent || event.attempts >= MAX_ATTEMPTS) {
       await this.prisma.webhookEvent.update({
         where: { id: event.id },
         data: { status: 'FAILED', lastError, processedAt: new Date() },
       });
       this.logger.error(
-        `${label} FAILED after ${event.attempts} attempts: ${lastError}`,
+        `${label} FAILED after ${event.attempts} attempt(s)${permanent ? ' (permanent error)' : ''}: ${lastError}`,
       );
       return;
     }
-    const delayMs = BACKOFF_MS[event.attempts];
+    const retryAfterMs =
+      error instanceof ProviderError
+        ? (error.detail.retryAfterSeconds ?? 0) * 1000
+        : 0;
+    const delayMs = Math.max(BACKOFF_MS[event.attempts], retryAfterMs);
     await this.prisma.webhookEvent.update({
       where: { id: event.id },
       data: {

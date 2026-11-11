@@ -203,14 +203,14 @@ integration harness boots offline (P3). The old hello client still posts the hel
 `GitHubIssueProvider`.
 
 **Acceptance criteria:**
-- [ ] Requests and mappings as in the spec's table (IDs as strings, `''` for a null body, `createdAt` as a `Date`);
+- [x] Requests and mappings as in the spec's table (IDs as strings, `''` for a null body, `createdAt` as a `Date`);
   the comment body reaches GitHub unchanged
-- [ ] `getComment` → `null` for a `404` and for a comment of another issue
-- [ ] `findCommentByMarker` reads all pages, returns the oldest comment written by the App, ignores a human
+- [x] `getComment` → `null` for a `404` and for a comment of another issue
+- [x] `findCommentByMarker` reads all pages, returns the oldest comment written by the App, ignores a human
   comment holding the marker; an empty marker throws
 
 **Verification:**
-- [ ] `npm test` passes
+- [x] `npm test` passes
 
 **Dependencies:** T6
 **Files:** `src/github/github-issue.provider.ts` (+ `.spec.ts`)
@@ -224,13 +224,13 @@ tests move from the fake hello service to the in-memory provider; the payload fi
 `issue.id`.
 
 **Acceptance criteria:**
-- [ ] Target repo → one `postComment` with `{ platform: 'GITHUB', id: <issue.id>, externalRef: '<full_name>#<n>' }`
+- [x] Target repo → one `postComment` with `{ platform: 'GITHUB', id: <issue.id>, externalRef: '<full_name>#<n>' }`
   and spec 1's text; row `DONE`
-- [ ] Another repo → `IGNORED` `other-repo`; zero provider calls
-- [ ] `src/events/hello/` no longer exists; Octokit is imported only under `src/github/`
+- [x] Another repo → `IGNORED` `other-repo`; zero provider calls
+- [x] `src/events/hello/` no longer exists; Octokit is imported only under `src/github/`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 - [ ] Manual: open a sandbox issue → one hello from `<app>[bot]`; row `DONE`
 
 **Dependencies:** T7
@@ -245,22 +245,22 @@ deletes `src/events/hello/*`
 other error keep spec 1's retries; `retryAfterSeconds` sets a minimum wait (A2).
 
 **Acceptance criteria:**
-- [ ] Permanent error → `FAILED` after the first attempt, `lastError` set; the next event is still processed
-- [ ] Transient or any other error → 3 attempts, 5 s then 30 s, as before
-- [ ] `retryAfterSeconds: 120` → the next attempt is due about 120 s later
+- [x] Permanent error → `FAILED` after the first attempt, `lastError` set; the next event is still processed
+- [x] Transient or any other error → 3 attempts, 5 s then 30 s, as before
+- [x] `retryAfterSeconds: 120` → the next attempt is due about 120 s later
 
 **Verification:**
-- [ ] `npm run test:integration` passes
+- [x] `npm run test:integration` passes
 
 **Dependencies:** T8
 **Files:** `src/events/events.worker.ts`, `test/worker.integration.spec.ts`
 **Scope:** S
 
 ### Checkpoint 2 — Real hello through the port
-- [ ] All four commands green
-- [ ] Open a sandbox issue → one hello; the hello's own webhook → `IGNORED` `not-handled`
-- [ ] Signed request for `someone/other-repo` → `IGNORED` `other-repo`, no comment
-- [ ] Signed request with `N=999999` → `FAILED` at once, `attempts = 1`, `last_error` shows the `404`
+- [x] All four commands green
+- [x] Open a sandbox issue → one hello; the hello's own webhook → `IGNORED` `not-handled`
+- [x] Signed request for `someone/other-repo` → `IGNORED` `other-repo`, no comment
+- [x] Signed request with `N=999999` → `FAILED` at once, `attempts = 1`, `last_error` shows the `404`
 - [ ] You review and commit
 
 ---

@@ -1,24 +1,41 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../config/env.schema.js';
+import {
+  ISSUE_PROVIDER,
+  type IssueProvider,
+} from '../contracts/issue-provider.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
-import { HelloCommentService } from './hello/hello-comment.service.js';
 
 export type ProcessResult =
   { status: 'DONE' } | { status: 'IGNORED'; reason: string };
 
 /** The fields of an `issues.opened` payload the hello comment needs. */
 interface IssuesOpenedPayload {
-  installation?: { id?: number };
-  repository: { name: string; owner: { login: string } };
-  issue: { number: number };
+  repository: { full_name: string };
+  issue: { id: number; number: number };
+}
+
+/** Fixed text: contains no issue content, so nothing needs secret scanning. */
+export function helloCommentBody(deliveryId: string): string {
+  return `👋 Hello from the GitHub AI Agent (walking skeleton). Webhook round trip OK — delivery \`${deliveryId}\`.`;
 }
 
 /**
- * Decides what a stored event means. Throwing means "retry" (worker rules).
+ * Decides what a stored event means. A thrown error goes to the worker's failure rule
+ * (a permanent ProviderError fails at once, anything else is retried).
  * Specs 2 and 5 replace this seam.
  */
 @Injectable()
 export class EventProcessor {
-  constructor(private readonly hello: HelloCommentService) {}
+  private readonly targetRepo: string;
+
+  constructor(
+    @Inject(ISSUE_PROVIDER) private readonly issues: IssueProvider,
+    config: ConfigService<Env, true>,
+  ) {
+    this.targetRepo = config.get('TARGET_REPO', { infer: true });
+  }
 
   async process(event: WebhookEvent): Promise<ProcessResult> {
     if (event.eventName === 'ping') return ignored('ping');
@@ -27,16 +44,19 @@ export class EventProcessor {
     }
 
     const payload = event.payload as unknown as IssuesOpenedPayload;
-    const installationId = payload.installation?.id;
-    if (!installationId) return ignored('no-installation');
+    const fullName = payload.repository.full_name;
+    if (fullName.toLowerCase() !== this.targetRepo.toLowerCase()) {
+      return ignored('other-repo');
+    }
 
-    await this.hello.postHello({
-      installationId,
-      owner: payload.repository.owner.login,
-      repo: payload.repository.name,
-      issueNumber: payload.issue.number,
-      deliveryId: event.deliveryId,
-    });
+    await this.issues.postComment(
+      {
+        platform: 'GITHUB',
+        id: String(payload.issue.id),
+        externalRef: `${fullName}#${payload.issue.number}`,
+      },
+      helloCommentBody(event.deliveryId),
+    );
     return { status: 'DONE' };
   }
 }

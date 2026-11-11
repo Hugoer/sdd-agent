@@ -44,6 +44,8 @@ export interface IssueTarget {
 export class GitHubClient {
   readonly owner: string;
   readonly repo: string;
+  /** GITHUB_APP_ID: marks the comments this App wrote (spec 3, G11). */
+  readonly appId: number;
   private readonly logger = new Logger(GitHubClient.name);
   private readonly app: App;
   private installation: Octokit | undefined;
@@ -61,6 +63,7 @@ export class GitHubClient {
     [this.owner, this.repo] = config
       .get('TARGET_REPO', { infer: true })
       .split('/');
+    this.appId = config.get('GITHUB_APP_ID', { infer: true });
     const baseFetch = options.fetch ?? globalThis.fetch;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const log = {
@@ -70,7 +73,7 @@ export class GitHubClient {
       error: (message: string) => this.logger.error(message),
     };
     this.app = new App({
-      appId: config.get('GITHUB_APP_ID', { infer: true }),
+      appId: this.appId,
       privateKey: readFileSync(
         config.get('GITHUB_APP_PRIVATE_KEY_PATH', { infer: true }),
         'utf8',
