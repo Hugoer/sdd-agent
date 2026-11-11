@@ -115,17 +115,62 @@ describe('InMemoryIssueProvider', () => {
     expect(issues.labelsOf(task)).toEqual(['bug']);
   });
 
-  it('grants write access to admin and write only', async () => {
+  it('answers the access level that was set, none by default, whatever the case', async () => {
     const issues = new InMemoryIssueProvider(REPO);
-    const task = issues.seedIssue({ number: 1 });
-    issues.setPermission('admin-user', 'admin');
-    issues.setPermission('writer', 'write');
-    issues.setPermission('reader', 'read');
+    issues.setAccessLevel('Alice', 'approver');
+    issues.setAccessLevel('bob', 'participant');
+    // P6: the issue need not be seeded, only be in the repo.
+    const task = {
+      platform: 'GITHUB' as const,
+      id: '99',
+      externalRef: `${REPO}#99`,
+    };
 
-    await expect(issues.hasWriteAccess(task, 'admin-user')).resolves.toBe(true);
-    await expect(issues.hasWriteAccess(task, 'writer')).resolves.toBe(true);
-    await expect(issues.hasWriteAccess(task, 'reader')).resolves.toBe(false);
-    await expect(issues.hasWriteAccess(task, 'stranger')).resolves.toBe(false);
+    await expect(issues.getAccessLevel(task, 'alice')).resolves.toBe(
+      'approver',
+    );
+    await expect(issues.getAccessLevel(task, 'BOB')).resolves.toBe(
+      'participant',
+    );
+    await expect(issues.getAccessLevel(task, 'stranger')).resolves.toBe('none');
+    expect(issues.calls.map((call) => call.method)).toEqual([
+      'getAccessLevel',
+      'getAccessLevel',
+      'getAccessLevel',
+    ]);
+  });
+
+  it('getAccessLevel: a ref outside its repo → permanent error; failNext applies', async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const elsewhere = {
+      platform: 'GITHUB' as const,
+      id: '1',
+      externalRef: 'someone/else#1',
+    };
+    await expect(
+      issues.getAccessLevel(elsewhere, 'alice'),
+    ).rejects.toMatchObject({
+      kind: 'permanent',
+    });
+
+    const down = new ProviderError('503', 'transient');
+    issues.failNext(down);
+    await expect(
+      issues.getAccessLevel(
+        { ...elsewhere, externalRef: `${REPO}#1` },
+        'alice',
+      ),
+    ).rejects.toBe(down);
+  });
+
+  it('isSelf: its bot login in any case, nobody else, and no call recorded', () => {
+    const issues = new InMemoryIssueProvider(REPO, 'my-app[bot]');
+    expect(issues.isSelf('my-app[bot]')).toBe(true);
+    expect(issues.isSelf('My-App[BOT]')).toBe(true);
+    expect(issues.isSelf('my-app')).toBe(false);
+    expect(issues.isSelf('dependabot[bot]')).toBe(false);
+    expect(new InMemoryIssueProvider(REPO).isSelf('test-app[bot]')).toBe(true);
+    expect(issues.calls).toEqual([]);
   });
 
   it('reads lanes in fixed order, the skip modifier, and ignores case and unknown lanes', () => {

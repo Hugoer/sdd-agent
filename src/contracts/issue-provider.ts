@@ -10,6 +10,8 @@ export type TaskStatus =
   | 'executing'
   | 'in-review'
   | 'needs-human';
+/** What a user may do with the bot, lowest first (D19, added 2026-11-11). Never a platform's role name. */
+export type AccessLevel = 'none' | 'participant' | 'approver';
 
 /** DB identity = platform + id. externalRef is what adapters call the API with; it may change. */
 export interface TaskRef {
@@ -47,10 +49,13 @@ export interface IssueProvider {
   ): Promise<CommentRef | null>;
   /** projection of Task.status: sets this status label and removes any other `status: *` label */
   setStatusLabel(task: TaskRef, status: TaskStatus): Promise<void>;
-  /** only to revert a lane/modifier label added by a sender without write access */
+  /** only to revert a lane/modifier label added by a sender with no access (D21) */
   removeLabel(task: TaskRef, label: string): Promise<void>;
-  /** write or higher (GitHub: collaborator permission on the target repo) */
-  hasWriteAccess(task: TaskRef, login: string): Promise<boolean>;
+  /** the user's level on the task's repo or project, asked on every call (spec 2, 2026-11-11).
+   *  GitHub: Write or higher → 'approver', Triage → 'participant', anything else or unknown user → 'none' */
+  getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel>;
+  /** true when login is the bot's own account (added 2026-11-11, spec 2) */
+  isSelf(login: string): boolean;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean };
   /** creates missing status / workflow / modifier labels (startup) */

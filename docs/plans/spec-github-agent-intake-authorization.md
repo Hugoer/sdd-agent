@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #2: Intake & Authorization
 
-> **Created:** 2026-11-11 · **Status:** draft 2026-11-11, waiting for approval (including P1–P9)
+> **Created:** 2026-11-11 · **Status:** approved 2026-11-11 (including P1–P9) · build started 2026-11-11
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-intake-authorization.md` into
 > ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan
@@ -26,7 +26,7 @@ sender, or an ignore reason. Built in 16 tasks across 5 phases:
 
 Real GitHub is reached at every checkpoint. You review the work and commit at each one (I never commit).
 
-## Build-time decisions (not in the spec; please confirm)
+## Build-time decisions (not in the spec; confirmed 2026-11-11)
 
 | # | Decision | Why |
 |---|---|---|
@@ -82,15 +82,15 @@ spec), so they run one after another.
 column. `npm run db:events` also shows `external_ref` and the sender.
 
 **Acceptance criteria:**
-- [ ] `externalRefOf`: issue, comment, comment on a pull request and pull request payloads → `owner/repo#number`;
+- [x] `externalRefOf`: issue, comment, comment on a pull request and pull request payloads → `owner/repo#number`;
   no issue and no pull request, or a missing or wrongly typed field → `null`; it never throws (unit)
-- [ ] A stored event has its `external_ref`; a payload without an issue is stored with none and still answers
+- [x] A stored event has its `external_ref`; a payload without an issue is stored with none and still answers
   `202` (integration)
-- [ ] The migration's back-fill gives rows stored earlier the same value as `externalRefOf` (integration, P7)
+- [x] The migration's back-fill gives rows stored earlier the same value as `externalRefOf` (integration, P7)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual (after your `npm run db:migrate`): `npm run db:events` shows old `issues` rows with
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual (after your `npm run db:migrate`): `npm run db:events` shows old `issues` rows with
   `<TARGET_REPO>#<n>` and their sender; `ping` rows show no reference
 
 **Dependencies:** None
@@ -106,15 +106,15 @@ that only matches a `FAILED` row puts it back to `PENDING` (spec "Redelivery", I
 `duplicate` or `requeued`.
 
 **Acceptance criteria:**
-- [ ] `FAILED` row → `PENDING`, `attempts = 0`, `availableAt` = now, `processedAt` empty; payload, `receivedAt`,
+- [x] `FAILED` row → `PENDING`, `attempts = 0`, `availableAt` = now, `processedAt` empty; payload, `receivedAt`,
   `externalRef` and `lastError` unchanged; the worker then processes it once
-- [ ] Two redeliveries at the same time → `requeued` is `true` for exactly one; a `PENDING`, `PROCESSING`, `DONE`
+- [x] Two redeliveries at the same time → `requeued` is `true` for exactly one; a `PENDING`, `PROCESSING`, `DONE`
   or `IGNORED` row is left untouched
-- [ ] Every case answers `202`, and there is one row per delivery ID
+- [x] Every case answers `202`, and there is one row per delivery ID
 
 **Verification:**
-- [ ] `npm run test:integration` passes
-- [ ] Manual: Checkpoint 1's requeue row
+- [x] `npm run test:integration` passes
+- [x] Manual: Checkpoint 1's requeue row
 
 **Dependencies:** T1 (same file)
 **Files:** `src/events/events.service.ts`, `test/webhook.integration.spec.ts`
@@ -127,15 +127,15 @@ until T4). GitHub adapter: the mapping of AW4, `404` → `none`, no cache; `isSe
 resolved at startup. Fake: `setAccessLevel(login, level)` (default `none`), a bot login and `isSelf` (P6).
 
 **Acceptance criteria:**
-- [ ] Adapter (scripted `fetch`): `admin`, `maintain`, `write` → `approver`; a Triage answer → `participant`;
+- [x] Adapter (scripted `fetch`): `admin`, `maintain`, `write` → `approver`; a Triage answer → `participant`;
   `read`, `none`, `404` and an answer without `user.permissions` → `none`; one request per call, never cached
-- [ ] `isSelf`: the bot login, also in another letter case → `true`; a human login or another bot → `false`; no
+- [x] `isSelf`: the bot login, also in another letter case → `true`; a human login or another bot → `false`; no
   request
-- [ ] Fake: the level that was set, `none` by default; `isSelf` for its bot login; a ref outside its repo →
+- [x] Fake: the level that was set, `none` by default; `isSelf` for its bot login; a ref outside its repo →
   permanent error
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/issue-provider.ts`, `src/github/github-issue.provider.ts` (+ `.spec.ts`),
@@ -148,15 +148,15 @@ resolved at startup. Fake: `setAccessLevel(login, level)` (default `none`), a bo
 `hasWriteAccess` and the fake's `setPermission` are deleted everywhere.
 
 **Acceptance criteria:**
-- [ ] Smoke lines: `getAccessLevel` → `approver` for the issue author, `none` for `octocat` and for an invented
+- [x] Smoke lines: `getAccessLevel` → `approver` for the issue author, `none` for `octocat` and for an invented
   login; `isSelf` → `true` for the bot login (`getPushCredentials().authorName`), `false` for the issue author
-- [ ] `runSmoke` passes against the fakes and prints `FAIL` when a fake gives `octocat` a level (unit)
-- [ ] `grep -rn "hasWriteAccess\|setPermission" src test` → no match; `src/contracts/issue-provider.ts` matches
+- [x] `runSmoke` passes against the fakes and prints `FAIL` when a fake gives `octocat` a level (unit)
+- [x] `grep -rn "hasWriteAccess\|setPermission" src test` → no match; `src/contracts/issue-provider.ts` matches
   overview §4
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual (real GitHub, your `npm run dev` stopped): `npm run github:smoke -- --issue N` → every line `PASS`
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual (real GitHub, your `npm run dev` stopped): `npm run github:smoke -- --issue N` → every line `PASS`
 
 **Dependencies:** T3
 **Files:** `src/github/smoke/run-smoke.ts` (+ `.spec.ts`); deletions in `src/contracts/issue-provider.ts`,
@@ -164,14 +164,14 @@ resolved at startup. Fake: `setAccessLevel(login, level)` (default `none`), a bo
 **Scope:** M (7 files, 5 of them only lose code)
 
 ### Checkpoint 1 — Storing and access levels
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] After your `npm run db:migrate`: `npm run db:events` shows `external_ref` and the sender for rows stored
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] After your `npm run db:migrate`: `npm run db:events` shows `external_ref` and the sender for rows stored
   before today
-- [ ] Signed `issues.opened` for issue `999999` with delivery ID `requeue-1` → `FAILED` at once (the hello's
+- [x] Signed `issues.opened` for issue `999999` with delivery ID `requeue-1` → `FAILED` at once (the hello's
   `404`); the same request again → the log shows `requeued` and the row fails again with `attempts = 1`; still
   one row
-- [ ] The smoke's access lines: `approver` for you, `none` for `octocat`, `isSelf` `true` for `<app>[bot]`
-- [ ] Opening a sandbox issue still gets the hello
+- [x] The smoke's access lines: `approver` for you, `none` for `octocat`, `isSelf` `true` for `<app>[bot]`
+- [x] Opening a sandbox issue still gets the hello
 - [ ] You review and commit
 
 ---
@@ -507,6 +507,6 @@ plus fixes if a row fails
 
 ## Open questions
 
-- Confirm P1–P9 above. P5 is the only one that departs from the spec's wording (two log lines per event instead
-  of one). P2, P3 and P5 touch files that the spec's "Project structure" doesn't list: `src/app.module.ts`,
-  `test/app.ts`, `test/worker.integration.spec.ts`.
+None. P1–P9 were confirmed on 2026-11-11. P5 changed the spec's wording (two log lines per event instead of
+one); the spec's "Logging" section was updated the same day. P2 and P3 touch files that the spec's "Project
+structure" doesn't list: `src/app.module.ts`, `test/app.ts`, `test/worker.integration.spec.ts`.

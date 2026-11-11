@@ -5,6 +5,7 @@ import {
   FakeGitHubFetch,
   TEST_APP_ID,
   TEST_REPO,
+  TEST_SLUG,
   connectedTestClient,
 } from '../../test/fakes/fake-github-fetch.js';
 import { GitHubIssueProvider } from './github-issue.provider.js';
@@ -527,39 +528,106 @@ describe('GitHubIssueProvider.removeLabel', () => {
   });
 });
 
-describe('GitHubIssueProvider.hasWriteAccess', () => {
+describe('GitHubIssueProvider.getAccessLevel', () => {
   const PERMISSION = `/repos/${TEST_REPO}/collaborators/octocat/permission`;
+  /** GitHub's answer shape: `permission` is the legacy level, `user.permissions` the role flags. */
+  const answer = (
+    permission: string,
+    role: string,
+    flags: Partial<
+      Record<'admin' | 'maintain' | 'push' | 'triage' | 'pull', boolean>
+    >,
+  ) => ({
+    permission,
+    role_name: role,
+    user: {
+      login: 'octocat',
+      permissions: {
+        admin: false,
+        maintain: false,
+        push: false,
+        triage: false,
+        pull: false,
+        ...flags,
+      },
+    },
+  });
+  const all = {
+    admin: true,
+    maintain: true,
+    push: true,
+    triage: true,
+    pull: true,
+  };
 
   it.each([
-    ['admin', true],
-    ['write', true],
-    ['read', false],
-    ['none', false],
-  ])('%s → %s, with one request', async (permission, expected) => {
+    ['admin', answer('admin', 'admin', all), 'approver'],
+    [
+      'maintain (reported as write)',
+      answer('write', 'maintain', { ...all, admin: false }),
+      'approver',
+    ],
+    [
+      'write',
+      answer('write', 'write', { push: true, triage: true, pull: true }),
+      'approver',
+    ],
+    [
+      'triage (reported as read)',
+      answer('read', 'triage', { triage: true, pull: true }),
+      'participant',
+    ],
+    ['read', answer('read', 'read', { pull: true }), 'none'],
+    ['none', answer('none', 'none', {}), 'none'],
+    [
+      'write without user.permissions',
+      { permission: 'write', role_name: 'write' },
+      'approver',
+    ],
+    [
+      'read without user.permissions',
+      { permission: 'read', role_name: 'triage' },
+      'none',
+    ],
+    ['read with user: null', { permission: 'read', user: null }, 'none'],
+  ])('%s → %s, with one request', async (_name, body, expected) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
-    fake.on('GET', PERMISSION, { body: { permission } });
+    fake.on('GET', PERMISSION, { body });
 
-    await expect(issues.hasWriteAccess(task5, 'octocat')).resolves.toBe(
+    await expect(issues.getAccessLevel(task5, 'octocat')).resolves.toBe(
       expected,
     );
     expect(fake.to(PERMISSION)).toHaveLength(1);
   });
 
-  it('no such user (404) → false', async () => {
+  it('no such user (404) → none', async () => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
     fake.on('GET', PERMISSION, { status: 404, body: { message: 'Not Found' } });
 
-    await expect(issues.hasWriteAccess(task5, 'octocat')).resolves.toBe(false);
+    await expect(issues.getAccessLevel(task5, 'octocat')).resolves.toBe('none');
   });
 
-  it('throws on a failure instead of answering false', async () => {
+  it.each([
+    [503, 'transient'],
+    [403, 'permanent'],
+  ])('a %s throws (%s) instead of answering none', async (status, kind) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
-    fake.on('GET', PERMISSION, { status: 503, body: { message: 'down' } });
+    fake.on('GET', PERMISSION, { status, body: { message: 'nope' } });
 
-    await expect(issues.hasWriteAccess(task5, 'octocat')).rejects.toMatchObject(
+    await expect(issues.getAccessLevel(task5, 'octocat')).rejects.toMatchObject(
+      { kind },
+    );
+  });
+
+  it('no answer at all → transient error', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', PERMISSION, 'no-response');
+
+    await expect(issues.getAccessLevel(task5, 'octocat')).rejects.toMatchObject(
       { kind: 'transient' },
     );
   });
@@ -567,12 +635,49 @@ describe('GitHubIssueProvider.hasWriteAccess', () => {
   it('asks again on every call (no cache)', async () => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
-    fake.on('GET', PERMISSION, { body: { permission: 'write' } });
+    fake.on(
+      'GET',
+      PERMISSION,
+      { body: answer('write', 'write', { push: true }) },
+      { body: answer('read', 'read', { pull: true }) },
+    );
 
-    await issues.hasWriteAccess(task5, 'octocat');
-    await issues.hasWriteAccess(task5, 'octocat');
-
+    await expect(issues.getAccessLevel(task5, 'octocat')).resolves.toBe(
+      'approver',
+    );
+    await expect(issues.getAccessLevel(task5, 'octocat')).resolves.toBe('none');
     expect(fake.to(PERMISSION)).toHaveLength(2);
+  });
+});
+
+describe('GitHubIssueProvider.isSelf', () => {
+  async function identified(fake: FakeGitHubFetch) {
+    const client = await connectedTestClient(fake);
+    await client.identifyBot();
+    return new GitHubIssueProvider(client);
+  }
+
+  it.each([
+    [`${TEST_SLUG}[bot]`, true],
+    [`${TEST_SLUG.toUpperCase()}[BOT]`, true],
+    [TEST_SLUG, false],
+    ['octocat', false],
+    ['dependabot[bot]', false],
+    ['github-actions[bot]', false],
+    ['', false],
+  ])('%j → %s, with no request', async (login, expected) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await identified(fake);
+    const before = fake.requests.length;
+
+    expect(issues.isSelf(login)).toBe(expected);
+    expect(fake.requests).toHaveLength(before);
+  });
+
+  it('is false for everyone before the bot login is resolved', async () => {
+    const issues = await providerWith(new FakeGitHubFetch());
+    expect(issues.isSelf('')).toBe(false);
+    expect(issues.isSelf(`${TEST_SLUG}[bot]`)).toBe(false);
   });
 });
 
@@ -593,7 +698,7 @@ describe('GitHubIssueProvider on another repo', () => {
     ],
     ['setStatusLabel', (issues) => issues.setStatusLabel(elsewhere, 'draft')],
     ['removeLabel', (issues) => issues.removeLabel(elsewhere, 'grill: skip')],
-    ['hasWriteAccess', (issues) => issues.hasWriteAccess(elsewhere, 'octocat')],
+    ['getAccessLevel', (issues) => issues.getAccessLevel(elsewhere, 'octocat')],
   ])('%s throws a permanent error and sends nothing', async (_name, call) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);

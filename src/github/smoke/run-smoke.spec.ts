@@ -28,7 +28,7 @@ function setup(
     labels: ['grill: skip', 'bug'],
     author: 'dev',
   });
-  issues.setPermission('dev', 'admin');
+  issues.setAccessLevel('dev', 'approver');
   const repo = new InMemoryRepoProvider(REPO);
   repo.seedFile('main', '.github-agent/workflow.json', '{"steps":{}}');
   repo.seedFile('main', 'smoke-skill/SKILL.md', '# Smoke skill\n');
@@ -74,7 +74,7 @@ describe('runSmoke (issue checks)', () => {
 
     await expect(run()).resolves.toBe(true);
 
-    expect(lines.length).toBeGreaterThanOrEqual(12);
+    expect(lines.length).toBeGreaterThanOrEqual(14);
     expect(lines.filter((line) => !line.startsWith('PASS '))).toEqual([]);
     expect(issues.labelsOf(task).sort()).toEqual([
       'bug',
@@ -88,8 +88,15 @@ describe('runSmoke (issue checks)', () => {
         ) as string,
       }),
     ]);
-    expect(lines).toContainEqual(expect.stringMatching(/dev.*true/));
-    expect(lines).toContainEqual(expect.stringMatching(/octocat.*false/));
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        'PASS getAccessLevel (issue author): dev → approver',
+        'PASS getAccessLevel octocat: octocat → none',
+        'PASS getAccessLevel (invented login): no-such-user-run-1 → none',
+        'PASS isSelf (bot login): test-app[bot] → true',
+        'PASS isSelf (issue author): dev → false',
+      ]),
+    );
   });
 
   it('passes again on a second run: still one status label, one more comment', async () => {
@@ -145,14 +152,28 @@ describe('runSmoke (issue checks)', () => {
     );
   });
 
-  it('reports FAIL when octocat has write access', async () => {
+  it.each(['participant', 'approver'] as const)(
+    'reports FAIL when octocat is a %s',
+    async (level) => {
+      const { issues, lines, run } = setup();
+      issues.setAccessLevel('octocat', level);
+
+      await expect(run()).resolves.toBe(false);
+
+      expect(lines).toContainEqual(
+        `FAIL getAccessLevel octocat: octocat → ${level}, expected none`,
+      );
+    },
+  );
+
+  it('reports FAIL when isSelf does not know the bot login', async () => {
     const { issues, lines, run } = setup();
-    issues.setPermission('octocat', 'write');
+    vi.spyOn(issues, 'isSelf').mockReturnValue(false);
 
     await expect(run()).resolves.toBe(false);
 
     expect(lines).toContainEqual(
-      expect.stringMatching(/^FAIL hasWriteAccess octocat/),
+      'FAIL isSelf (bot login): test-app[bot] → false, expected true',
     );
   });
 });

@@ -1,6 +1,7 @@
 // In-memory IssueProvider for specs 2, 4 and 5 (spec 3, G13). Same rules as the GitHub adapter
 // (labels named as on GitHub), no network. Seed state with the helpers, inspect it after the call.
 import type {
+  AccessLevel,
   CommentRef,
   IssueProvider,
   Lane,
@@ -42,18 +43,20 @@ interface FakeComment {
   createdAt: Date;
 }
 
-type Permission = 'admin' | 'write' | 'read' | 'none';
-
 export class InMemoryIssueProvider implements IssueProvider {
   readonly calls: { method: string; args: unknown[] }[] = [];
   readonly repoLabels: string[] = [];
   private readonly issues = new Map<string, FakeIssue>();
   private readonly comments: FakeComment[] = [];
-  private readonly permissions = new Map<string, Permission>();
+  private readonly accessLevels = new Map<string, AccessLevel>();
   private nextError: ProviderError | undefined;
   private nextCommentId = 1;
 
-  constructor(readonly repo = 'test-owner/test-repo') {}
+  constructor(
+    readonly repo = 'test-owner/test-repo',
+    /** The bot's own login, as the GitHub adapter resolves it at startup. */
+    readonly botLogin = 'test-app[bot]',
+  ) {}
 
   // ── seeding and inspection ──
 
@@ -87,8 +90,9 @@ export class InMemoryIssueProvider implements IssueProvider {
     return this.addComment(task, comment.body, comment.byBot);
   }
 
-  setPermission(login: string, permission: Permission): void {
-    this.permissions.set(login.toLowerCase(), permission);
+  /** What getAccessLevel answers for this login (default: 'none'). */
+  setAccessLevel(login: string, level: AccessLevel): void {
+    this.accessLevels.set(login.toLowerCase(), level);
   }
 
   /** The next provider call rejects with this error (and changes nothing). */
@@ -187,12 +191,17 @@ export class InMemoryIssueProvider implements IssueProvider {
     });
   }
 
-  hasWriteAccess(task: TaskRef, login: string): Promise<boolean> {
-    return this.call('hasWriteAccess', [task, login], () => {
-      this.issue(task);
-      const permission = this.permissions.get(login.toLowerCase());
-      return permission === 'admin' || permission === 'write';
+  /** Plan P6: checks only that the ref is in this repo (the adapter never reads the issue here). */
+  getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel> {
+    return this.call('getAccessLevel', [task, login], () => {
+      this.inRepo(task);
+      return this.accessLevels.get(login.toLowerCase()) ?? 'none';
     });
+  }
+
+  /** Pure, like the adapter: not recorded in `calls`. */
+  isSelf(login: string): boolean {
+    return same(login, this.botLogin);
   }
 
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean } {
@@ -225,7 +234,7 @@ export class InMemoryIssueProvider implements IssueProvider {
     });
   }
 
-  private issue(task: TaskRef): FakeIssue {
+  private inRepo(task: TaskRef): void {
     if (
       !task.externalRef.toLowerCase().startsWith(`${this.repo.toLowerCase()}#`)
     ) {
@@ -234,6 +243,10 @@ export class InMemoryIssueProvider implements IssueProvider {
         'permanent',
       );
     }
+  }
+
+  private issue(task: TaskRef): FakeIssue {
+    this.inRepo(task);
     const issue = this.issues.get(task.externalRef);
     if (!issue) {
       throw new ProviderError(

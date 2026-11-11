@@ -1,7 +1,7 @@
 # Spec #2 — GitHub AI Agent: Intake & Authorization
 
 > **Created:** 2026-11-11 · **Status:** approved 2026-11-11 (including AW1–AW8) · plan:
-> `docs/plans/spec-github-agent-intake-authorization.md` · not built yet
+> `docs/plans/spec-github-agent-intake-authorization.md` (approved 2026-11-11) · not built yet
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox) (public, owned by a personal account)
@@ -270,9 +270,10 @@ At most four revert comments can ever exist on one issue (three lanes and `grill
 
 ### Logging
 
-One line per event: delivery ID, event, action, sender login, and either `accepted <TYPE>` (plus the lane, and the
-issue or PR reference) or `ignored <reason>`. When an event is stored: `stored`, `duplicate` or `requeued`. Never
-logged: comment text, the payload, tokens.
+Intake writes one line per event: delivery ID, event, action, sender login, and either `accepted <TYPE>` (plus
+the lane, and the issue or PR reference) or `ignored <reason>`. The worker keeps its own status line from spec 1
+(`DONE`, `IGNORED (reason)`, a retry, `FAILED`), so an event shows two lines (plan P5, 2026-11-11). When an event
+is stored: `stored`, `duplicate` or `requeued`. Never logged: comment text, the payload, tokens.
 
 ### Ignore reasons
 

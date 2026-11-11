@@ -1,6 +1,7 @@
 // The checks of `npm run github:smoke` (spec 3 "Smoke script", plan P6). They use the provider ports only, so
 // they are unit-tested against the in-memory fakes before they write to the sandbox.
 import type {
+  AccessLevel,
   CommentRef,
   IssueProvider,
   TaskRef,
@@ -48,7 +49,10 @@ export async function runSmoke(
   const results = [
     await runGroup(issueChecks(ports.issues, options), print),
     await runGroup(repoChecks(ports.repo, options), print),
-    await runGroup(credentialChecks(ports.repo, ports.fetch, options), print),
+    await runGroup(
+      credentialChecks(ports.repo, ports.issues, ports.fetch, options),
+      print,
+    ),
   ];
   if (options.branch && options.sha) {
     results.push(
@@ -95,10 +99,10 @@ function issueChecks(
   let task!: UnifiedTask;
   let comment!: CommentRef;
 
-  const writeAccess = async (login: string, expected: boolean) => {
-    const access = await issues.hasWriteAccess(task, login);
-    assert(access === expected, `${login} → ${access}, expected ${expected}`);
-    return `${login} → ${access}`;
+  const accessLevel = async (login: string, expected: AccessLevel) => {
+    const level = await issues.getAccessLevel(task, login);
+    assert(level === expected, `${login} → ${level}, expected ${expected}`);
+    return `${login} → ${level}`;
   };
 
   return [
@@ -193,13 +197,30 @@ function issueChecks(
         throw new Error('it was not refused');
       },
     ],
-    ['hasWriteAccess (issue author)', () => writeAccess(task.author, true)],
-    ['hasWriteAccess octocat', () => writeAccess('octocat', false)],
     [
-      'hasWriteAccess (invented login)',
-      () => writeAccess(`no-such-user-${runId}`, false),
+      'getAccessLevel (issue author)',
+      () => accessLevel(task.author, 'approver'),
+    ],
+    ['getAccessLevel octocat', () => accessLevel('octocat', 'none')],
+    [
+      'getAccessLevel (invented login)',
+      () => accessLevel(`no-such-user-${runId}`, 'none'),
+    ],
+    [
+      'isSelf (issue author)',
+      () => Promise.resolve(isSelf(issues, task.author, false)),
     ],
   ];
+}
+
+function isSelf(
+  issues: IssueProvider,
+  login: string,
+  expected: boolean,
+): string {
+  const self = issues.isSelf(login);
+  assert(self === expected, `${login} → ${self}, expected ${expected}`);
+  return `${login} → ${self}`;
 }
 
 function repoChecks(
@@ -267,10 +288,12 @@ function describeFile(file: RepoFile): string {
 /** G8: the push token is new on every call and can't write anything but contents. Tokens print as lengths only. */
 function credentialChecks(
   repo: RepoProvider,
+  issues: IssueProvider,
   fetchFn: typeof fetch,
   { targetRepo, issue }: SmokeOptions,
 ): Check[] {
   let token = '';
+  let botLogin = '';
   return [
     [
       'getPushCredentials (twice)',
@@ -279,11 +302,16 @@ function credentialChecks(
         const second = await repo.getPushCredentials();
         assert(first.token !== second.token, 'the same token twice');
         token = second.token;
+        botLogin = second.authorName;
         const minutes = Math.round(
           (second.expiresAt.getTime() - Date.now()) / 60_000,
         );
         return `${second.authorName} <${second.authorEmail}>, ${second.remoteUrl}, expires in ${minutes} min, two different tokens (${first.token.length} and ${second.token.length} chars)`;
       },
+    ],
+    [
+      'isSelf (bot login)',
+      () => Promise.resolve(isSelf(issues, botLogin, true)),
     ],
     [
       'push token cannot comment (403)',

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
+  AccessLevel,
   CommentRef,
   IssueProvider,
   Lane,
@@ -157,8 +158,12 @@ export class GitHubIssueProvider implements IssueProvider {
     this.logger.log(`removeLabel ${task.externalRef} → "${label}"`);
   }
 
-  /** GitHub reports maintain as write and triage as read. No cache (G6). */
-  async hasWriteAccess(task: TaskRef, login: string): Promise<boolean> {
+  /**
+   * Spec 2 AW4: `permission` admin or write (GitHub reports maintain as write) → approver; otherwise
+   * `user.permissions.triage` → participant; anything else, a missing field or no such user (404) → none.
+   * No cache (spec 3, G6): a failure throws, it is never read as "no access".
+   */
+  async getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel> {
     const { owner, repo } = this.github.target(task);
     const found = await this.github.requestOrNull((octokit) =>
       octokit.request(
@@ -166,9 +171,17 @@ export class GitHubIssueProvider implements IssueProvider {
         { owner, repo, username: login },
       ),
     );
-    return (
-      found?.data.permission === 'admin' || found?.data.permission === 'write'
-    );
+    if (!found) return 'none';
+    const { permission, user } = found.data;
+    if (permission === 'admin' || permission === 'write') return 'approver';
+    if (user?.permissions?.triage === true) return 'participant';
+    return 'none';
+  }
+
+  /** The bot login (`<slug>[bot]`) is resolved at startup; a human login can't contain `[`. */
+  isSelf(login: string): boolean {
+    const bot = this.github.bot.login;
+    return bot !== '' && login.toLowerCase() === bot.toLowerCase();
   }
 
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean } {

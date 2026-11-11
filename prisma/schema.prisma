@@ -31,7 +31,10 @@ model WebhookEvent {
   lastError    String?            @map("last_error")
   receivedAt   DateTime           @default(now()) @map("received_at") @db.Timestamptz
   processedAt  DateTime?          @map("processed_at") @db.Timestamptz
+  /// The issue or PR the event is about, `owner/repo#number` (spec 2, IA14); null when the payload has none.
+  externalRef  String?            @map("external_ref")
 
   @@index([status, availableAt, receivedAt])
+  @@index([externalRef, receivedAt])
   @@map("webhook_events")
 }

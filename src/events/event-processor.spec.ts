@@ -33,6 +33,7 @@ function event(overrides: Partial<WebhookEvent> = {}): WebhookEvent {
     lastError: null,
     receivedAt: new Date(),
     processedAt: null,
+    externalRef: null,
     ...overrides,
   };
 }
