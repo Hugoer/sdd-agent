@@ -2,6 +2,11 @@
 
 > **Created:** 2026-11-10 · **Status:** approved 2026-11-10 (including A1–A5) · built and verified 2026-11-11 (every matrix row passed)
 >
+> **Changed by spec 2 (2026-11-11, once it is built):** `hasWriteAccess` becomes `getAccessLevel` (two levels,
+> overview D19), `isSelf` is new, and the hello comment is removed. See
+> `spec-github-agent-intake-authorization.md`, "Changes to earlier specs' behavior". The text below records what
+> spec 3 built.
+>
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
 >
@@ -504,6 +509,12 @@ None blocks this spec. For later specs:
   commit (pass a commit SHA as `ref`), and whether `listFiles` should also return each file's blob SHA to skip
   unchanged files.
 - **Spec 5:** overview D16 says retries end in `needs-human` + a comment; until then a failed event is only a
-  `FAILED` row. The retry constants stay constants.
+  `FAILED` row. The retry constants stay constants. Also (seen in the verification, 2026-11-11): a row that ends
+  `DONE` after a failed attempt keeps that attempt's `last_error`, because spec 1's worker never clears it. Either
+  clear it on success or document it as history.
+- **Small, any later spec touching these (seen in the verification, 2026-11-11):** an invalid `.env` still exits
+  with a stack trace (spec 1's config validation), unlike the one-line GitHub startup message (plan P9). Provider
+  error messages show the encoded path (`contents/.github-agent%2Fworkflow.json`); decoding the pathname in
+  `toProviderError` would make `last_error` easier to read.
 - **Spec 10:** the check-run name `Quality Gate` (it becomes the required-check name in branch protection) and
   its output title.

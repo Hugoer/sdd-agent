@@ -11,7 +11,10 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (`github-providers`) built 2026-11-11: `GitHubModule` (App auth on `TARGET_REPO`, startup checks, label
   bootstrap), the `IssueProvider` / `RepoProvider` adapters behind `ISSUE_PROVIDER` / `REPO_PROVIDER`, in-memory
   fakes in `test/fakes/`, and `npm run github:smoke`. Next in the build order: spec 2 (`intake-authorization`):
-  spec not written yet. Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  spec approved 2026-11-11 (`docs/specs/spec-github-agent-intake-authorization.md`); its plan
+  (`docs/plans/`, same file name) is written and waiting for approval; not built yet, so the code still has
+  `hasWriteAccess` and the hello comment. Repo: `Hugoer/sdd-agent`;
+  target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)

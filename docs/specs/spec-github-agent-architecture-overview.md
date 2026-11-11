@@ -1,6 +1,7 @@
 # Spec #0 — GitHub AI Agent: Architecture Overview
 
-> **Created:** 2026-11-09 · **Status:** approved 2026-11-09
+> **Created:** 2026-11-09 · **Status:** approved 2026-11-09 · amended 2026-11-11 (spec 2: D19–D21, approved with
+> that spec on 2026-11-11)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#10) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -19,8 +20,9 @@ An MVP GitHub App backend (NestJS on the developer's machine, reached through ng
 sandbox target repo** through Grill Me → Spec → Plan → Coder → Quality Gate, driven by labels and `/approve`
 comments, without acting under the developer's identity or touching their checkout.
 
-- **Actors:** the developer (runs the app, reviews and merges PRs), `write` users of the target repo (label
-  issues, answer questions, `/approve`), the bot (the GitHub App).
+- **Actors:** the developer (runs the app, reviews and merges PRs), Participants of the target repo (label
+  issues, answer questions), Approvers (the same, plus `/approve`) and the bot (the GitHub App). Levels: D19
+  (2026-11-11; was "`write` users").
 - **Done when** every capability spec can be written and implemented in build order without contradicting
   another one (see Success criteria).
 
@@ -44,7 +46,8 @@ comments, without acting under the developer's identity or touching their checko
   LangGraph runs only inside the Coder and Quality Gate agent loops.
 - **D4 Thin intake:** the controller validates HMAC, stores the event (deduplicated by delivery ID) and replies
   `202`, with no outbound calls. The worker checks the sender. Every event that doesn't reach the router is
-  recorded in the events table with a reason. `ExecutionLog` is for LLM runs only.
+  recorded in the events table with a reason. `ExecutionLog` is for LLM runs only. **2026-11-11 (spec 2):** a
+  redelivery of a `FAILED` event queues it again; any other redelivery still changes nothing.
 - **D5 Lane labels act per event:** removing the run's lane label cancels the run (`draft`); adding a lane label
   starts a run, cancelling the active one first (restart); a lane swap works in either order; with two lane
   labels nothing starts or is cancelled; events received before the current run started are ignored.
@@ -72,7 +75,8 @@ comments, without acting under the developer's identity or touching their checko
 - **D14 One target repo per instance** (`TARGET_REPO`); events from any other repo are ignored.
 - **D15 Secret scanning** covers everything the bot sends out, including the diff before every push.
 - **D16 Failures:** transient errors are retried a bounded number of times, then `needs-human` + comment.
-  Never silent.
+  Never silent. **2026-11-11 (spec 2):** this applies from the router on. A failure at intake, before the sender
+  is known to be allowed, ends as a `FAILED` event row with its error and no comment.
 - **D17 Bounded loops:** the Coder and Quality Gate agent loops have step caps from config.
 - **D18 Step skills are required (2026-11-10).** Every step a run uses needs a skill mapped in `workflow.json`;
   there is no built-in fallback prompt. Checked when the run starts, so nothing is posted or approved first: a
@@ -80,6 +84,18 @@ comments, without acting under the developer's identity or touching their checko
   prompt frame (output schema, tools, guardrails). Replaces "missing → built-in default prompt". Reason: a silent
   fallback gives weaker documents and can put a green Quality Gate check on a PR, and the steps no longer need a
   second set of method prompts.
+- **D19 Two access levels (2026-11-11, spec 2).** A **Participant** (GitHub: Triage or higher) may open issues,
+  add or remove `workflow: *` and `grill: skip`, and answer Grill Me. An **Approver** (GitHub: Write or higher)
+  may also `/approve` and push to a bot PR. The contract names the levels, never a platform's roles; each adapter
+  maps them (`IssueProvider.getAccessLevel`, which replaces `hasWriteAccess`). The same mapping serves personal
+  and organization repos: a personal repo has no Triage role, so nobody there is only a Participant. Replaces
+  "only `write` users drive the bot". Reason: people without code access (product owner, QA) can take an issue up
+  to the Spec or Plan, while code still starts only on an Approver's `/approve`.
+- **D20 `/approve` is the whole comment (2026-11-11, spec 2).** Trimmed, upper or lower case; anything else is a
+  normal comment. Intake decides it, because the two inputs need different levels (was "exact syntax: spec 7").
+- **D21 Answers to refused senders (2026-11-11, spec 2).** A Participant's `/approve` gets one reply per attempt.
+  A lane or skip label added by a sender with no access is removed every time, with one comment per issue and
+  label. Everything else from a sender with no access is ignored silently.
 
 ## Contradictions found in the idea doc
 
@@ -107,7 +123,7 @@ Numbers are IDs, not build order.
 | # | Module id | NestJS module(s) · folder | Responsibility | Depends on | Effort |
 |---|---|---|---|---|---|
 | 1 | `walking-skeleton` | `ConfigModule`, `PrismaModule`, `WebhookModule`, `EventsModule` · `src/config`, `src/prisma`, `src/webhook`, `src/events` | Zod env validation, Prisma, `POST /webhooks/github` + HMAC guard, events table, `enqueue()`, polling worker, minimal App client for the "hello" comment | — | high |
-| 2 | `intake-authorization` | `IntakeModule` · `src/intake` | Payload → neutral input, sender check (+ the App's own PR events), target-repo filter, ignore reasons, label revert | 1, 3 | xhigh |
+| 2 | `intake-authorization` | `IntakeModule` · `src/intake` | Payload → neutral input (`WorkflowInput`), the sender's access level (+ the App's own PR events), target-repo filter, ignore reasons, label revert, `/approve` reply | 1, 3 | xhigh |
 | 3 | `github-providers` | `GitHubModule` · `src/github` | App auth (JWT → installation token), GitHub `IssueProvider` + `RepoProvider`, label bootstrap | 1 | high |
 | 4 | `llm-foundation` | `LlmModule` · `src/llm` | Anthropic client, Zod output + retry, `ExecutionLog`, input guardrails, secret scanner, step-skill loader + prompt assembly | 1, 3 | xhigh |
 | 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, cancel/restart, stale events | 2, 3 | xhigh |
@@ -189,14 +205,18 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 | `LANE_ADDED(l)`, `LANE_REMOVED(l)` | `issues.labeled` / `issues.unlabeled` with `workflow: l` |
 | `SKIP_ADDED` | `issues.labeled` with `grill: skip` |
 | `COMMENT` | `issue_comment.created` on the issue that isn't a command |
-| `APPROVE` | `issue_comment.created` that is `/approve` (exact syntax: spec 7) |
+| `APPROVE` | `issue_comment.created` whose whole text is `/approve` (D20, 2026-11-11; was "exact syntax: spec 7") |
 | `PR_UPDATED` | `pull_request.opened` / `synchronize` on a bot PR |
 | Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` |
 
-**Ignored at intake** (recorded with a reason, never routed): other repos; senders without `write` (a lane or
-skip label they added is removed + one comment); the bot's own events, except `PR_UPDATED` on its own PR; comment
-edits and deletes; comments on PRs; PRs not opened by the bot; `status: *` label changes; `grill: skip` removal;
-any other event type or action.
+The first six rows are the `WorkflowInput` type of §4, produced by intake (spec 2).
+
+**Ignored at intake** (recorded with a reason, never routed; the reasons: spec 2): other repos; senders below the
+level the input needs (D19: `APPROVE` and a human's `PR_UPDATED` need Approver, every other input Participant;
+D21 says which refusals get a comment); the bot's own events, except `PR_UPDATED` on its own PR; comment edits and
+deletes; comments on PRs; PRs not opened by the bot; `status: *` label changes; `grill: skip` removal; a label
+event without a label (the label was deleted from the repo); invalid payloads; any other event type or action.
+(2026-11-11: was "senders without `write` (a lane or skip label they added is removed + one comment)".)
 
 ### Per-event pipeline
 
@@ -302,6 +322,8 @@ export type Platform = 'GITHUB' | 'JIRA' | 'AZURE_DEVOPS';
 export type Lane = 'full-sdd' | 'spec-code' | 'code-only';
 export type TaskStatus =
   | 'draft' | 'grilling' | 'spec-review' | 'ready-for-dev' | 'executing' | 'in-review' | 'needs-human';
+/** What a user may do with the bot, lowest first (D19, added 2026-11-11). Never a platform's role name. */
+export type AccessLevel = 'none' | 'participant' | 'approver';
 
 /** DB identity = platform + id. externalRef is what adapters call the API with; it may change. */
 export interface TaskRef {
@@ -329,10 +351,13 @@ export interface IssueProvider {
   findCommentByMarker(task: TaskRef, marker: string): Promise<CommentRef | null>;
   /** projection of Task.status: sets this status label and removes any other `status: *` label */
   setStatusLabel(task: TaskRef, status: TaskStatus): Promise<void>;
-  /** only to revert a lane/modifier label added by a sender without write access */
+  /** only to revert a lane/modifier label added by a sender with no access (D21) */
   removeLabel(task: TaskRef, label: string): Promise<void>;
-  /** write or higher (GitHub: collaborator permission on the target repo) */
-  hasWriteAccess(task: TaskRef, login: string): Promise<boolean>;
+  /** the user's level on the task's repo or project, asked on every call (replaces hasWriteAccess, 2026-11-11).
+   *  GitHub: Write or higher → 'approver', Triage → 'participant', anything else or unknown user → 'none' */
+  getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel>;
+  /** true when login is the bot's own account (added 2026-11-11, spec 2) */
+  isSelf(login: string): boolean;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean };
   /** creates missing status / workflow / modifier labels (startup) */
@@ -388,6 +413,19 @@ export class ProviderError extends Error {
   constructor(message: string, readonly kind: 'transient' | 'permanent',
     readonly detail: { status?: number; retryAfterSeconds?: number } = {}) { super(message); }
 }
+
+/** Added 2026-11-11 (spec 2). What intake hands to the router: one authorized event, platform-neutral. */
+export interface TaskComment { id: string; body: string; createdAt: Date } // body is untrusted data
+export type WorkflowInput = {
+  deliveryId: string; // WebhookEvent.deliveryId
+  receivedAt: Date;   // when the controller stored the event ("received" in §3 R1)
+  sender: string;     // login; the bot's own login only on PR_UPDATED
+} & (
+  | { type: 'ISSUE_OPENED' | 'SKIP_ADDED'; task: TaskRef }
+  | { type: 'LANE_ADDED' | 'LANE_REMOVED'; task: TaskRef; lane: Lane }
+  | { type: 'COMMENT' | 'APPROVE'; task: TaskRef; comment: TaskComment }
+  | { type: 'PR_UPDATED'; pr: PullRequestRef; headSha: string }
+);
 ```
 
 ### Step-skill contract
@@ -458,7 +496,7 @@ earlier table through its own migration; it is then listed under "Extended by".
 
 | Table | Owner | Purpose | Extended by |
 |---|---|---|---|
-| `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason | 2 (ignore reasons), 8 (`WAITING_WORKSPACE`) |
+| `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
 | `ExecutionLog` | 4 | One row per LLM call: node, tokens, status, confidence, lane, error | — |
 | `Task` | 5 | One row per issue: status (source of truth), lane, current run, session lease | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
@@ -471,13 +509,13 @@ earlier table through its own migration; it is then listed under "Extended by".
 ## 7. Cross-cutting rules
 
 1. **Authenticity:** a webhook without a valid `X-Hub-Signature-256` gets `401` and is not stored.
-2. **Authorization:** only `write`-or-higher senders drive the bot; the App itself only through `pull_request`
-   events on its own PR. Everything else is ignored and recorded, never answered (except the one comment when a
-   lane or skip label is reverted).
+2. **Authorization** (D19, 2026-11-11; was "only `write`-or-higher senders"): only Participants and Approvers
+   drive the bot, and only an Approver's `/approve` counts; the App itself only through `pull_request` events on
+   its own PR. Everything else is ignored and recorded, never answered (except the two comments of D21).
 3. **One target repo** (`TARGET_REPO`); events from other repos are ignored.
 4. **Labels:** `status: *` is bot-only, a projection of `Task.status`. `workflow: *` and `grill: skip` are
-   human-only; the bot never adds them and only removes ones added without `write`. Lane and skip labels are read
-   from the API at processing time, never from the payload.
+   human-only; the bot never adds them and only removes ones added by a sender with no access (D21). Lane and
+   skip labels are read from the API at processing time, never from the payload.
 5. **PostgreSQL is the source of truth:** no workflow state in process memory or in the issue thread; every event
    rebuilds its state from the tables.
 6. **Serialization:** one job at a time per task (session lease) and one coding job at a time (workspace lease).
@@ -500,7 +538,8 @@ earlier table through its own migration; it is then listed under "Extended by".
     untouched; comments, PRs and check runs through the App.
 15. **Skills shape instructions only** (§4), are always read from the base branch, and are required: no step runs
     on a built-in fallback prompt (D18).
-16. **No code without a human go:** only an `/approve` from a `write` user starts the Coder.
+16. **No code without a human go:** only an `/approve` from an Approver (GitHub: Write or higher, D19) starts the
+    Coder.
 17. **Never silent:** every `needs-human` posts exactly one comment with the cause and the next step; every ignored
     event is recorded with a reason.
 18. **Bounded:** Grill rounds and questions, LLM loop steps, fix attempts and retries all have caps.
@@ -509,25 +548,34 @@ earlier table through its own migration; it is then listed under "Extended by".
 
 - **1:** the `ping` event sent when the webhook is created (reply 2xx, record as ignored); the hello comment uses
   the payload's `installation.id`.
-- **2:** an unauthorized *removal* of a lane label is ignored (the bot never re-adds lane labels), so the run
+- **2:** ~~an unauthorized *removal* of a lane label is ignored (the bot never re-adds lane labels), so the run
   continues without its label and a later re-add restarts it; labels set at issue creation fire `opened` and
-  `labeled` in any order; how the bot recognises its own sender.
+  `labeled` in any order; how the bot recognises its own sender.~~ → resolved 2026-11-11 in
+  `spec-github-agent-intake-authorization.md`: the removal is ignored as `unauthorized`; intake passes `opened`
+  and `labeled` on in the order received and the router handles both orders (below, 5); `IssueProvider.isSelf`.
 - **3:** ~~caching `hasWriteAccess` results (at most per job); whether loading a skill directory needs a file
   listing.~~ → resolved 2026-11-10 in `spec-github-agent-github-providers.md`: no cache (G6); `listFiles` (G7).
 - **4:** injection detected → `FAILED` or wrap and continue; truncate vs summarize oversized input; which files a
   skill may reference and their size cap. **Added 2026-11-10 (spec 3, G7):** a skill is loaded as its whole
   directory: how reference files reach the LLM; whether and where a skill's scripts run (this contradicts "The
   skill only changes instructions" and the tools column in §4, so this overview changes first); binary files;
-  reading the listing and the files at one commit.
+  reading the listing and the files at one commit. **Agreed 2026-11-11 (spec 2 interview):** the secret scanner
+  wraps the two ports, so every outgoing text is scanned whoever the caller is (this covers spec 2's two
+  comments, and the §4 comment "body is already secret-scanned" goes away).
 - **5:** "received" = the time the controller stored the event; several lane labels added at once → one reminder
   comment, not one per event; events on closed issues; worker concurrency cap; the run-start skills check (R6)
-  calls spec 4's loader.
+  calls spec 4's loader. **Added 2026-11-11 (spec 2):** an `ISSUE_OPENED` processed after its issue's run started
+  is stale (R1); spec 5 replaces spec 2's placeholder processor and adds its own ignore reasons; a task's
+  waiting events are found through `WebhookEvent.externalRef` (spec 2), and the spec that first needs them adds
+  the query method to `EventsService`.
 - **6:** a comment that arrives while the final evaluation runs (merge it in before moving to the Spec?); partial
   answers to a batch; the cancel comment strips markers, escapes code fences and truncates long answers with a
   link.
 - **7:** `/approve` syntax; a Spec/Plan longer than GitHub's 65,536-character comment limit; the approved comment
   deleted before `/approve`; the snapshot is taken when the approval is first processed, so a queued approval
-  keeps that text.
+  keeps that text. **Agreed 2026-11-11 (spec 2 interview):** while an issue waits for an approval, a comment that
+  starts with `/approve` but isn't exactly that gets one hint ("comment exactly `/approve`"), at most once per
+  document; spec 7 adds the case to transition-table row 20.
 - **8:** an explicit-URL fetch needs an explicit refspec (update `refs/remotes/origin/*` or a bot-owned ref
   namespace?); branch name format with the run number; the agent branch checked out in the developer's clone;
   concurrent fetches.
@@ -586,16 +634,23 @@ guide (spec 1) shows each delivery's state and ignore reason; the issue timeline
 PR's Checks tab shows check runs; run
 `git -C "$WORKSPACE_REPO_PATH" status --short && git -C "$WORKSPACE_REPO_PATH" branch --show-current` before and
 after a Coder run; `git config --show-origin --get-regexp 'http\..*extraheader'` in both checkouts must print
-nothing. Unauthorized rows need a second GitHub account with `triage` access to the target repo.
+nothing. Rows with a sender that has no access use spec 2's signed test request (sender `octocat`). Rows with a
+sender who is only a Participant (a Triage user) need a target repo owned by an organization: a personal repo has
+no Triage role (D19), so on the sandbox they are covered by automated tests (2026-11-11; was "a second GitHub
+account with `triage` access").
 
 **Invariants**
 - [ ] (1) `curl` the webhook URL without, or with a wrong, `X-Hub-Signature-256` → `401`; no events-table row.
 - [ ] (1) Redeliver a delivery from the App's "Recent deliveries" → still one row; no second comment.
 - [ ] (2) The bot posts a comment or changes a label → its own webhook is recorded as ignored (own event); no LLM
   call, no follow-up comment: the bot never triggers itself.
-- [ ] (2) A `triage` user comments `/approve` on a `ready-for-dev` issue → nothing changes on GitHub; the event is
-  ignored (unauthorized).
-- [ ] (2) A `triage` user adds `workflow: code-only` → the label is removed + exactly one comment; no run starts.
+- [ ] (2) A sender with no access comments `/approve` on a `ready-for-dev` issue → nothing changes on GitHub; the
+  event is ignored (`unauthorized`).
+- [ ] (2) A sender with no access adds `workflow: code-only` → the label is removed + exactly one comment; no run
+  starts. The same again on that issue → removed again, NO second comment.
+- [ ] (2, organization repo only) A Triage user adds `workflow: full-sdd` and answers the questions → the run
+  starts and continues. Their `/approve` → exactly one reply and nothing else changes; a Write user's `/approve`
+  → it counts.
 - [ ] (2) An event from another repo (App installed there for the test) → ignored; no API call to that repo.
 - [ ] (5) Add `workflow: full-sdd` and `grill: skip` in one edit → skip comment + Spec, whatever the webhook order.
 - [ ] (5) A human changes a `status: *` label → nothing happens; the next transition restores the right label.
