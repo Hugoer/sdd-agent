@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #2: Intake & Authorization
 
-> **Created:** 2026-11-11 · **Status:** approved 2026-11-11 (including P1–P9) · build started 2026-11-11
+> **Created:** 2026-11-11 · **Status:** approved 2026-11-11 (including P1–P9) · build started 2026-11-11 · built and verified 2026-11-12
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-intake-authorization.md` into
 > ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan
@@ -172,7 +172,7 @@ resolved at startup. Fake: `setAccessLevel(login, level)` (default `none`), a bo
   one row
 - [x] The smoke's access lines: `approver` for you, `none` for `octocat`, `isSelf` `true` for `<app>[bot]`
 - [x] Opening a sandbox issue still gets the hello
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -266,7 +266,7 @@ requests through the controller.
 
 **Verification:**
 - [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: Checkpoint 2
+- [x] Manual: Checkpoint 2
 
 **Dependencies:** T7
 **Files:** `src/app.module.ts`, `src/events/event-processor.ts` (its `.spec.ts` is deleted),
@@ -280,7 +280,7 @@ requests through the controller.
 - [x] Signed request for `someone/other-repo` → `IGNORED` `other-repo`. `send issues '{"action":"opened"}'` →
   `IGNORED` `invalid-payload`, `attempts = 1`
 - [x] Adding a label gives `unsupported-event` for now (P9)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -341,7 +341,7 @@ revert comment unless its marker is already there (spec "Label revert", AW2, IA1
 - [x] The bot's own `issues.unlabeled` and `issue_comment.created` rows are `IGNORED` `own-event`; nothing else
   follows
 - [x] The same once more → the label disappears again; NO second comment
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -438,7 +438,7 @@ redelivery, and the real polling loop.
 - [x] `grep -rn "\.payload" src/intake --include='*.ts'` → only `github-payload.ts` and its test; Octokit is
   imported only under `src/github/`
 - [x] The pull request rows wait for T16 (they need the smoke branch)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -452,13 +452,13 @@ State and the `db:events` line. `README.md`: the sentence about the hello. The o
 a name it lists.
 
 **Acceptance criteria:**
-- [ ] Every command in the guide exists in `package.json`; the guide's table of ignore reasons equals
+- [x] Every command in the guide exists in `package.json`; the guide's table of ignore reasons equals
   `ignore-reason.ts`
-- [ ] No living doc (the guide, `README.md`, `AGENTS.md`) promises a hello comment or names `hasWriteAccess`
-- [ ] `AGENTS.md` says spec 2 is built and names the next spec (4, `llm-foundation`)
+- [x] No living doc (the guide, `README.md`, `AGENTS.md`) promises a hello comment or names `hasWriteAccess`
+- [x] `AGENTS.md` says spec 2 is built and names the next spec (4, `llm-foundation`)
 
 **Verification:**
-- [ ] Manual: you read the changed guide sections once
+- [x] Manual: you read the changed guide sections once
 
 **Dependencies:** T14
 **Files:** `docs/guides/setup-github-agent-local.md`, `AGENTS.md`, `README.md`
@@ -472,12 +472,12 @@ steps, the redeliveries and the Wi-Fi rows, one step per message. Results are ti
 the plan's status lines are set.
 
 **Acceptance criteria:**
-- [ ] Every matrix row is ticked or reported as failing with its output (no silent skips); the "Organization
+- [x] Every matrix row is ticked or reported as failing with its output (no silent skips); the "Organization
   repo only" rows are marked as not run
-- [ ] The spec's success criteria are checked, including the three `grep` rows
+- [x] The spec's success criteria are checked, including the three `grep` rows
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
 
 **Dependencies:** T15
 **Files:** `docs/specs/spec-github-agent-intake-authorization.md` and this plan (checkboxes and status only),
@@ -485,7 +485,7 @@ plus fixes if a row fails
 **Scope:** S (more if a row fails)
 
 ### Checkpoint 5 — Complete
-- [ ] The spec's "Success criteria" are all checked
+- [x] The spec's "Success criteria" are all checked
 - [ ] You review and commit; spec 4 (`llm-foundation`) is next in the build order
 
 ---

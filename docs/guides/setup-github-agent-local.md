@@ -5,15 +5,17 @@
 > zero to the bot's first comment on a sandbox issue. Living doc: each later spec that changes setup updates it.
 > **Updated:** 2026-11-11 for spec #3 (`docs/specs/spec-github-agent-github-providers.md`): `TARGET_REPO`, the
 > startup checks, the labels, the smoke script.
+> **Updated:** 2026-11-12 for spec #2 (`docs/specs/spec-github-agent-intake-authorization.md`): no hello comment
+> any more, the `external_ref` column, redelivery of a `FAILED` event, ignore reasons, who can do what, signed
+> test requests.
 
-**End state:** you open an issue in your sandbox repo, and within a few seconds `<your-app>[bot]` comments:
-
-```text
-👋 Hello from the GitHub AI Agent (walking skeleton). Webhook round trip OK — delivery `<id>`.
-```
+**End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
+and accepted: `npm run db:events` shows the row `DONE` and the app log shows `accepted ISSUE_OPENED`. The bot
+posts nothing yet; the workflow that answers comes with later specs.
 
 **How the pieces connect:** GitHub sends a webhook → your ngrok static domain → the NestJS app on
-`localhost:3000` → PostgreSQL (Docker) → a background worker → a comment through the GitHub App.
+`localhost:3000` → PostgreSQL (Docker) → a background worker → intake: what the event is and whether its sender
+may do it, asked through the GitHub App.
 
 You will collect five values on the way. They all go into `.env` in step 5:
 
@@ -246,6 +248,9 @@ npm run db:up        # starts postgres:16-alpine on 127.0.0.1:5432 and waits unt
 npm run db:migrate   # applies the migrations
 ```
 
+**After pulling new code**, run `npm run db:migrate` again before `npm run dev`: a spec can add a column (spec 2
+added `external_ref` and filled it for the rows you already have). Nothing is deleted.
+
 **Your data** lives in a named Docker volume and survives `npm run db:down` / `db:up`, `docker compose
 restart`, `docker compose down` / `up` and a Docker Desktop restart. Only `docker compose down -v` or
 `npm run db:reset` deletes it (`db:reset` asks first).
@@ -289,27 +294,37 @@ then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
 ## 8. Smoke test
 
 1. Open an issue in the sandbox repo.
-2. Within about 5 seconds, `<your-app>[bot]` posts the hello comment with the delivery ID.
+2. Within about 5 seconds the app log shows two lines for it:
+
+   ```text
+   LOG [IntakeService] delivery=<id> event=issues action=opened sender=<you> accepted ISSUE_OPENED <you>/sdd-agent-sandbox#<n>
+   LOG [EventsWorker] delivery=<id> event=issues action=opened DONE
+   ```
+
 3. Check the stored event:
 
    ```sh
    npm run db:events
    ```
 
-   You should see one `issues` / `opened` row with status `DONE` and attempts `1`. The hello comment's own
-   `issue_comment` webhook appears as `IGNORED` / `not-handled`: the bot never replies to itself.
+   You should see one `issues` / `opened` row with `external_ref` `<you>/sdd-agent-sandbox#<n>`, your login as
+   sender, status `DONE` and attempts `1`. No comment appears on the issue.
 
 You can also redeliver the App's earlier failed `ping` (step 9): it's stored as `IGNORED` / `ping`.
+
+Try a label: add `workflow: full-sdd` → `accepted LANE_ADDED full-sdd`; add `bug` → `IGNORED` / `other-label`.
+Comment on the issue → `accepted COMMENT`; the log never contains the comment's text.
 
 ## 9. Troubleshooting
 
 | Symptom | Where to look | Cause / fix |
 |---|---|---|
-| No comment, nothing in the app log | App settings → **Advanced → Recent deliveries** (status, response, **Redeliver**) | Is the webhook URL right? Are the tunnel and the app both running? |
+| Nothing in the app log | App settings → **Advanced → Recent deliveries** (status, response, **Redeliver**) | Is the webhook URL right? Are the tunnel and the app both running? |
+| I labeled or commented and nothing happened | `npm run db:events` (`status`, `ignore_reason`) | An `IGNORED` row says why in `ignore_reason`: see "Ignore reasons" below. `unauthorized` or `label-reverted`: the sender lacks the access ("Reference: who can do what") |
 | Delivery shows `502` | ngrok inspector <http://localhost:4040> | The app isn't running on `PORT`. Start `npm run dev`, then **Redeliver** |
 | Delivery shows `401` | app log | `GITHUB_WEBHOOK_SECRET` doesn't match the App's webhook secret. Fix it, restart, redeliver |
-| Delivery shows `202`, no comment, and the row is `FAILED` with attempts `1` | `npm run db:events` (`last_error`) | A permanent GitHub error, e.g. `404` (the issue was deleted or transferred) or `403` (a missing permission). It is not retried; fix the cause. Redelivering the same delivery is ignored |
-| Delivery shows `202`, no comment, and the row goes `FAILED` with attempts `3` | `npm run db:events` (`last_error`) | GitHub was unreachable, answered `5xx` or rate-limited three times (about 35 s, longer after a rate limit). Check the connection |
+| Delivery shows `202` and the row is `FAILED` with attempts `1` | `npm run db:events` (`last_error`) | A permanent GitHub error, e.g. `404` (the issue was deleted or transferred) or `403` (a missing permission). It is not retried; fix the cause, then **Redeliver** it |
+| Delivery shows `202` and the row goes `FAILED` with attempts `3` | `npm run db:events` (`last_error`) | GitHub was unreachable, answered `5xx` or rate-limited three times (about 35 s, longer after a rate limit). Check the connection, then **Redeliver** it |
 | The row is `IGNORED` / `other-repo` | the delivery's repository | The App is installed on another repo too; the bot only works on `TARGET_REPO` |
 | `npm run dev` exits at startup with a GitHub message | the message | See the table in step 7 |
 | `npm run github:smoke` prints `FAIL` | the `FAIL` line (method and what it saw) | Check the preconditions in step 11 |
@@ -319,8 +334,34 @@ You can also redeliver the App's earlier failed `ping` (step 9): it's stored as 
 | `npm run db:up` fails: port 5432 already allocated | `docker ps` | Another Postgres is using 5432. Stop it |
 
 GitHub never retries a failed delivery automatically. While the app is down, deliveries are lost until you
-**Redeliver** them. A redelivery of an already-stored delivery is accepted (`202`) and ignored, so it never
-posts a second hello.
+**Redeliver** them. A redelivery is always accepted (`202`):
+
+- of a `FAILED` row: the same row is queued again (attempts back to `0`) and runs from the start; the log shows
+  `requeued`. Safe: every bot comment is guarded by a hidden marker, so none is posted twice.
+- of a row in any other status: nothing changes; the log shows `duplicate`.
+
+**Ignore reasons.** What `ignore_reason` holds for an `IGNORED` row:
+
+| Reason | Meaning |
+|---|---|
+| `ping` | GitHub's webhook test |
+| `other-repo` | not `TARGET_REPO` |
+| `unsupported-event` | an event or action the bot doesn't use (e.g. closing or reopening an issue) |
+| `invalid-payload` | a needed field is missing or malformed |
+| `own-event` | sent by the bot itself, and not a `pull_request` event |
+| `label-deleted` | a label event without a label (the label was deleted from the repo) |
+| `status-label` | a `status: *` label was added or removed |
+| `other-label` | a label the bot doesn't use |
+| `skip-removed` | `grill: skip` was removed |
+| `pr-comment` | a comment on a pull request |
+| `comment-edited` | a comment was edited (the bot reads a comment as it was created) |
+| `comment-deleted` | a comment was deleted |
+| `not-bot-pr` | a pull request the bot didn't open |
+| `unauthorized` | the sender's level is too low; nothing was done |
+| `label-reverted` | a lane or skip label added with no access was removed, with one comment per label |
+| `approve-denied` | a Participant's `/approve` was answered |
+
+Rows stored before spec 2 can still show `not-handled` or `no-installation`; they are no longer written.
 
 ## 10. Tests
 
@@ -358,10 +399,85 @@ npm run github:smoke -- --issue <n> --branch smoke/spec-3 --sha <head SHA> # plu
 `--base` (default `main`) is the branch the file checks read; `--dir` (default `.github-agent`) is the directory
 listed.
 
+**Access lines** (who may do what, "Reference: who can do what"): `getAccessLevel` is `approver` for the issue's
+author (you own the repo), `none` for `octocat` and for an invented login; `isSelf` is `false` for the issue's
+author and `true` for `<your-app>[bot]`.
+
 **After a passing run:** the issue has exactly one `status: *` label (`status: spec-review`), `grill: skip` is
 gone, `bug` stays, and there is one more smoke comment. With `--branch`: one pull request from that branch (a
 second run finds it instead of opening another) and one `Quality Gate` check run on the commit, conclusion
 `success`.
+
+## History of an issue
+
+Every stored event has an `external_ref`: `<owner>/<repo>#<number>` of its issue or pull request (a comment on a
+pull request gets the pull request's number). To list one issue's events, oldest first (replace `42`):
+
+```sh
+set -a; source .env; set +a
+events_of() {  # events_of <issue or PR number>
+  docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT received_at, event_name, action, \
+    status, ignore_reason FROM webhook_events WHERE external_ref = '$TARGET_REPO#$1' ORDER BY received_at"
+}
+events_of 42
+```
+
+Rows with no issue or pull request (`ping`, a broken payload) have an empty `external_ref`.
+
+## Send a signed test request
+
+To see what the bot does with an event you can't produce in the GitHub UI (a sender with no access, another
+repo, a broken payload), sign a request with your webhook secret and send it to the running app. Run this in
+the bot repo, with `npm run dev` running; set `N` to an open sandbox issue:
+
+```sh
+set -a; source .env; set +a
+N=1
+send() {    # send <event> <json body> [delivery ID] → prints the HTTP status
+  SIG=$(printf '%s' "$2" | openssl dgst -sha256 -hmac "$GITHUB_WEBHOOK_SECRET" | sed 's/^.* //')
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST "http://localhost:${PORT:-3000}/webhooks/github" \
+    -H 'Content-Type: application/json' -H "X-GitHub-Event: $1" \
+    -H "X-GitHub-Delivery: ${3:-manual-$(date +%s)-$RANDOM}" -H "X-Hub-Signature-256: sha256=$SIG" -d "$2"
+}
+common() {  # common <sender login> [repo] → the fields every body needs
+  printf '"repository":{"full_name":"%s"},"sender":{"login":"%s"},"issue":{"id":1,"number":%s}' \
+    "${2:-$TARGET_REPO}" "$1" "$N"
+}
+LABELED='"label":{"name":"workflow: code-only"}'
+APPROVE='"comment":{"id":1,"body":"/approve","created_at":"2026-11-11T10:00:00Z"}'
+```
+
+Examples (each prints `202`; read the result with `npm run db:events` and the app log):
+
+```sh
+send issues "{\"action\":\"opened\",$(common octocat)}"                  # IGNORED unauthorized
+send issue_comment "{\"action\":\"created\",$(common octocat),$APPROVE}" # IGNORED unauthorized, no reply
+send issues "{\"action\":\"labeled\",$(common octocat),$LABELED}"        # removes the label if issue N has it
+send issues '{"action":"labeled"}'                                       # IGNORED invalid-payload
+```
+
+The third one acts on the real issue: if `workflow: code-only` is on issue `N`, the bot removes it and posts one
+comment explaining why (row `IGNORED` / `label-reverted`). The fake `issue.id` doesn't matter: the bot addresses
+the issue by its number. A delivery ID you pass as the third argument is stored once; sending it again is a
+redelivery (step 9).
+
+## Reference: who can do what
+
+The bot asks GitHub for the sender's role on the repo each time it processes an event (never cached):
+
+| Level | GitHub role on the repo | May |
+|---|---|---|
+| **Participant** | Triage or higher | open an issue, add or remove a `workflow: *` label, add `grill: skip`, comment |
+| **Approver** | Write, Maintain or Admin | everything a Participant may, plus comment `/approve` and push to the bot's pull request |
+| none | Read, or no role | nothing: the event is `IGNORED` / `unauthorized` |
+
+- A `workflow: *` or `grill: skip` label added by someone with no access is removed again, with one comment per
+  issue and label (`label-reverted`). The comment names the user without `@`, so nobody is notified.
+- A Participant's `/approve` gets one reply that mentions them (`approve-denied`); nothing is approved.
+- `/approve` counts only when it is the whole comment (spaces and case don't matter): `/approve thanks` or a
+  quoted `> /approve` is an ordinary comment.
+- **A personal repo has no Triage role:** every collaborator has Write, so everyone with access is an Approver.
+  The Participant level only shows on a repo owned by an organization.
 
 ## Reference: labels
 

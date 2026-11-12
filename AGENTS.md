@@ -7,14 +7,15 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   The idea doc `docs/idea/github-ai-agent-master-technical-spec.md` still rules for parts not yet moved
   (moved parts are marked "→ moved to …"). Load only the section relevant to the task, not the whole doc.
 - **State:** spec #1 (walking skeleton) built: NestJS 12 app (ESM) with Zod env config, Prisma 7 + PostgreSQL,
-  `POST /webhooks/github` (HMAC guard, delivery dedupe), a polling worker and a hello comment. Spec 3
-  (`github-providers`) built 2026-11-11: `GitHubModule` (App auth on `TARGET_REPO`, startup checks, label
-  bootstrap), the `IssueProvider` / `RepoProvider` adapters behind `ISSUE_PROVIDER` / `REPO_PROVIDER`, in-memory
-  fakes in `test/fakes/`, and `npm run github:smoke`. Next in the build order: spec 2 (`intake-authorization`):
-  spec and plan approved 2026-11-11 (`docs/specs/spec-github-agent-intake-authorization.md`, plan in
-  `docs/plans/` under the same file name); not built yet, so the code still has `hasWriteAccess` and the hello
-  comment. Repo: `Hugoer/sdd-agent`;
-  target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  `POST /webhooks/github` (HMAC guard, delivery dedupe) and a polling worker. Spec 3 (`github-providers`) built
+  2026-11-11: `GitHubModule` (App auth on `TARGET_REPO`, startup checks, label bootstrap), the `IssueProvider` /
+  `RepoProvider` adapters behind `ISSUE_PROVIDER` / `REPO_PROVIDER`, in-memory fakes in `test/fakes/`, and
+  `npm run github:smoke`. Spec 2 (`intake-authorization`) built 2026-11-12: `IntakeModule` classifies each event
+  (`src/intake/github-payload.ts` is the only reader of a GitHub payload) and authorizes its sender with
+  `getAccessLevel` (Participant / Approver); accepted events end `DONE`, the rest `IGNORED` with a reason; a lane or
+  skip label added without access is reverted. The hello comment is gone; `webhook_events.external_ref` holds
+  `owner/repo#number`; a redelivery of a `FAILED` event queues it again. Next in the build order: spec 4
+  (`llm-foundation`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
@@ -42,7 +43,7 @@ npm run db:up             dev Postgres on 127.0.0.1:5432 (named volume, data per
 npm run db:down           stop dev Postgres (keeps data)
 npm run db:migrate        prisma migrate dev (create/apply migrations)
 npm run db:reset          prisma migrate reset (wipes dev data; asks first)
-npm run db:events         last 20 webhook_events rows
+npm run db:events         last 20 webhook_events rows (external_ref, sender, status, ignore_reason)
 npm run db:test:up        test Postgres on 127.0.0.1:5434 (in-memory data)
 npm run db:test:down      remove the test Postgres
 npm run tunnel            ngrok on NGROK_DOMAIN → PORT

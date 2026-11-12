@@ -1,7 +1,8 @@
 # Spec #2 — GitHub AI Agent: Intake & Authorization
 
 > **Created:** 2026-11-11 · **Status:** approved 2026-11-11 (including AW1–AW8) · plan:
-> `docs/plans/spec-github-agent-intake-authorization.md` (approved 2026-11-11) · not built yet
+> `docs/plans/spec-github-agent-intake-authorization.md` (approved 2026-11-11) · built and verified 2026-11-12
+> (every matrix row passed; the optional organization rows not run)
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox) (public, owned by a personal account)
@@ -589,97 +590,97 @@ events_of() {  # events_of <issue or PR number> → its stored events, oldest fi
 ```
 
 **Accepted events (you, real GitHub actions)**
-- [ ] Open an issue → row `DONE`; the log shows `accepted ISSUE_OPENED`; NO comment appears on the issue.
-- [ ] Add `workflow: full-sdd` → row `DONE`, log `accepted LANE_ADDED full-sdd`; the label stays; nothing posted.
-- [ ] Remove `workflow: full-sdd` → row `DONE`, log `accepted LANE_REMOVED full-sdd`.
-- [ ] Add `grill: skip` → row `DONE`, log `accepted SKIP_ADDED`.
-- [ ] Comment `looks fine` → row `DONE`, log `accepted COMMENT`; the log does NOT contain `looks fine`.
-- [ ] Comment `/approve` → row `DONE`, log `accepted APPROVE`. Comment `  /APPROVE` with a blank line after it →
+- [x] Open an issue → row `DONE`; the log shows `accepted ISSUE_OPENED`; NO comment appears on the issue.
+- [x] Add `workflow: full-sdd` → row `DONE`, log `accepted LANE_ADDED full-sdd`; the label stays; nothing posted.
+- [x] Remove `workflow: full-sdd` → row `DONE`, log `accepted LANE_REMOVED full-sdd`.
+- [x] Add `grill: skip` → row `DONE`, log `accepted SKIP_ADDED`.
+- [x] Comment `looks fine` → row `DONE`, log `accepted COMMENT`; the log does NOT contain `looks fine`.
+- [x] Comment `/approve` → row `DONE`, log `accepted APPROVE`. Comment `  /APPROVE` with a blank line after it →
   `accepted APPROVE`.
-- [ ] Comment `/approve thanks`, then `LGTM, /approve`, then a quoted `> /approve` → three rows `DONE`, each
+- [x] Comment `/approve thanks`, then `LGTM, /approve`, then a quoted `> /approve` → three rows `DONE`, each
   `accepted COMMENT`.
 
 **Ignored from the payload alone (you, real GitHub actions)**
-- [ ] Remove `grill: skip` → row `IGNORED` `skip-removed`.
-- [ ] Add `bug` → row `IGNORED` `other-label`.
-- [ ] Add `status: grilling` by hand → row `IGNORED` `status-label`; the label stays (no revert). Remove it →
+- [x] Remove `grill: skip` → row `IGNORED` `skip-removed`.
+- [x] Add `bug` → row `IGNORED` `other-label`.
+- [x] Add `status: grilling` by hand → row `IGNORED` `status-label`; the label stays (no revert). Remove it →
   `status-label` again.
-- [ ] Edit one of your comments → `comment-edited`. Delete it → `comment-deleted`.
-- [ ] Close the issue and reopen it → two rows `IGNORED` `unsupported-event`.
-- [ ] Open a pull request by hand (a branch with one edit, made in the GitHub UI) → row `IGNORED` `not-bot-pr`.
+- [x] Edit one of your comments → `comment-edited`. Delete it → `comment-deleted`.
+- [x] Close the issue and reopen it → two rows `IGNORED` `unsupported-event`.
+- [x] Open a pull request by hand (a branch with one edit, made in the GitHub UI) → row `IGNORED` `not-bot-pr`.
   Comment `/approve` on it → row `IGNORED` `pr-comment`; nothing posted.
-- [ ] In the App's "Recent deliveries", redeliver the `ping` → still one row for it, `IGNORED` `ping`.
+- [x] In the App's "Recent deliveries", redeliver the `ping` → still one row for it, `IGNORED` `ping`.
 
 **Bot pull request** (precondition: issue `N` meets the smoke script's preconditions, setup guide step 11; in the
 GitHub UI create branch `smoke/spec-2` from `main` with one small commit, `SHA`; stop `npm run dev`; run
 `npm run github:smoke -- --issue N --branch smoke/spec-2 --sha SHA`; start the app again)
-- [ ] The smoke output shows `getAccessLevel` `approver` for you, `none` for `octocat` and for the invented
+- [x] The smoke output shows `getAccessLevel` `approver` for you, `none` for `octocat` and for the invented
   login, and `isSelf` `true` for `<app>[bot]`, `false` for you; every line `PASS`.
-- [ ] Redeliver the `pull_request.opened` delivery (it failed while the app was stopped) → row `DONE`, sender
+- [x] Redeliver the `pull_request.opened` delivery (it failed while the app was stopped) → row `DONE`, sender
   `<app>[bot]`, log `accepted PR_UPDATED` with the PR number and `SHA`.
-- [ ] Redeliver one of the smoke run's `issue_comment` deliveries → row `IGNORED` `own-event`.
-- [ ] With the app running, commit another small edit on `smoke/spec-2` in the GitHub UI → a
+- [x] Redeliver one of the smoke run's `issue_comment` deliveries → row `IGNORED` `own-event`.
+- [x] With the app running, commit another small edit on `smoke/spec-2` in the GitHub UI → a
   `pull_request.synchronize` row `DONE`, sender you, log `accepted PR_UPDATED` with the new head SHA. A
   `check_suite` row, if one arrives, is `IGNORED` `unsupported-event`.
 
 **Sender with no access (signed test requests)**
-- [ ] `send issues "{\"action\":\"opened\",$(common octocat)}"` → `202`; row `IGNORED` `unauthorized`; nothing
+- [x] `send issues "{\"action\":\"opened\",$(common octocat)}"` → `202`; row `IGNORED` `unauthorized`; nothing
   posted.
-- [ ] `send issue_comment "{\"action\":\"created\",$(common octocat),$APPROVE}"` → row `IGNORED` `unauthorized`;
+- [x] `send issue_comment "{\"action\":\"created\",$(common octocat),$APPROVE}"` → row `IGNORED` `unauthorized`;
   NO reply on the issue.
-- [ ] `send issues "{\"action\":\"unlabeled\",$(common octocat),$LABELED}"` → row `IGNORED` `unauthorized`;
+- [x] `send issues "{\"action\":\"unlabeled\",$(common octocat),$LABELED}"` → row `IGNORED` `unauthorized`;
   nothing changes on the issue.
-- [ ] Add `workflow: code-only` to issue `N` by hand (row `DONE`), then
+- [x] Add `workflow: code-only` to issue `N` by hand (row `DONE`), then
   `send issues "{\"action\":\"labeled\",$(common octocat),$LABELED}"` → the label disappears from the issue;
   exactly one bot comment naming `workflow: code-only` and `octocat` (no `@`); row `IGNORED` `label-reverted`.
-- [ ] After that row: the bot's own `issues.unlabeled` and `issue_comment.created` rows are `IGNORED`
+- [x] After that row: the bot's own `issues.unlabeled` and `issue_comment.created` rows are `IGNORED`
   `own-event`; no further comment or label change follows.
-- [ ] Add `workflow: code-only` by hand again and send the same request again → the label disappears again; NO
+- [x] Add `workflow: code-only` by hand again and send the same request again → the label disappears again; NO
   second comment; row `label-reverted`.
-- [ ] The same with `"label":{"name":"grill: skip"}` (label added by hand first) → removed; one comment naming
+- [x] The same with `"label":{"name":"grill: skip"}` (label added by hand first) → removed; one comment naming
   `grill: skip`.
-- [ ] Delete the bot's `workflow: code-only` revert comment by hand, add the label and send the request again →
+- [x] Delete the bot's `workflow: code-only` revert comment by hand, add the label and send the request again →
   the label is removed and the comment is posted again, once.
 
 **Other repo and broken payloads (signed test requests)**
-- [ ] `send issues "{\"action\":\"labeled\",$(common $ME someone/other-repo),$LABELED}"` → row `IGNORED`
+- [x] `send issues "{\"action\":\"labeled\",$(common $ME someone/other-repo),$LABELED}"` → row `IGNORED`
   `other-repo`; the log shows no GitHub call for it.
-- [ ] `send issues '{"action":"labeled"}'` → `202`; row `IGNORED` `invalid-payload`, `attempts = 1`.
-- [ ] `send issues "{\"action\":\"labeled\",$(common $ME)}"` (no `label`) → row `IGNORED` `label-deleted`.
-- [ ] `send issue_comment "{\"action\":\"created\",$(common $ME)}"` (no `comment`) → row `IGNORED`
+- [x] `send issues '{"action":"labeled"}'` → `202`; row `IGNORED` `invalid-payload`, `attempts = 1`.
+- [x] `send issues "{\"action\":\"labeled\",$(common $ME)}"` (no `label`) → row `IGNORED` `label-deleted`.
+- [x] `send issue_comment "{\"action\":\"created\",$(common $ME)}"` (no `comment`) → row `IGNORED`
   `invalid-payload`.
-- [ ] `send installation '{"action":"created"}'` → row `IGNORED` `unsupported-event`.
+- [x] `send installation '{"action":"created"}'` → row `IGNORED` `unsupported-event`.
 
 **Stored reference (`external_ref`)**
-- [ ] Right after `npm run db:migrate`: rows stored before this spec show their `external_ref` (an old `issues` ·
+- [x] Right after `npm run db:migrate`: rows stored before this spec show their `external_ref` (an old `issues` ·
   `opened` row shows `<TARGET_REPO>#<n>`); `ping` rows show none.
-- [ ] Every row of issue `N` from the groups above shows `<TARGET_REPO>#N`, and `events_of N` lists exactly those
+- [x] Every row of issue `N` from the groups above shows `<TARGET_REPO>#N`, and `events_of N` lists exactly those
   rows, oldest first.
-- [ ] The bot PR's `pull_request` rows and the row of the comment on the hand-made PR show
+- [x] The bot PR's `pull_request` rows and the row of the comment on the hand-made PR show
   `<TARGET_REPO>#<that PR's number>`.
-- [ ] The `other-repo` row shows `someone/other-repo#N`. The `installation` row and the `{"action":"labeled"}` row
+- [x] The `other-repo` row shows `someone/other-repo#N`. The `installation` row and the `{"action":"labeled"}` row
   were stored (`202`) with an empty `external_ref`.
 
 **Fail closed, then retry by redelivery** (`BODY="{\"action\":\"labeled\",$(common $ME),$LABELED}"`)
-- [ ] Wi-Fi off, then `send issues "$BODY" retry-1` → `202`; after about 35 s the row is `FAILED` with
+- [x] Wi-Fi off, then `send issues "$BODY" retry-1` → `202`; after about 35 s the row is `FAILED` with
   `attempts = 3`. It is never `DONE` and never `IGNORED`, and nothing is posted on the issue.
-- [ ] Wi-Fi on, then the same command again → `202`; there is still ONE row for `retry-1`; the log shows
+- [x] Wi-Fi on, then the same command again → `202`; there is still ONE row for `retry-1`; the log shows
   `requeued`, then `accepted LANE_ADDED code-only`; the row is `DONE` with `attempts = 1`.
-- [ ] The same command a third time → `202`; the row stays `DONE`; the log shows `duplicate` and NO new
+- [x] The same command a third time → `202`; the row stays `DONE`; the log shows `duplicate` and NO new
   `accepted` line.
 
 **Invariants**
-- [ ] After all rows above: no row has `ignore_reason` `not-handled`, and every `IGNORED` row's reason is one of
+- [x] After all rows above: no row has `ignore_reason` `not-handled`, and every `IGNORED` row's reason is one of
   "Ignore reasons".
-- [ ] No row with sender `octocat` is `DONE`.
-- [ ] There is one row per delivery ID, whatever was redelivered.
-- [ ] No issue timeline shows the bot adding a `workflow: *` or `grill: skip` label, or changing a `status: *`
+- [x] No row with sender `octocat` is `DONE`.
+- [x] There is one row per delivery ID, whatever was redelivered.
+- [x] No issue timeline shows the bot adding a `workflow: *` or `grill: skip` label, or changing a `status: *`
   label, and no issue got a hello comment.
-- [ ] `grep` the app log for `looks fine`, `ghs_`, `-----BEGIN` and the webhook secret → no match.
-- [ ] `grep -rn "hasWriteAccess" src test` → no match. `grep -rnE "from '(octokit|@octokit)" src --include='*.ts'
+- [x] `grep` the app log for `looks fine`, `ghs_`, `-----BEGIN` and the webhook secret → no match.
+- [x] `grep -rn "hasWriteAccess" src test` → no match. `grep -rnE "from '(octokit|@octokit)" src --include='*.ts'
   --exclude-dir=generated` → matches only under `src/github/`. `grep -rn "\.payload" src/intake --include='*.ts'`
   → matches only in `github-payload.ts` and its test.
-- [ ] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
+- [x] `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:integration` all pass.
 
 **Not checked by hand on the sandbox** (a personal repo has no Triage role, IA2); covered by unit and integration
 tests with the fake provider:
@@ -688,23 +689,23 @@ tests with the fake provider:
   `/approve` → a second reply; a retried event → no extra reply.
 - A Participant as the human sender of `PR_UPDATED` → `unauthorized`.
 
-**Organization repo only** (optional; needs a target repo owned by an organization and a second account with the
+**Organization repo only** (not run in the 2026-11-12 verification: the sandbox is a personal repo) (optional; needs a target repo owned by an organization and a second account with the
 Triage role there)
 - [ ] The Triage user adds `workflow: full-sdd` → row `DONE`; the label stays.
 - [ ] The Triage user comments `/approve` → exactly one reply mentioning them; row `IGNORED` `approve-denied`.
 
 ## Success criteria
 
-- [ ] Every row of the verification matrix passes on the developer's machine (the organization rows are
+- [x] Every row of the verification matrix passes on the developer's machine (the organization rows are
   optional).
-- [ ] Every event stored after the build ends `DONE`, `IGNORED` with a reason of this spec, or `FAILED` with
+- [x] Every event stored after the build ends `DONE`, `IGNORED` with a reason of this spec, or `FAILED` with
   `last_error`.
-- [ ] `src/contracts` matches overview §4; `hasWriteAccess` is gone; only `src/github` imports Octokit; only
+- [x] `src/contracts` matches overview §4; `hasWriteAccess` is gone; only `src/github` imports Octokit; only
   `github-payload.ts` reads the payload.
-- [ ] `external_ref` is filled for new and old rows, and overview §6 lists the column.
-- [ ] Spec 5 can replace the placeholder processor and consume `IntakeService.intake()` without changing
+- [x] `external_ref` is filled for new and old rows, and overview §6 lists the column.
+- [x] Spec 5 can replace the placeholder processor and consume `IntakeService.intake()` without changing
   `src/intake`, the controller or the `WebhookEvent` columns.
-- [ ] The setup guide, `AGENTS.md` (State, Commands) and the overview reflect this spec.
+- [x] The setup guide, `AGENTS.md` (State, Commands) and the overview reflect this spec.
 
 ## Agreed for later specs (follow-up interview 2026-11-11)
 
