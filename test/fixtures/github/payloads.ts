@@ -107,6 +107,118 @@ export function issuesLabelDeleted(options: IssueOptions = {}): Delivery {
   return { eventName: 'issues', payload: base('unlabeled', options) };
 }
 
+export interface CommentOptions extends IssueOptions {
+  body?: string;
+  commentId?: number;
+  createdAt?: string;
+  /** The comment is on a pull request (its `issue` carries `pull_request`). */
+  onPullRequest?: boolean;
+}
+
+function comment(action: string, options: CommentOptions) {
+  const payload = base(action, options);
+  const login = options.sender ?? HUMAN;
+  const number = options.number ?? 7;
+  const issueWithPr = options.onPullRequest
+    ? {
+        ...payload.issue,
+        pull_request: {
+          url: `https://api.github.com/repos/${TARGET_REPO}/pulls/${number}`,
+          html_url: `https://github.com/${TARGET_REPO}/pull/${number}`,
+          merged_at: null,
+        },
+      }
+    : payload.issue;
+  return {
+    ...payload,
+    issue: issueWithPr,
+    comment: {
+      id: options.commentId ?? 6805237143,
+      html_url: `https://github.com/${TARGET_REPO}/issues/${number}#issuecomment-${options.commentId ?? 6805237143}`,
+      body: options.body ?? 'looks fine',
+      created_at: options.createdAt ?? '2026-11-11T19:26:25Z',
+      updated_at: options.createdAt ?? '2026-11-11T19:26:25Z',
+      user: { login, type: login.endsWith('[bot]') ? 'Bot' : 'User' },
+      author_association: 'OWNER',
+    },
+  };
+}
+
+/** Real delivery: issue_comment.created (also on a pull request: derived, adds `issue.pull_request`). */
+export function issueCommentCreated(options: CommentOptions = {}): Delivery {
+  return { eventName: 'issue_comment', payload: comment('created', options) };
+}
+
+/** Derived from issue_comment.created: GitHub adds `changes.body.from`. */
+export function issueCommentEdited(options: CommentOptions = {}): Delivery {
+  return {
+    eventName: 'issue_comment',
+    payload: {
+      ...comment('edited', options),
+      changes: { body: { from: 'the old text' } },
+    },
+  };
+}
+
+/** Derived from issue_comment.created. */
+export function issueCommentDeleted(options: CommentOptions = {}): Delivery {
+  return { eventName: 'issue_comment', payload: comment('deleted', options) };
+}
+
+export interface PullRequestOptions {
+  repo?: string;
+  sender?: string;
+  number?: number;
+  /** Who opened the PR (default: the bot). */
+  author?: string;
+  headSha?: string;
+}
+
+export const HEAD_SHA = 'bf7bda2a95c880e6f2fce8e493eb3df502ec654c';
+
+function pullRequest(action: string, options: PullRequestOptions) {
+  const number = options.number ?? 15;
+  const author = options.author ?? BOT_LOGIN;
+  const repo = options.repo ?? TARGET_REPO;
+  return {
+    action,
+    number,
+    pull_request: {
+      id: 5258563000 + number,
+      number,
+      html_url: `https://github.com/${repo}/pull/${number}`,
+      state: 'open',
+      title: 'sdd-agent smoke (spec 3)',
+      user: { login: author, type: author.endsWith('[bot]') ? 'Bot' : 'User' },
+      head: { ref: 'smoke/spec-2', sha: options.headSha ?? HEAD_SHA },
+      base: { ref: 'main', sha: '0000000000000000000000000000000000000000' },
+    },
+    repository: repository(repo),
+    sender: sender(options.sender ?? author),
+    installation: { id: 180575705 },
+  };
+}
+
+/** Derived from the real pull_request.closed delivery. */
+export function pullRequestOpened(options: PullRequestOptions = {}): Delivery {
+  return { eventName: 'pull_request', payload: pullRequest('opened', options) };
+}
+
+/** Derived from the real pull_request.closed delivery: `synchronize` = a new head commit. */
+export function pullRequestSynchronize(
+  options: PullRequestOptions = {},
+): Delivery {
+  return {
+    eventName: 'pull_request',
+    payload: pullRequest('synchronize', options),
+  };
+}
+
+/** Real delivery: pull_request.closed (an action the bot doesn't use). */
+export function pullRequestClosed(options: PullRequestOptions = {}): Delivery {
+  return { eventName: 'pull_request', payload: pullRequest('closed', options) };
+}
+
 /** GitHub's webhook test: no repository, no sender. */
 export function ping(): Delivery {
   return {

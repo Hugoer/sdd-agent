@@ -4,12 +4,19 @@ import {
   HUMAN,
   TARGET_REPO,
   checkSuiteRequested,
+  HEAD_SHA,
+  issueCommentCreated,
+  issueCommentDeleted,
+  issueCommentEdited,
   issuesClosed,
   issuesLabelDeleted,
   issuesLabeled,
   issuesOpened,
   issuesUnlabeled,
   ping,
+  pullRequestClosed,
+  pullRequestOpened,
+  pullRequestSynchronize,
   storedEvent,
   type Delivery,
 } from '../../test/fixtures/github/payloads.js';
@@ -420,6 +427,290 @@ describe('classifyGitHubEvent: issues labeled / unlabeled', () => {
   });
 });
 
+describe('classifyGitHubEvent: issue_comment', () => {
+  const task = (number = 7) => ({
+    platform: 'GITHUB',
+    id: String(6335695000 + number),
+    externalRef: `${TARGET_REPO}#${number}`,
+  });
+
+  it('created on an issue, any text → COMMENT with comment {id, body, createdAt}; Participant', () => {
+    const event = storedEvent(
+      issueCommentCreated({
+        body: 'looks fine',
+        commentId: 6775442980,
+        createdAt: '2026-11-11T10:00:00Z',
+      }),
+    );
+    expect(classifyGitHubEvent(event, TARGET_REPO, isSelf)).toEqual({
+      outcome: 'candidate',
+      input: {
+        type: 'COMMENT',
+        task: task(),
+        comment: {
+          id: '6775442980',
+          body: 'looks fine',
+          createdAt: new Date('2026-11-11T10:00:00Z'),
+        },
+        deliveryId: event.deliveryId,
+        receivedAt: event.receivedAt,
+        sender: HUMAN,
+      },
+      needs: 'participant',
+      subject: task(),
+    });
+  });
+
+  it.each(['/approve', '  /APPROVE\n\n'])(
+    'created %j → APPROVE; Approver; the body as written',
+    (body) => {
+      const result = classify(issueCommentCreated({ body }));
+      expect(result).toMatchObject({
+        outcome: 'candidate',
+        input: { type: 'APPROVE', comment: { body } },
+        needs: 'approver',
+      });
+    },
+  );
+
+  it.each(['/approve thanks', 'LGTM, /approve', '> /approve', '/approved', ''])(
+    'created %j → COMMENT',
+    (body) => {
+      expect(classify(issueCommentCreated({ body }))).toMatchObject({
+        input: { type: 'COMMENT' },
+        needs: 'participant',
+      });
+    },
+  );
+
+  it('a +01:00 creation time is read as that instant', () => {
+    const result = classify(
+      issueCommentCreated({ createdAt: '2026-11-11T11:00:00+01:00' }),
+    );
+    expect(result).toMatchObject({
+      input: { comment: { createdAt: new Date('2026-11-11T10:00:00Z') } },
+    });
+  });
+
+  it.each(['looks fine', '/approve'])(
+    'created %j on a pull request → pr-comment, whoever sent it',
+    (body) => {
+      expect(
+        classify(issueCommentCreated({ body, onPullRequest: true })),
+      ).toEqual({
+        outcome: 'ignored',
+        reason: 'pr-comment',
+      });
+      expect(
+        classify(
+          issueCommentCreated({ body, onPullRequest: true, sender: 'octocat' }),
+        ),
+      ).toEqual({ outcome: 'ignored', reason: 'pr-comment' });
+    },
+  );
+
+  it('issue.pull_request: null is not a pull request', () => {
+    expect(
+      classify(withField(issueCommentCreated(), 'issue.pull_request', null)),
+    ).toMatchObject({ input: { type: 'COMMENT' } });
+  });
+
+  it('edited → comment-edited; deleted → comment-deleted', () => {
+    expect(classify(issueCommentEdited())).toEqual({
+      outcome: 'ignored',
+      reason: 'comment-edited',
+    });
+    expect(classify(issueCommentDeleted())).toEqual({
+      outcome: 'ignored',
+      reason: 'comment-deleted',
+    });
+  });
+
+  it('another action → unsupported-event', () => {
+    expect(
+      classify(withField(issueCommentCreated(), 'action', 'pinned')),
+    ).toEqual({ outcome: 'ignored', reason: 'unsupported-event' });
+  });
+
+  it.each<[string, Delivery]>([
+    [
+      'no comment object',
+      withField(issueCommentCreated(), 'comment', undefined),
+    ],
+    [
+      'comment.id a string',
+      withField(issueCommentCreated(), 'comment.id', '5'),
+    ],
+    [
+      'comment.body missing',
+      withField(issueCommentCreated(), 'comment.body', undefined),
+    ],
+    [
+      'comment.body null',
+      withField(issueCommentCreated(), 'comment.body', null),
+    ],
+    [
+      'comment.created_at missing',
+      withField(issueCommentCreated(), 'comment.created_at', undefined),
+    ],
+    [
+      'comment.created_at not a date',
+      withField(issueCommentCreated(), 'comment.created_at', 'yesterday'),
+    ],
+    ['no issue', withField(issueCommentCreated(), 'issue', undefined)],
+    [
+      'issue.number a string',
+      withField(issueCommentCreated(), 'issue.number', '7'),
+    ],
+  ])('created, %s → invalid-payload', (_name, delivery) => {
+    expect(classify(delivery)).toEqual({
+      outcome: 'ignored',
+      reason: 'invalid-payload',
+    });
+  });
+
+  it("the bot's own comment → own-event (its revert comment and its reply never trigger it)", () => {
+    for (const build of [
+      issueCommentCreated,
+      issueCommentEdited,
+      issueCommentDeleted,
+    ]) {
+      expect(classify(build({ sender: BOT_LOGIN, body: '/approve' }))).toEqual({
+        outcome: 'ignored',
+        reason: 'own-event',
+      });
+    }
+  });
+});
+
+describe('classifyGitHubEvent: pull_request', () => {
+  const pr = (number = 15) => ({
+    platform: 'GITHUB',
+    repo: TARGET_REPO,
+    number,
+    url: `https://github.com/${TARGET_REPO}/pull/${number}`,
+  });
+  const subject = (number = 15) => ({
+    platform: 'GITHUB',
+    id: String(5258563000 + number),
+    externalRef: `${TARGET_REPO}#${number}`,
+  });
+
+  it.each([
+    ['opened', pullRequestOpened],
+    ['synchronize', pullRequestSynchronize],
+  ])(
+    '%s on a bot PR, sent by the bot → PR_UPDATED, needs no lookup',
+    (_action, build) => {
+      const event = storedEvent(build());
+      expect(classifyGitHubEvent(event, TARGET_REPO, isSelf)).toEqual({
+        outcome: 'candidate',
+        input: {
+          type: 'PR_UPDATED',
+          pr: pr(),
+          headSha: HEAD_SHA,
+          deliveryId: event.deliveryId,
+          receivedAt: event.receivedAt,
+          sender: BOT_LOGIN,
+        },
+        needs: 'self',
+        subject: subject(),
+      });
+    },
+  );
+
+  it('synchronize on a bot PR, pushed by a human → PR_UPDATED, needs an Approver, asked on the PR ref (AW6)', () => {
+    const sha = 'a'.repeat(40);
+    const result = classify(
+      pullRequestSynchronize({ sender: HUMAN, headSha: sha, number: 16 }),
+    );
+    expect(result).toMatchObject({
+      outcome: 'candidate',
+      input: { type: 'PR_UPDATED', sender: HUMAN, headSha: sha, pr: pr(16) },
+      needs: 'approver',
+      subject: subject(16),
+    });
+  });
+
+  it.each([
+    ['a human', { author: HUMAN }],
+    ['another bot', { author: 'dependabot[bot]' }],
+    ['a human, sent by the bot', { author: HUMAN, sender: BOT_LOGIN }],
+  ])('a PR opened by %s → not-bot-pr', (_name, options) => {
+    expect(classify(pullRequestOpened(options))).toEqual({
+      outcome: 'ignored',
+      reason: 'not-bot-pr',
+    });
+  });
+
+  it.each(['closed', 'reopened', 'edited', 'labeled', 'review_requested'])(
+    '%s → unsupported-event',
+    (action) => {
+      expect(
+        classify(withField(pullRequestClosed(), 'action', action)),
+      ).toEqual({ outcome: 'ignored', reason: 'unsupported-event' });
+    },
+  );
+
+  it('the real closed delivery → unsupported-event', () => {
+    expect(classify(pullRequestClosed())).toEqual({
+      outcome: 'ignored',
+      reason: 'unsupported-event',
+    });
+  });
+
+  it.each<[string, Delivery]>([
+    [
+      'no pull_request',
+      withField(pullRequestOpened(), 'pull_request', undefined),
+    ],
+    [
+      'head.sha missing',
+      withField(pullRequestOpened(), 'pull_request.head.sha', undefined),
+    ],
+    [
+      'head.sha not a sha',
+      withField(pullRequestOpened(), 'pull_request.head.sha', 'main'),
+    ],
+    [
+      'html_url missing',
+      withField(pullRequestOpened(), 'pull_request.html_url', undefined),
+    ],
+    [
+      'html_url not a URL',
+      withField(pullRequestOpened(), 'pull_request.html_url', 'pull 15'),
+    ],
+    [
+      'user.login missing',
+      withField(pullRequestOpened(), 'pull_request.user.login', undefined),
+    ],
+    [
+      'number a string',
+      withField(pullRequestOpened(), 'pull_request.number', '15'),
+    ],
+    [
+      'id missing',
+      withField(pullRequestOpened(), 'pull_request.id', undefined),
+    ],
+  ])('%s → invalid-payload', (_name, delivery) => {
+    expect(classify(delivery)).toEqual({
+      outcome: 'ignored',
+      reason: 'invalid-payload',
+    });
+  });
+
+  it('a pull_request event from the bot is not own-event (check 5 skips it)', () => {
+    expect(classify(pullRequestOpened({ sender: BOT_LOGIN })).outcome).toBe(
+      'candidate',
+    );
+    // ...but another repo still wins
+    expect(classify(pullRequestOpened({ repo: 'someone/else' }))).toEqual({
+      outcome: 'ignored',
+      reason: 'other-repo',
+    });
+  });
+});
+
 describe('every builder that gives an input', () => {
   it.each<[string, Delivery]>([
     ['issues.opened', issuesOpened({ number: 31 })],
@@ -459,6 +750,6 @@ describe('senderLoginOf', () => {
     [{ zen: 'x' }, null],
     [null, null],
   ])('%j → %j', (payload, expected) => {
-    expect(senderLoginOf(payload)).toBe(expected);
+    expect(senderLoginOf({ payload })).toBe(expected);
   });
 });

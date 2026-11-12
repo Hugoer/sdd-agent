@@ -11,6 +11,7 @@ import {
   laneOfLabel,
   sameLabel,
 } from '../github/labels.js';
+import { isApproveCommand } from './approve-command.js';
 import type { IgnoreReason } from './ignore-reason.js';
 
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
@@ -60,6 +61,30 @@ const labelPayload = z.object({
   label: z.object({ name: z.string().min(1) }).nullish(),
 });
 
+/** A comment on a pull request: its `issue` carries a `pull_request` object. */
+const onPullRequest = z.object({
+  issue: z.object({ pull_request: z.object({}).loose() }),
+});
+
+const commentPayload = z.object({
+  issue: z.object({ id, number: id }),
+  comment: z.object({
+    id,
+    body: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+  }),
+});
+
+const pullRequestPayload = z.object({
+  pull_request: z.object({
+    id,
+    number: id,
+    html_url: z.url(),
+    user: z.object({ login: z.string().regex(LOGIN) }),
+    head: z.object({ sha: z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/) }),
+  }),
+});
+
 type Envelope = z.infer<typeof envelope>;
 
 const senderLogin = z.object({
@@ -67,8 +92,10 @@ const senderLogin = z.object({
 });
 
 /** The sender's login for the log line, only when it is a valid login (so nothing else reaches the log). */
-export function senderLoginOf(payload: unknown): string | null {
-  const parsed = senderLogin.safeParse(payload);
+export function senderLoginOf(
+  event: Pick<WebhookEvent, 'payload'>,
+): string | null {
+  const parsed = senderLogin.safeParse(event.payload);
   return parsed.success ? parsed.data.sender.login : null;
 }
 
@@ -109,7 +136,9 @@ export function classifyGitHubEvent(
     sender: env.sender.login,
   };
   if (eventName === 'issues') return classifyIssues(env, payload, common);
-  return ignored('unsupported-event');
+  if (eventName === 'issue_comment')
+    return classifyComment(env, payload, common);
+  return classifyPullRequest(env, payload, common, isSelf);
 }
 
 type Common = Pick<WorkflowInput, 'deliveryId' | 'receivedAt' | 'sender'>;
@@ -170,6 +199,78 @@ function classifyLabel(
   }
   if (isStatusLabel(label.name)) return ignored('status-label');
   return ignored('other-label'); // also an unknown `workflow: *`
+}
+
+/** The `issue_comment` rows. The body is the text as it was created; later edits are ignored. */
+function classifyComment(
+  env: Envelope,
+  payload: unknown,
+  common: Common,
+): Classified {
+  switch (env.action) {
+    case 'edited':
+      return ignored('comment-edited');
+    case 'deleted':
+      return ignored('comment-deleted');
+    case 'created':
+      break;
+    default:
+      return ignored('unsupported-event');
+  }
+  if (onPullRequest.safeParse(payload).success) return ignored('pr-comment');
+  const parsed = commentPayload.safeParse(payload);
+  if (!parsed.success) return ignored('invalid-payload');
+
+  const { issue, comment: raw } = parsed.data;
+  const task = taskOf(env, issue);
+  const comment = {
+    id: String(raw.id),
+    body: raw.body,
+    createdAt: new Date(raw.created_at),
+  };
+  return isApproveCommand(raw.body)
+    ? candidate({ ...common, type: 'APPROVE', task, comment }, 'approver', task)
+    : candidate(
+        { ...common, type: 'COMMENT', task, comment },
+        'participant',
+        task,
+      );
+}
+
+/**
+ * The `pull_request` rows: only `opened` and `synchronize` on a PR the bot opened. The bot as sender needs
+ * no lookup; a human sender must be an Approver, asked on a ref built from the PR number (AW6: on GitHub a
+ * PR is an issue in the same number space; the ref only addresses the repo).
+ */
+function classifyPullRequest(
+  env: Envelope,
+  payload: unknown,
+  common: Common,
+  isSelf: (login: string) => boolean,
+): Classified {
+  if (env.action !== 'opened' && env.action !== 'synchronize')
+    return ignored('unsupported-event');
+  const parsed = pullRequestPayload.safeParse(payload);
+  if (!parsed.success) return ignored('invalid-payload');
+  const pr = parsed.data.pull_request;
+  if (!isSelf(pr.user.login)) return ignored('not-bot-pr');
+
+  const repo = env.repository.full_name;
+  const subject: TaskRef = {
+    platform: 'GITHUB',
+    id: String(pr.id),
+    externalRef: `${repo}#${pr.number}`,
+  };
+  return candidate(
+    {
+      ...common,
+      type: 'PR_UPDATED',
+      pr: { platform: 'GITHUB', repo, number: pr.number, url: pr.html_url },
+      headSha: pr.head.sha,
+    },
+    isSelf(common.sender) ? 'self' : 'approver',
+    subject,
+  );
 }
 
 /** The rows that build an input from the issue: `issue.id` and `issue.number` must be valid. */

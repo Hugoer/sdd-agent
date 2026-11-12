@@ -353,15 +353,15 @@ revert comment unless its marker is already there (spec "Label revert", AW2, IA1
 table, with the comment's ID, text and creation time. A Participant's `/approve` is `unauthorized` until T12.
 
 **Acceptance criteria:**
-- [ ] Every row of the spec's "What counts as `/approve`" table (unit)
-- [ ] `created` on an issue → `COMMENT` (Participant) or `APPROVE` (Approver) with `comment { id, body,
+- [x] Every row of the spec's "What counts as `/approve`" table (unit)
+- [x] `created` on an issue → `COMMENT` (Participant) or `APPROVE` (Approver) with `comment { id, body,
   createdAt }`; on a pull request → `pr-comment`; `edited` / `deleted` → their reasons; no `comment` object →
   `invalid-payload`; the bot's own comment → `own-event`
-- [ ] Integration: a Participant's comment → `DONE`; an Approver's `/approve` → `DONE`; `/approve` from a sender
+- [x] Integration: a Participant's comment → `DONE`; an Approver's `/approve` → `DONE`; `/approve` from a sender
   with no access → `unauthorized` and no comment; the captured log never holds the comment text
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T10 (same files)
 **Files:** `src/intake/approve-command.ts` (+ `.spec.ts`), `src/intake/github-payload.ts` (+ `.spec.ts`),
@@ -375,14 +375,14 @@ table, with the comment's ID, text and creation time. A Participant's `/approve`
 there (spec "`/approve` reply", IA4, IA11).
 
 **Acceptance criteria:**
-- [ ] `findCommentByMarker` with the marker of that comment ID, then `postComment` with the spec's text, which
+- [x] `findCommentByMarker` with the marker of that comment ID, then `postComment` with the spec's text, which
   mentions `@<login>`; result `approve-denied`
-- [ ] The same event again (a retry) → no second reply; a second `/approve` comment → a second reply; a sender
+- [x] The same event again (a retry) → no second reply; a second `/approve` comment → a second reply; a sender
   with no access → no reply
-- [ ] A `ProviderError` comes out unchanged; integration: one reply and row `approve-denied`
+- [x] A `ProviderError` comes out unchanged; integration: one reply and row `approve-denied`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T11
 **Files:** `src/intake/intake.service.ts` (+ `.spec.ts`), `test/intake.integration.spec.ts`
@@ -395,15 +395,15 @@ there (spec "`/approve` reply", IA4, IA11).
 sender must be an Approver, checked with a ref built from the pull request number (AW6).
 
 **Acceptance criteria:**
-- [ ] Bot PR, bot sender → accepted with zero provider calls; bot PR, human sender → accepted only for
+- [x] Bot PR, bot sender → accepted with zero provider calls; bot PR, human sender → accepted only for
   `approver` (`participant` and `none` → `unauthorized`), with one lookup on `<repo>#<PR number>`
-- [ ] A pull request opened by a human → `not-bot-pr`; another action (`closed`, …) → `unsupported-event`;
+- [x] A pull request opened by a human → `not-bot-pr`; another action (`closed`, …) → `unsupported-event`;
   `head.sha`, `html_url` or `user.login` missing → `invalid-payload`
-- [ ] Integration: one accepted `pull_request` row (`DONE`) and one `not-bot-pr`, both with `external_ref`
+- [x] Integration: one accepted `pull_request` row (`DONE`) and one `not-bot-pr`, both with `external_ref`
   `<repo>#<PR number>`; every row of both classify tables now has a test
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T12 (same files)
 **Files:** `src/intake/github-payload.ts` (+ `.spec.ts`), `src/intake/intake.service.ts` (+ `.spec.ts`),
@@ -416,28 +416,28 @@ sender must be an Approver, checked with a ref built from the pull request numbe
 redelivery, and the real polling loop.
 
 **Acceptance criteria:**
-- [ ] A transient error on every lookup → three attempts, then `FAILED` with `lastError`; the row is never `DONE`
+- [x] A transient error on every lookup → three attempts, then `FAILED` with `lastError`; the row is never `DONE`
   or `IGNORED`; no label removed, no comment
-- [ ] A redelivery of that `FAILED` row once the lookup works → processed once, `DONE`, `attempts = 1`; one more
+- [x] A redelivery of that `FAILED` row once the lookup works → processed once, `DONE`, `attempts = 1`; one more
   redelivery changes nothing
-- [ ] With the polling worker: a signed `labeled` event from a sender with no access ends `label-reverted` with
+- [x] With the polling worker: a signed `labeled` event from a sender with no access ends `label-reverted` with
   one comment
 
 **Verification:**
-- [ ] `npm run test:integration` passes
+- [x] `npm run test:integration` passes
 
 **Dependencies:** T2, T13
 **Files:** `test/intake.integration.spec.ts`
 **Scope:** S
 
 ### Checkpoint 4 — Comments on real GitHub
-- [ ] All four commands green
-- [ ] You comment `looks fine` → row `DONE`, log `accepted COMMENT`; the log does NOT contain `looks fine`
-- [ ] You comment `/approve` → `accepted APPROVE`. You comment `/approve thanks` → `accepted COMMENT`
-- [ ] Signed `/approve` with sender `octocat` → row `IGNORED` `unauthorized`; NO reply on the issue
-- [ ] `grep -rn "\.payload" src/intake --include='*.ts'` → only `github-payload.ts` and its test; Octokit is
+- [x] All four commands green
+- [x] You comment `looks fine` → row `DONE`, log `accepted COMMENT`; the log does NOT contain `looks fine`
+- [x] You comment `/approve` → `accepted APPROVE`. You comment `/approve thanks` → `accepted COMMENT`
+- [x] Signed `/approve` with sender `octocat` → row `IGNORED` `unauthorized`; NO reply on the issue
+- [x] `grep -rn "\.payload" src/intake --include='*.ts'` → only `github-payload.ts` and its test; Octokit is
   imported only under `src/github/`
-- [ ] The pull request rows wait for T16 (they need the smoke branch)
+- [x] The pull request rows wait for T16 (they need the smoke branch)
 - [ ] You review and commit
 
 ---

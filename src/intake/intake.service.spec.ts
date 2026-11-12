@@ -4,20 +4,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryIssueProvider } from '../../test/fakes/in-memory-issue-provider.js';
 import {
   BOT_LOGIN,
+  HEAD_SHA,
   HUMAN,
   TARGET_REPO,
   checkSuiteRequested,
+  issueCommentCreated,
   issuesClosed,
   issuesLabeled,
   issuesOpened,
   issuesUnlabeled,
   ping,
+  pullRequestOpened,
+  pullRequestSynchronize,
   storedEvent,
 } from '../../test/fixtures/github/payloads.js';
 import type { Env } from '../config/env.schema.js';
 import type { AccessLevel } from '../contracts/issue-provider.js';
 import { ProviderError } from '../contracts/provider-error.js';
-import { IntakeService, labelRevertComment } from './intake.service.js';
+import {
+  IntakeService,
+  approveDeniedComment,
+  labelRevertComment,
+} from './intake.service.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -311,6 +319,243 @@ describe('IntakeService: label revert (a sender with no access adds a lane or sk
     await intake.intake(event);
 
     expect(issues.commentsOf(task)).toHaveLength(1);
+  });
+});
+
+describe('IntakeService: COMMENT (Participant) and APPROVE (Approver)', () => {
+  const comment = (body: string, sender = HUMAN) =>
+    storedEvent(issueCommentCreated({ body, sender, number: 4 }));
+
+  it.each<[string, AccessLevel, string]>([
+    ['looks fine', 'approver', 'COMMENT'],
+    ['looks fine', 'participant', 'COMMENT'],
+    ['/approve', 'approver', 'APPROVE'],
+  ])(
+    '%j from %s → accepted %s, one lookup, nothing posted',
+    async (body, level, type) => {
+      const { issues, intake } = setup();
+      issues.setAccessLevel(HUMAN, level);
+
+      const result = await intake.intake(comment(body));
+
+      expect(result).toMatchObject({
+        outcome: 'accepted',
+        input: { type, comment: { body } },
+      });
+      expect(issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+      ]);
+    },
+  );
+
+  it.each<[string, AccessLevel]>([
+    ['looks fine', 'none'],
+    ['/approve', 'none'],
+  ])('%j from %s → unauthorized, no reply', async (body, level) => {
+    const { issues, intake } = setup();
+    issues.setAccessLevel('octocat', level);
+
+    await expect(intake.intake(comment(body, 'octocat'))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'unauthorized',
+    });
+    expect(issues.calls.map((call) => call.method)).toEqual(['getAccessLevel']);
+  });
+
+  it('the log line names the type and the issue, never the comment text', async () => {
+    const { issues, intake, log } = setup();
+    issues.setAccessLevel(HUMAN, 'approver');
+
+    await intake.intake(
+      storedEvent(
+        issueCommentCreated({ body: 'secret-ish words', number: 4 }),
+        { deliveryId: 'd-c' },
+      ),
+    );
+    await intake.intake(
+      storedEvent(issueCommentCreated({ body: '/approve', number: 4 }), {
+        deliveryId: 'd-a',
+      }),
+    );
+
+    expect(lines(log)).toEqual([
+      `delivery=d-c event=issue_comment action=created sender=${HUMAN} accepted COMMENT ${TARGET_REPO}#4`,
+      `delivery=d-a event=issue_comment action=created sender=${HUMAN} accepted APPROVE ${TARGET_REPO}#4`,
+    ]);
+  });
+});
+
+describe("IntakeService: a Participant's /approve gets one reply per comment", () => {
+  function participant() {
+    const ctx = setup();
+    ctx.issues.setAccessLevel('pat', 'participant');
+    const task = ctx.issues.seedIssue({ number: 4, id: '6335695004' });
+    return { ...ctx, task };
+  }
+  const approve = (commentId: number) =>
+    storedEvent(
+      issueCommentCreated({
+        number: 4,
+        body: '/approve',
+        sender: 'pat',
+        commentId,
+      }),
+    );
+
+  it('getAccessLevel → findCommentByMarker(marker of that comment) → postComment; approve-denied', async () => {
+    const { issues, intake, task } = participant();
+
+    await expect(intake.intake(approve(6775442980))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'approve-denied',
+    });
+
+    const text =
+      '<!-- sdd-agent:approve-denied:6775442980 -->\n' +
+      '@pat `/approve` needs write access to this repository, so nothing was approved. ' +
+      'Ask someone with write access to comment `/approve`.';
+    expect(issues.calls).toEqual([
+      { method: 'getAccessLevel', args: [task, 'pat'] },
+      {
+        method: 'findCommentByMarker',
+        args: [task, '<!-- sdd-agent:approve-denied:6775442980 -->'],
+      },
+      { method: 'postComment', args: [task, text] },
+    ]);
+  });
+
+  it('the same event again (a retry) → no second reply; a second /approve comment → a second reply', async () => {
+    const { issues, intake, task } = participant();
+
+    await intake.intake(approve(101));
+    await expect(intake.intake(approve(101))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'approve-denied',
+    });
+    expect(issues.commentsOf(task)).toHaveLength(1);
+
+    await intake.intake(approve(102));
+    expect(issues.commentsOf(task).map((c) => c.body)).toEqual([
+      approveDeniedComment('101', 'pat'),
+      approveDeniedComment('102', 'pat'),
+    ]);
+  });
+
+  it("a sender with no access gets no reply; an Approver's /approve is accepted with none", async () => {
+    const { issues, intake, task } = participant();
+    issues.setAccessLevel('boss', 'approver');
+
+    await intake.intake(
+      storedEvent(
+        issueCommentCreated({ number: 4, body: '/approve', sender: 'octocat' }),
+      ),
+    );
+    await intake.intake(
+      storedEvent(
+        issueCommentCreated({ number: 4, body: '/approve', sender: 'boss' }),
+      ),
+    );
+
+    expect(issues.commentsOf(task)).toEqual([]);
+  });
+
+  it("a Participant's normal comment is accepted, no reply", async () => {
+    const { intake, issues, task } = participant();
+    const result = await intake.intake(
+      storedEvent(
+        issueCommentCreated({
+          number: 4,
+          body: '/approve please',
+          sender: 'pat',
+        }),
+      ),
+    );
+    expect(result).toMatchObject({
+      outcome: 'accepted',
+      input: { type: 'COMMENT' },
+    });
+    expect(issues.commentsOf(task)).toEqual([]);
+  });
+
+  it.each(['findCommentByMarker', 'postComment'] as const)(
+    'a ProviderError from %s comes out unchanged; the retry ends with exactly one reply',
+    async (method) => {
+      const { issues, intake, task } = participant();
+      const error = new ProviderError(`GitHub ${method} → 503`, 'transient');
+      vi.spyOn(issues, method).mockRejectedValueOnce(error);
+      const event = approve(7);
+
+      await expect(intake.intake(event)).rejects.toBe(error);
+      await intake.intake(event);
+      await intake.intake(event);
+
+      expect(issues.commentsOf(task)).toHaveLength(1);
+    },
+  );
+});
+
+describe('IntakeService: PR_UPDATED', () => {
+  it('bot PR, bot sender → accepted with zero provider calls', async () => {
+    const { issues, intake } = setup();
+
+    const result = await intake.intake(storedEvent(pullRequestOpened()));
+
+    expect(result).toMatchObject({
+      outcome: 'accepted',
+      input: { type: 'PR_UPDATED', sender: BOT_LOGIN },
+    });
+    expect(issues.calls).toEqual([]);
+  });
+
+  it.each<[AccessLevel, string]>([
+    ['approver', 'accepted'],
+    ['participant', 'ignored'],
+    ['none', 'ignored'],
+  ])(
+    'bot PR, human sender who is %s → %s, one lookup on <repo>#<PR number>',
+    async (level, outcome) => {
+      const { issues, intake } = setup();
+      issues.setAccessLevel(HUMAN, level);
+
+      const result = await intake.intake(
+        storedEvent(pullRequestSynchronize({ sender: HUMAN, number: 15 })),
+      );
+
+      expect(result.outcome).toBe(outcome);
+      if (result.outcome === 'ignored')
+        expect(result.reason).toBe('unauthorized');
+      expect(issues.calls).toEqual([
+        {
+          method: 'getAccessLevel',
+          args: [
+            {
+              platform: 'GITHUB',
+              id: String(5258563000 + 15),
+              externalRef: `${TARGET_REPO}#15`,
+            },
+            HUMAN,
+          ],
+        },
+      ]);
+    },
+  );
+
+  it('a PR not opened by the bot → not-bot-pr with zero provider calls', async () => {
+    const { issues, intake } = setup();
+    await expect(
+      intake.intake(storedEvent(pullRequestOpened({ author: HUMAN }))),
+    ).resolves.toEqual({ outcome: 'ignored', reason: 'not-bot-pr' });
+    expect(issues.calls).toEqual([]);
+  });
+
+  it('logs the PR and its head: accepted PR_UPDATED <repo>#<n> <sha>', async () => {
+    const { intake, log } = setup();
+    await intake.intake(
+      storedEvent(pullRequestOpened({ number: 15 }), { deliveryId: 'd-pr' }),
+    );
+    expect(lines(log)).toEqual([
+      `delivery=d-pr event=pull_request action=opened sender=${BOT_LOGIN} accepted PR_UPDATED ${TARGET_REPO}#15 ${HEAD_SHA}`,
+    ]);
   });
 });
 

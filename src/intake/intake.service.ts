@@ -42,7 +42,7 @@ export class IntakeService {
     const result = await this.decide(event);
     this.logger.log(
       `delivery=${event.deliveryId} event=${event.eventName} action=${event.action ?? '-'} ` +
-        `sender=${senderLoginOf(event.payload) ?? '-'} ${describe(result)}`,
+        `sender=${senderLoginOf(event) ?? '-'} ${describe(result)}`,
     );
     return result;
   }
@@ -60,7 +60,25 @@ export class IntakeService {
     if (allows(level, needs)) return accepted(input);
     if (revert && level === 'none')
       return this.revertLabel(subject, revert, input.sender);
+    if (input.type === 'APPROVE' && level === 'participant')
+      return this.denyApprove(input.task, input.comment.id, input.sender);
     return ignored('unauthorized');
+  }
+
+  /** Spec 2 "`/approve` reply" (IA4): one reply per `/approve` comment, guarded by its marker. */
+  private async denyApprove(
+    task: TaskRef,
+    commentId: string,
+    sender: string,
+  ): Promise<IntakeResult> {
+    const marker = approveDeniedMarker(commentId);
+    if (!(await this.issues.findCommentByMarker(task, marker))) {
+      await this.issues.postComment(
+        task,
+        approveDeniedComment(commentId, sender),
+      );
+    }
+    return ignored('approve-denied');
   }
 
   /**
@@ -91,6 +109,19 @@ export function labelRevertComment(revert: Revert, login: string): string {
     `${labelRevertMarker(revert.key)}\n` +
     `The \`${revert.label}\` label was removed. It was added by \`${login}\`, who is not allowed to start or ` +
     'change a workflow on this repository (on GitHub that needs the Triage role or higher).'
+  );
+}
+
+export function approveDeniedMarker(commentId: string): string {
+  return `<!-- sdd-agent:approve-denied:${commentId} -->`;
+}
+
+/** Fixed text and a validated login (AW7); it mentions the user, who did ask for something (IA11). */
+export function approveDeniedComment(commentId: string, login: string): string {
+  return (
+    `${approveDeniedMarker(commentId)}\n` +
+    `@${login} \`/approve\` needs write access to this repository, so nothing was approved. ` +
+    'Ask someone with write access to comment `/approve`.'
   );
 }
 
