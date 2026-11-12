@@ -1,7 +1,8 @@
 # Spec #0 — GitHub AI Agent: Architecture Overview
 
 > **Created:** 2026-11-09 · **Status:** approved 2026-11-09 · amended 2026-11-11 (spec 2: D19–D21, approved with
-> that spec on 2026-11-11)
+> that spec on 2026-11-11) · amended 2026-11-12 (spec 4 interview: D22, D23; spec 4's
+> contract changes in §1, §4 and §6, approved with that spec on 2026-11-12)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#10) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -56,7 +57,9 @@ comments, without acting under the developer's identity or touching their checko
   description before re-adding the label, paste them into the first answer of the new session, or edit the Spec
   comment before `/approve`.
 - **D7 `needs-human` exits only through the label restart,** whatever the cause. Every entry posts exactly one
-  comment with the cause and the next step. `/retry` → Future.
+  comment with the cause and the next step. `/retry` → Future. **2026-11-12 (spec 4, L15):** spec 5's interview
+  reconsiders `/retry` for causes outside the issue, now that a model call can fail for billing, key,
+  model-name or outage reasons.
 - **D8 A Grill round asks 1..K questions,** chosen by the LLM; only questions whose answers don't affect each
   other go together. K = `GRILL_MAX_QUESTIONS_PER_ROUND` (default 3). Output `{ confidence, questions[], gaps }`;
   `GrillRound` = one row per bot comment.
@@ -86,7 +89,8 @@ comments, without acting under the developer's identity or touching their checko
   second set of method prompts.
 - **D19 Two access levels (2026-11-11, spec 2).** A **Participant** (GitHub: Triage or higher) may open issues,
   add or remove `workflow: *` and `grill: skip`, and answer Grill Me. An **Approver** (GitHub: Write or higher)
-  may also `/approve` and push to a bot PR. The contract names the levels, never a platform's roles; each adapter
+  may also `/approve`, push to a bot PR and add `model: max-*` labels (D23, 2026-11-12). The contract names the
+  levels, never a platform's roles; each adapter
   maps them (`IssueProvider.getAccessLevel`, which replaces `hasWriteAccess`). The same mapping serves personal
   and organization repos: a personal repo has no Triage role, so nobody there is only a Participant. Replaces
   "only `write` users drive the bot". Reason: people without code access (product owner, QA) can take an issue up
@@ -95,7 +99,27 @@ comments, without acting under the developer's identity or touching their checko
   normal comment. Intake decides it, because the two inputs need different levels (was "exact syntax: spec 7").
 - **D21 Answers to refused senders (2026-11-11, spec 2).** A Participant's `/approve` gets one reply per attempt.
   A lane or skip label added by a sender with no access is removed every time, with one comment per issue and
-  label. Everything else from a sender with no access is ignored silently.
+  label. Everything else from a sender with no access is ignored silently. **2026-11-12 (D23):** the same for a
+  `model: max-*` label added by anyone below Approver.
+- **D22 Gemini through `ChatGoogle` (2026-11-12, spec 4 interview).** The LLM client is `ChatGoogle` from
+  `@langchain/google`, the package LangChain recommends for Gemini, with a Google AI Studio key
+  (`GOOGLE_API_KEY`). Replaces `@langchain/anthropic` with `claude-sonnet-5-5`. LangGraph (D3) and the stored Grill
+  conversation (LangChain messages) don't depend on the provider. `ChatGoogleGenerativeAI`
+  (`@langchain/google-genai`) is not used: LangChain says it will be deprecated (it runs on Google's old
+  `@google/generative-ai` SDK). Reason: the developer's choice of provider. One bot instance uses one provider
+  for every step: providers are never mixed per step. The provider's package is imported in one adapter file of
+  `src/llm`; choosing the provider by configuration is Future (idea doc §11).
+- **D23 A model per step, chosen by humans (2026-11-12, spec 4 interview).** `workflow.json` names the models in
+  two levels, `standard` and `max`; each level has a required `default` and may name any step (§4). Five labels,
+  `model: max-grill | max-spec | max-plan | max-code | max-quality-gate`, switch one step of one issue to `max`.
+  Only an Approver may add one; one added by anyone else is removed with one comment per issue and label (as
+  D21); a removal counts whoever made it, since it can only lower the model. The labels are read from the API at
+  the start of every step run (every Grill round too) and never start anything on their own. A missing or invalid
+  `models` section → `needs-human` (checked with the skills, §3 R6); model names are not checked against Google's
+  list, so an unknown one fails at its first call → `needs-human`. `ExecutionLog` records the model, and every
+  text an LLM step posts names it. Replaces "the model is a constant in spec 4". Reason: a human decides when a
+  sensitive Spec or a hard coding task needs the most capable model; model names stay in a reviewed file, never in
+  issue text or comments.
 
 ## Contradictions found in the idea doc
 
@@ -125,7 +149,7 @@ Numbers are IDs, not build order.
 | 1 | `walking-skeleton` | `ConfigModule`, `PrismaModule`, `WebhookModule`, `EventsModule` · `src/config`, `src/prisma`, `src/webhook`, `src/events` | Zod env validation, Prisma, `POST /webhooks/github` + HMAC guard, events table, `enqueue()`, polling worker, minimal App client for the "hello" comment | — | high |
 | 2 | `intake-authorization` | `IntakeModule` · `src/intake` | Payload → neutral input (`WorkflowInput`), the sender's access level (+ the App's own PR events), target-repo filter, ignore reasons, label revert, `/approve` reply | 1, 3 | xhigh |
 | 3 | `github-providers` | `GitHubModule` · `src/github` | App auth (JWT → installation token), GitHub `IssueProvider` + `RepoProvider`, label bootstrap | 1 | high |
-| 4 | `llm-foundation` | `LlmModule` · `src/llm` | Anthropic client, Zod output + retry, `ExecutionLog`, input guardrails, secret scanner, step-skill loader + prompt assembly | 1, 3 | xhigh |
+| 4 | `llm-foundation` | `LlmModule`, `SecretScanModule` · `src/llm`, `src/secret-scan` | Gemini client (`ChatGoogle`, D22), model per step (D23), Zod output + re-ask, `ExecutionLog` (prompt, answer, usage), input guard, secret scanner at the ports, step-skill loader + prompt assembly | 1, 3 | xhigh |
 | 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, cancel/restart, stale events | 2, 3 | xhigh |
 | 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment | 4, 5 | max |
 | 7 | `spec-plan-approvals` | `DocumentsModule` · `src/documents` | Spec/Plan generation, `/approve` rules, approved snapshots | 6 | xhigh |
@@ -141,6 +165,9 @@ Numbers are IDs, not build order.
 - Only `WorkflowModule` writes `Task.status` and the `status: *` label. Only `WorkspaceModule` runs `git`. Only
   `GitHubModule` imports Octokit (spec 3 removes spec 1's hello client). Only `CoderModule` and
   `QualityGateModule` use LangGraph.
+- Only `src/llm/google` imports the LLM provider's package (D22). `SecretScanModule` depends on nothing but
+  config; `GitHubModule` imports it and wraps both providers with the scanner, so no module can get a port that
+  doesn't scan (spec 4, 2026-11-12).
 - A table is written only through its owner module's services (§6).
 
 **Project structure**
@@ -152,7 +179,7 @@ src/
   config/ prisma/ webhook/ events/  spec 1
   intake/                           spec 2
   github/                           spec 3
-  llm/                              spec 4
+  llm/ secret-scan/                 spec 4
   workflow/                         spec 5
   grill/ documents/                 specs 6, 7
   workspace/                        spec 8
@@ -170,7 +197,7 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 | | Bot repo [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo, was `cn_ai` until 2026-11-10) | Target repo (sandbox) [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox) |
 |---|---|---|
 | What | The NestJS app. The bot never writes code here. | New demo repo (small TypeScript project, ESLint + Vitest) where issues live and the bot codes. |
-| Contains | `src/`, `prisma/`, the steps' prompt frames (D18), tests, `docs/`, `AGENTS.md`, `.env.example` (`.env` is gitignored) | Issues and labels, `.github-agent/workflow.json`, step skills (e.g. `.claude/skills/*`), the product code, `agent/*` branches, bot PRs and check runs, optional branch protection |
+| Contains | `src/`, `prisma/`, the steps' prompt frames (D18), tests, `docs/`, `AGENTS.md`, `.env.example` (`.env` is gitignored) | Issues and labels, `.github-agent/workflow.json` (skills and models per step, D23), step skills (e.g. `.claude/skills/*`), the product code, `agent/*` branches, bot PRs and check runs, optional branch protection |
 | On the developer's machine | The developer's checkout; runs the app | The developer's clone (`WORKSPACE_REPO_PATH`) and the bot worktree (`WORKSPACE_WORKTREE_PATH`: shares history, only the bot writes there) |
 | GitHub App | Not installed | Installed (only here) |
 | Created by | The developer, manually | The developer, manually; spec 1's setup covers it |
@@ -180,7 +207,8 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
   webhook URL = the ngrok tunnel → `POST /webhooks/github`; secret = `GITHUB_WEBHOOK_SECRET`.
 - **Labels** (created by the bot at startup if missing, spec 3):
   `status: draft | grilling | spec-review | ready-for-dev | executing | in-review | needs-human` (bot only);
-  `workflow: full-sdd | spec-code | code-only` and `grill: skip` (humans only).
+  `workflow: full-sdd | spec-code | code-only` and `grill: skip` (humans only);
+  `model: max-grill | max-spec | max-plan | max-code | max-quality-gate` (Approvers only, D23, 2026-11-12).
 - **State:** the local PostgreSQL holds all workflow state; GitHub only shows its projection (labels, comments,
   PRs, check runs).
 
@@ -214,7 +242,8 @@ The first six rows are the `WorkflowInput` type of §4, produced by intake (spec
 **Ignored at intake** (recorded with a reason, never routed; the reasons: spec 2): other repos; senders below the
 level the input needs (D19: `APPROVE` and a human's `PR_UPDATED` need Approver, every other input Participant;
 D21 says which refusals get a comment); the bot's own events, except `PR_UPDATED` on its own PR; comment edits and
-deletes; comments on PRs; PRs not opened by the bot; `status: *` label changes; `grill: skip` removal; a label
+deletes; comments on PRs; PRs not opened by the bot; `status: *` label changes; `grill: skip` removal; `model: max-*` label changes (D23, 2026-11-12: the next step run
+reads them from the API; one added below Approver is removed with one comment); a label
 event without a label (the label was deleted from the repo); invalid payloads; any other event type or action.
 (2026-11-11: was "senders without `write` (a lane or skip label they added is removed + one comment)".)
 
@@ -235,14 +264,15 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 - **R3 One job per task:** while a job holds the lease, the task's other events wait, then run against the new
   state.
 - **R4 Failures:** after bounded retries, any step failure becomes `FAILED(cause)`: invalid `workflow.json`,
-  missing skill, guardrail block, API error, rejected push, ….
+  missing skill, unknown model (D23), guardrail block, API error, rejected push, ….
 - **R5 `needs-human`:** every entry posts exactly one comment with the cause and "restart: remove and re-add the
   `workflow:*` label". The restart is the only exit.
 - **R6 Skills check (D18, 2026-11-10):** a run goes on to rows 9–11 only if every step it will use has a skill in
   `workflow.json`: `full-sdd` → `grill`, `spec`, `plan`, `code`, `qualityGate`; `spec-code` → the same without
   `plan`; `code-only` → `code`, `qualityGate`; with `grill: skip` → without `grill`. Otherwise the run is created
   and fails at once with `FAILED(missing skills: …)` (row 28); nothing else is posted. Each step checks again
-  when it loads its skill.
+  when it loads its skill. **2026-11-12 (D23):** the same check needs a valid `models` section; otherwise
+  `FAILED(invalid workflow.json)`.
 
 ### Transition table (normative)
 
@@ -344,14 +374,16 @@ export interface CommentRef { id: string; url: string; createdAt: Date }
 
 export interface IssueProvider {
   getTaskDetails(task: TaskRef): Promise<UnifiedTask>;
-  /** body is already secret-scanned and carries its hidden marker */
+  /** body carries its hidden marker; the port redacts secrets before sending (spec 4, 2026-11-12;
+   *  was "body is already secret-scanned") */
   postComment(task: TaskRef, body: string): Promise<CommentRef>;
   getComment(task: TaskRef, commentId: string): Promise<{ body: string; createdAt: Date } | null>;
   /** exactly-once recovery: the bot's comment carrying this marker, if it was already posted */
   findCommentByMarker(task: TaskRef, marker: string): Promise<CommentRef | null>;
   /** projection of Task.status: sets this status label and removes any other `status: *` label */
   setStatusLabel(task: TaskRef, status: TaskStatus): Promise<void>;
-  /** only to revert a lane/modifier label added by a sender with no access (D21) */
+  /** only to revert a lane/modifier label added by a sender with no access (D21),
+   *  or a model label added below Approver (D23, 2026-11-12) */
   removeLabel(task: TaskRef, label: string): Promise<void>;
   /** the user's level on the task's repo or project, asked on every call (replaces hasWriteAccess, 2026-11-11).
    *  GitHub: Write or higher → 'approver', Triage → 'participant', anything else or unknown user → 'none' */
@@ -359,8 +391,9 @@ export interface IssueProvider {
   /** true when login is the bot's own account (added 2026-11-11, spec 2) */
   isSelf(login: string): boolean;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
-  readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean };
-  /** creates missing status / workflow / modifier labels (startup) */
+  readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean; maxModelSteps: StepName[] };
+  // maxModelSteps: the steps whose `model: max-*` label is on the task (D23, spec 4, 2026-11-12)
+  /** creates missing status / workflow / modifier / model labels (startup) */
   ensureLabels(): Promise<void>;
 }
 
@@ -389,6 +422,9 @@ export interface RepoProvider {
   /** every regular file under dir at a ref, at any depth (a step skill is its whole directory);
    *  null = no such directory (added 2026-11-10, spec 3, G7) */
   listFiles(ref: string, dir: string): Promise<RepoFile[] | null>;
+  /** the commit SHA a branch or ref points to now, so a skill is read at one commit; unknown ref →
+   *  permanent ProviderError (added 2026-11-12, spec 4) */
+  resolveRef(ref: string): Promise<string>;
   openPullRequest(branch: string, base: string, title: string, body: string): Promise<PullRequestRef>;
   /** recovery after a crash between opening the PR and recording it */
   findPullRequest(branch: string): Promise<PullRequestRef | null>;
@@ -399,13 +435,20 @@ export interface RepoProvider {
 
 export type StepName = 'grill' | 'spec' | 'plan' | 'code' | 'qualityGate';
 
-/** What a target-repo skill contributes to a step: instructions, nothing else. */
-export interface StepSkill {
+export type ModelLevel = 'standard' | 'max';
+
+/** What a target-repo skill contributes to a step: instructions, nothing else. Text files only, read at one
+ *  base-branch commit; nothing is executed (replaces StepSkill, 2026-11-12, spec 4). */
+export interface LoadedSkill {
   step: StepName;
-  path: string; // directory mapped in .github-agent/workflow.json
-  text: string; // SKILL.md + the files it references, read at the base branch
-                // (2026-11-10: a skill is its whole directory; spec 4 revises this type)
+  path: string;   // directory mapped in .github-agent/workflow.json
+  commit: string; // commit SHA everything was read at
+  files: { path: string; text: string }[]; // SKILL.md first, then by path; paths relative to `path`
 }
+
+/** The model a step run uses (D23) and what the run was read with (added 2026-11-12, spec 4). */
+export interface ResolvedModel { provider: string; name: string; level: ModelLevel }
+export interface StepSetup { commit: string; skill: LoadedSkill; model: ResolvedModel }
 
 /** Added 2026-11-10 (spec 3, G5). Every provider failure. The worker retries `transient` and fails
  *  `permanent` at once; providers never retry a call themselves. */
@@ -413,6 +456,16 @@ export class ProviderError extends Error {
   constructor(message: string, readonly kind: 'transient' | 'permanent',
     readonly detail: { status?: number; retryAfterSeconds?: number } = {}) { super(message); }
 }
+
+/** Added 2026-11-12 (spec 4). A model call failed; the worker treats it like a ProviderError. */
+export type LlmErrorCode = 'rate-limited' | 'provider-unavailable' | 'bad-api-key' | 'access-denied'
+  | 'credits-exhausted' | 'unknown-model' | 'answer-blocked' | 'answer-cut' | 'bad-request' | 'invalid-answer';
+export class LlmError extends Error {
+  constructor(message: string, readonly kind: 'transient' | 'permanent', readonly code: LlmErrorCode,
+    readonly detail: { retryAfterSeconds?: number } = {}) { super(message); }
+}
+/** Added 2026-11-12 (spec 4). workflow.json, a skill or a model entry is wrong: always permanent. */
+export class StepConfigError extends Error {}
 
 /** Added 2026-11-11 (spec 2). What intake hands to the router: one authorized event, platform-neutral. */
 export interface TaskComment { id: string; body: string; createdAt: Date } // body is untrusted data
@@ -440,16 +493,37 @@ export type WorkflowInput = {
 - **Map:** `.github-agent/workflow.json` in the target repo: `{ "skills": { "<step>": "<directory relative to the
   repo root>" } }`. Read with `RepoProvider.readFile` at `TARGET_BASE_BRANCH` at the start of every step run
   (every Grill round too), never from an agent branch.
+- **Models (D23, 2026-11-12):** the map also names each step's model, in two levels:
+
+  ```json
+  {
+    "skills": { "grill": ".claude/skills/grill-me", "spec": "…", "plan": "…", "code": "…", "qualityGate": "…" },
+    "models": {
+      "standard": { "default": "gemini-3.8-flash", "code": "gemini-4-carbon" },
+      "max": { "default": "gemini-4-carbon" }
+    }
+  }
+  ```
+
+  A step uses `max` when its issue has the step's `model: max-<step>` label (`grill`, `spec`, `plan`, `code`,
+  `quality-gate`), read from the API when the step run starts; otherwise `standard`. Inside a level the step's own
+  entry wins, otherwise `default`. Both `default`s are required. Names are Gemini model codes and are not checked
+  against Google's list: an unknown one fails at the step's first call → `FAILED(unknown model: <name>)`. The
+  names above are examples; spec 4 sets the sandbox's.
 - **Required (D18, 2026-11-10):** every step a run uses needs a skill in the map (per lane: §3 R6). There is no
-  built-in fallback. A missing file, or a needed step missing from the map → `FAILED(missing skills: <steps>)` →
-  `needs-human` + one comment naming them. Checked when the run starts and again when a step loads its skill.
+  built-in fallback. A needed step missing from the map, or a mapped directory without a `SKILL.md` →
+  `FAILED(missing skills: <steps>)` → `needs-human` + one comment naming them (2026-11-12, spec 4: a missing
+  `workflow.json` is now `invalid workflow.json`, since the file also holds the models). Checked when the run starts and again when a step loads its skill.
   ~~Missing file → every step uses its built-in default prompt; a step missing from the map → that step's
   default.~~
-- **Invalid** map (bad JSON, unknown step, missing path) → `FAILED(invalid workflow.json)` → `needs-human` + one
+- **Invalid** map (bad JSON, unknown step, missing path, missing or invalid `models`) → `FAILED(invalid workflow.json)` → `needs-human` + one
   comment naming the problem.
 - **The skill only changes instructions.** Its text goes into the system prompt; output schema, tools, limits and
   guardrails are enforced in code, so no prompt wording can widen them. The bot's own frame is always in the
   prompt; the skill supplies the method.
+- **A skill is text only (2026-11-12, spec 4):** every text file of its directory goes into the prompt,
+  `SKILL.md` first, all read at one commit (`RepoProvider.resolveRef`); at most 204,800 bytes per skill; known
+  binary types are skipped; nothing is ever executed (running a skill's scripts: idea doc §11 "Future").
 - **Trust:** skills on the base branch are trusted instructions. Everything else from GitHub (issue, comments,
   approved Spec/Plan text, diffs, repo files) is untrusted data.
 
@@ -469,7 +543,7 @@ needs a new variable adds it here first.
 | `GITHUB_APP_PRIVATE_KEY_PATH` | required | readable PEM file | 1 |
 | `NGROK_DOMAIN` | empty (no tunnel) | bare hostname (no scheme, no path); read by `npm run tunnel` and the startup log of the webhook URL (added 2026-11-10) | 1 |
 | `TARGET_REPO` | required | `owner/name` | 3 |
-| `ANTHROPIC_API_KEY` | required | non-empty | 4 |
+| `GOOGLE_API_KEY` | required | non-empty; Google AI Studio key (was `ANTHROPIC_API_KEY`, D22, 2026-11-12) | 4 |
 | `TARGET_BASE_BRANCH` | `main` | valid branch name | 4 |
 | `SESSION_LEASE_SECONDS` | `120` | integer ≥ 30; heartbeat every third of it | 5 |
 | `GRILL_MAX_ROUNDS` | `5` | integer 1–10 | 6 |
@@ -486,18 +560,21 @@ needs a new variable adds it here first.
 | `CODER_MAX_STEPS` | `60` (provisional) | integer ≥ 1 (LLM turns per Coder run) | 9 |
 | `QUALITY_GATE_MAX_STEPS` | `30` (provisional) | integer ≥ 1 (LLM turns per Quality Gate run) | 10 |
 
-The model (`claude-sonnet-5-5`) is a constant in spec 4, not a variable.
+~~The model (`claude-sonnet-5-5`) is a constant in spec 4, not a variable.~~ Models are not env vars either: each
+step's model comes from the target repo's `workflow.json` (§4, D23, 2026-11-12).
 
 ## 6. Table ownership
 
 Names and purpose only; the owner spec defines the columns. One `prisma/schema.prisma`; each spec adds its own
 migrations. Only the owner module writes its table (others call its services). A later spec may extend an
-earlier table through its own migration; it is then listed under "Extended by".
+earlier table through its own migration; it is then listed under "Extended by". **2026-11-12 (spec 4, L16):** a
+row that one LLM call produced (a Grill round, a Spec, a Plan) stores that call's `ExecutionLog` id, so usage
+can be joined to it; the many calls of an agent loop are found by run and step.
 
 | Table | Owner | Purpose | Extended by |
 |---|---|---|---|
 | `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
-| `ExecutionLog` | 4 | One row per LLM call: node, tokens, status, confidence, lane, error | — |
+| `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
 | `Task` | 5 | One row per issue: status (source of truth), lane, current run, session lease | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, the merged answer, confidence before/after, gaps, comment IDs, post state | — |
@@ -513,9 +590,10 @@ earlier table through its own migration; it is then listed under "Extended by".
    drive the bot, and only an Approver's `/approve` counts; the App itself only through `pull_request` events on
    its own PR. Everything else is ignored and recorded, never answered (except the two comments of D21).
 3. **One target repo** (`TARGET_REPO`); events from other repos are ignored.
-4. **Labels:** `status: *` is bot-only, a projection of `Task.status`. `workflow: *` and `grill: skip` are
-   human-only; the bot never adds them and only removes ones added by a sender with no access (D21). Lane and
-   skip labels are read from the API at processing time, never from the payload.
+4. **Labels:** `status: *` is bot-only, a projection of `Task.status`. `workflow: *`, `grill: skip` and
+   `model: max-*` are human-only; the bot never adds them and only removes ones added by a sender without the
+   level they need (D21, D23). Lane, skip and model labels are read from the API at processing time, never from
+   the payload.
 5. **PostgreSQL is the source of truth:** no workflow state in process memory or in the issue thread; every event
    rebuilds its state from the tables.
 6. **Serialization:** one job at a time per task (session lease) and one coding job at a time (workspace lease).
@@ -555,19 +633,31 @@ earlier table through its own migration; it is then listed under "Extended by".
   and `labeled` on in the order received and the router handles both orders (below, 5); `IssueProvider.isSelf`.
 - **3:** ~~caching `hasWriteAccess` results (at most per job); whether loading a skill directory needs a file
   listing.~~ → resolved 2026-11-10 in `spec-github-agent-github-providers.md`: no cache (G6); `listFiles` (G7).
-- **4:** injection detected → `FAILED` or wrap and continue; truncate vs summarize oversized input; which files a
+- **4:** ~~injection detected → `FAILED` or wrap and continue; truncate vs summarize oversized input; which files a
   skill may reference and their size cap. **Added 2026-11-10 (spec 3, G7):** a skill is loaded as its whole
   directory: how reference files reach the LLM; whether and where a skill's scripts run (this contradicts "The
   skill only changes instructions" and the tools column in §4, so this overview changes first); binary files;
   reading the listing and the files at one commit. **Agreed 2026-11-11 (spec 2 interview):** the secret scanner
   wraps the two ports, so every outgoing text is scanned whoever the caller is (this covers spec 2's two
-  comments, and the §4 comment "body is already secret-scanned" goes away).
+  comments, and the §4 comment "body is already secret-scanned" goes away). **Added 2026-11-12 (D22, D23):**
+  `readControls` returns the steps that have a `model: max-*` label (contract change, made here first); spec 4's
+  build changes code of earlier specs: intake (spec 2) checks and reverts model labels, `removeLabel` accepts them,
+  and the label bootstrap (spec 3) creates 16 labels instead of 11; the model line in every posted LLM text
+  (format); which `ChatGoogle` errors are transient or permanent (rate limit, unknown model, a blocked answer);
+  LangChain's own retries vs the worker as the single retry layer (spec 3, G5); thinking tokens in
+  `ExecutionLog`; the setup guide says the free Gemini tier lets Google use prompts (a billed project doesn't).~~ → resolved 2026-11-12 in
+  `spec-github-agent-llm-foundation.md`: wrap and continue with a warning comment (L7); cut at 65,536
+  characters (L8); a skill is text only, read at one commit, 204,800 bytes at most (L6, LW2, LW3); the scanner
+  wraps the ports (L9, LW4); model labels, `readControls` and the changes to specs 2 and 3 (L3, LW1, LW7); the
+  error table and the single retry layer (L10); provider-neutral usage columns (L11).
 - **5:** "received" = the time the controller stored the event; several lane labels added at once → one reminder
   comment, not one per event; events on closed issues; worker concurrency cap; the run-start skills check (R6)
   calls spec 4's loader. **Added 2026-11-11 (spec 2):** an `ISSUE_OPENED` processed after its issue's run started
   is stale (R1); spec 5 replaces spec 2's placeholder processor and adds its own ignore reasons; a task's
   waiting events are found through `WebhookEvent.externalRef` (spec 2), and the spec that first needs them adds
-  the query method to `EventsService`.
+  the query method to `EventsService`. **Added 2026-11-12 (spec 4):** at run start spec 5 calls
+  `StepConfigService.checkRun` and the injection check of the issue description; it turns `LlmError` and
+  `StepConfigError` into `FAILED(cause)`; its interview decides `/retry` for causes outside the issue (D7).
 - **6:** a comment that arrives while the final evaluation runs (merge it in before moving to the Spec?); partial
   answers to a batch; the cancel comment strips markers, escapes code fences and truncates long answers with a
   link.
@@ -575,13 +665,17 @@ earlier table through its own migration; it is then listed under "Extended by".
   deleted before `/approve`; the snapshot is taken when the approval is first processed, so a queued approval
   keeps that text. **Agreed 2026-11-11 (spec 2 interview):** while an issue waits for an approval, a comment that
   starts with `/approve` but isn't exactly that gets one hint ("comment exactly `/approve`"), at most once per
-  document; spec 7 adds the case to transition-table row 20.
+  document; spec 7 adds the case to transition-table row 20. **Added 2026-11-12 (spec 4, L17):** the document
+  table keeps the text as posted, after the secret scanner; the LLM's raw answer is in `ExecutionLog`.
 - **8:** an explicit-URL fetch needs an explicit refspec (update `refs/remotes/origin/*` or a bot-owned ref
   namespace?); branch name format with the run number; the agent branch checked out in the developer's clone;
   concurrent fetches.
 - **9:** a crash between push and PR (`AgentPullRequest` written first, `findPullRequest` on retry); a failure in
   the middle of the loop (commit locally like a red run, or leave the tree dirty?); changed-files scoping for lint
-  and tests; signed commits (idea doc §10 known risk); a secret found in the diff → `FAILED`.
+  and tests; signed commits (idea doc §10 known risk); a secret found in the diff → `FAILED`. **Added 2026-11-12 (spec 4,
+  L18):** each turn of the Coder loop stores only its new messages in `ExecutionLog` (the first row holds the
+  full starting prompt); spec 9 extends the table for it (e.g. a turn number), and spec 10 follows the same
+  rule; whether the loop retries a single failed call (spec 4, L10).
 - **10:** `pull_request.opened` arrives while the Coder job still holds the task lease (it waits); the newest head
   wins; PRs of cancelled runs are still reviewed; the step cap is reached → which verdict; each run logs its input
   list for the "no LLM judges its own output" check.
@@ -589,7 +683,8 @@ earlier table through its own migration; it is then listed under "Extended by".
 ## Tech stack, commands, code style, tests
 
 - **Stack:** Node.js + TypeScript (strict), NestJS, Prisma + PostgreSQL, Zod with `@nestjs/config`, Octokit with
-  GitHub App auth, `@langchain/anthropic` with `claude-sonnet-5-5`, `@langchain/langgraph` only in the Coder and
+  GitHub App auth, `@langchain/google` (`ChatGoogle`, Gemini; D22; models per step from `workflow.json`, D23;
+  was `@langchain/anthropic` with `claude-sonnet-5-5`), `@langchain/langgraph` only in the Coder and
   Quality Gate loops (D3), the `git` binary via `execFile`, ngrok. Spec 1 pins the versions.
 - **Commands:** none yet (no `package.json`). Spec 1 scaffolds the project; the real build, test, lint, typecheck
   and `prisma migrate` commands go into `AGENTS.md` → Commands once they exist.
@@ -657,6 +752,12 @@ account with `triage` access").
 - [ ] (4, 5) `workflow.json` maps no `plan` skill; add `workflow: full-sdd` → `needs-human` + exactly one comment
   naming `plan`; NO Grill question is posted. `workflow: code-only` on another issue → the go-signal (that lane
   doesn't use `plan`).
+- [ ] (4, 5) `workflow.json` without a `models` section (or without `max.default`); add `workflow: full-sdd` →
+  `needs-human` + exactly one comment naming the problem; NO Grill question is posted.
+- [ ] (4) A sender below Approver adds `model: max-code` → the label is removed + exactly one comment; the same
+  again on that issue → removed again, NO second comment.
+- [ ] (4, 7) An Approver adds `model: max-spec` while the issue is grilling → the Grill questions name the
+  `standard` model, the Spec names the `max` model, and their `ExecutionLog` rows agree.
 - [ ] (5) Swap `workflow: full-sdd` for `workflow: code-only`, in either order → exactly one new run (one
   go-signal), no duplicate comments.
 - [ ] (5, 9) `workflow: code-only` → only the go-signal; worktree and branches unchanged until `/approve`.

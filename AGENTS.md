@@ -15,15 +15,17 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   `getAccessLevel` (Participant / Approver); accepted events end `DONE`, the rest `IGNORED` with a reason; a lane or
   skip label added without access is reverted. The hello comment is gone; `webhook_events.external_ref` holds
   `owner/repo#number`; a redelivery of a `FAILED` event queues it again. Next in the build order: spec 4
-  (`llm-foundation`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  (`llm-foundation`; spec and plan approved 2026-11-12, not built). Repo: `Hugoer/sdd-agent`;
+  target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
 
 - Node.js + TypeScript, NestJS (modules, DI, webhook controllers)
 - `@langchain/langgraph` (Coder and Quality Gate agent loops only; routing is plain NestJS)
-  + `@langchain/anthropic` (LLM calls)
-- Prisma + PostgreSQL (`ExecutionLog`); LLM model: `claude-sonnet-5-5`
+  + `@langchain/google` (`ChatGoogle`, Gemini LLM calls; overview D22)
+- Prisma + PostgreSQL (`ExecutionLog`); LLM models: one per step, from the target repo's `workflow.json`,
+  raised per issue by `model: max-*` labels (overview D23)
 - `octokit` via GitHub App auth; Zod for structured LLM output
 
 ## Commands
@@ -59,8 +61,8 @@ Code conventions: ESM (`"type": "module"`, `nodenext`): relative imports end in 
 ## Domain Rules
 
 - Webhooks are rejected with `401` unless `X-Hub-Signature-256` validates (HMAC-SHA256).
-- Labels: `status: *` are bot-managed; `workflow: *` and the `grill: skip` modifier are human-assigned —
-  the bot never sets them. Read labels from the API at processing time, never from the event payload.
+- Labels: `status: *` are bot-managed; `workflow: *`, the `grill: skip` modifier and `model: max-*`
+  (Approvers only) are human-assigned — the bot never sets them. Read labels from the API at processing time, never from the event payload.
 - Core logic talks to the `IssueProvider` interface, never to Octokit directly (Jira/Azure DevOps later).
 - Destructive GitHub/git actions require explicit human approval.
 - Issue text is untrusted input: injection/size guardrails run before it reaches the LLM;
@@ -74,7 +76,7 @@ Code conventions: ESM (`"type": "module"`, `nodenext`): relative imports end in 
   installation token over an explicit HTTPS URL (never stored in `.git/config`), PRs/comments/check runs via
   the GitHub App. No `gh` CLI.
 - Two repos: this one is the bot; the bot codes only in a separate **target (sandbox) repo**. Step skills
-  come from the target repo's `.github-agent/workflow.json`, always read from the base branch (GitHub API),
+  and each step's model come from the target repo's `.github-agent/workflow.json`, always read from the base branch (GitHub API),
   never from the agent's branch. Skills shape a step's instructions; the bot keeps its output schema, tools and guardrails.
   Skills are required: there is no built-in fallback prompt, and a run that needs an unmapped step goes to
   `status: needs-human` (overview D18).
