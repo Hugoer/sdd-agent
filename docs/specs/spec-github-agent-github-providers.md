@@ -2,8 +2,8 @@
 
 > **Created:** 2026-11-10 · **Status:** approved 2026-11-10 (including A1–A5) · built and verified 2026-11-11 (every matrix row passed)
 >
-> **Changed by spec 2 (2026-11-11, once it is built):** `hasWriteAccess` becomes `getAccessLevel` (two levels,
-> overview D19), `isSelf` is new, and the hello comment is removed. See
+> **Changed by spec 2 (decided 2026-11-11, built 2026-11-12):** `hasWriteAccess` was replaced by `getAccessLevel`
+> (two levels, overview D19), `isSelf` was added, and the hello comment was removed. See
 > `spec-github-agent-intake-authorization.md`, "Changes to earlier specs' behavior". The text below records what
 > spec 3 built.
 >
