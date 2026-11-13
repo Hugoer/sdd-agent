@@ -375,7 +375,7 @@ checked against the real API by the smoke script.
 |---|---|---|
 | HTTP `429` | `rate-limited` | transient; `retryAfterSeconds` from the `retry-after` header or Google's `RetryInfo.retryDelay` |
 | HTTP `408`, `500`, `502`, `503`, `504`; no response; the 300 s timeout | `provider-unavailable` | transient |
-| HTTP `401`, or any answer whose reason says the key is invalid (the older endpoint has answered `400` `API_KEY_INVALID`) | `bad-api-key` | permanent; the message says to check `GOOGLE_API_KEY` |
+| HTTP `401`, or any answer whose reason says the key is invalid (Google answers a wrong key with `400` `INVALID_ARGUMENT`, reason `API_KEY_INVALID`: seen at Checkpoint 1, 2026-11-12) | `bad-api-key` | permanent; the message says to check `GOOGLE_API_KEY` |
 | HTTP `403` | `access-denied` | permanent; "Google refused this key for this call: check the key's permissions and the project's billing" |
 | HTTP `402` | `credits-exhausted` | permanent; "the Google account's credits are used up" |
 | HTTP `404` on the model | `unknown-model` | permanent; the message names the model |
@@ -967,9 +967,9 @@ None blocks this spec. For the build and later specs:
 
 - **Build:** ~~whether the developer's key can call `gemini-4-argon` and `gemini-4-carbon`~~ → both are in the
   model list of the developer's key (checked 2026-11-12); the first smoke run confirms a real call. ~~Whether
-  Gemini answers `404` for an unknown model~~ → Google's error reference says so (`model_not_found`, L14). Still
-  to see in the build: what a wrong key really answers (`401`, or `400` on the older endpoint); the smoke row
-  shows it and the adapter follows the real answer.
+  Gemini answers `404` for an unknown model~~ → Google's error reference says so (`model_not_found`, L14). ~~What
+  a wrong key really answers~~ → `400` `INVALID_ARGUMENT` with reason `API_KEY_INVALID` (smoke at Checkpoint 1,
+  2026-11-12); the adapter maps it, and `401` too, to `bad-api-key`.
 - **Spec 5:** the run id's format; calling `checkRun` and the description check at run start; turning
   `LlmError` and `StepConfigError` into `FAILED(cause)` and its comment; `/retry` for causes outside the issue
   (L15).

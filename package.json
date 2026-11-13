@@ -26,9 +26,12 @@
     "db:events": "docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c \"SELECT delivery_id, event_name, action, external_ref, payload->'sender'->>'login' AS sender, status, ignore_reason, attempts, left(last_error, 80) AS last_error, received_at FROM webhook_events ORDER BY received_at DESC LIMIT 20\"",
     "postinstall": "prisma generate",
     "tunnel": "node --env-file-if-exists=.env scripts/tunnel.mjs",
-    "github:smoke": "nest build && node dist/github/smoke/github-smoke.js"
+    "github:smoke": "nest build && node dist/github/smoke/github-smoke.js",
+    "llm:smoke": "nest build && node dist/llm/smoke/llm-smoke.js"
   },
   "dependencies": {
+    "@langchain/core": "^1.4.0",
+    "@langchain/google": "^0.2.14",
     "@nestjs/common": "^12.4.2",
     "@nestjs/config": "^12.1.1",
     "@nestjs/core": "^12.4.2",

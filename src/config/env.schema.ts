@@ -7,6 +7,18 @@ const HOSTNAME =
 // GitHub's characters: owner = letters, digits, hyphens; repo = letters, digits, `.`, `_`, `-` (not `.` or `..`).
 const OWNER_SLASH_NAME =
   /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?\/(?!\.\.?$)[a-z0-9._-]{1,100}$/i;
+// A subset of git's ref rules: no leading or trailing `/`, no `..`, no `//`, no `.lock` ending.
+const BRANCH_NAME =
+  /^(?!\/)(?!.*\/$)(?!.*\.\.)(?!.*\/\/)(?!.*\.lock$)[a-z0-9._/-]{1,255}$/i;
+
+// LW8: `@langchain/core` ships LangSmith; any of these switches would send every prompt to a third party.
+const tracingOff = z
+  .string()
+  .refine(
+    (value) => value.trim().toLowerCase() !== 'true',
+    'must be unset or false: LangChain tracing must be off (it would send every prompt to LangSmith)',
+  )
+  .optional();
 
 function containsPrivateKey(path: string): boolean {
   try {
@@ -48,6 +60,18 @@ export const envSchema = z.object({
       'must be a bare hostname (no scheme, no path)',
     )
     .default(''),
+  GOOGLE_API_KEY: z.string().min(1),
+  TARGET_BASE_BRANCH: z
+    .string()
+    .regex(
+      BRANCH_NAME,
+      'must be a branch name: letters, digits, ".", "_", "-", "/"; no leading or trailing "/", no "..", no "//", no ".lock" ending',
+    )
+    .default('main'),
+  LANGSMITH_TRACING: tracingOff,
+  LANGSMITH_TRACING_V2: tracingOff,
+  LANGCHAIN_TRACING: tracingOff,
+  LANGCHAIN_TRACING_V2: tracingOff,
 });
 
 export type Env = z.infer<typeof envSchema>;

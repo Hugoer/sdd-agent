@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #4: LLM Foundation
 
-> **Created:** 2026-11-12 · **Status:** approved 2026-11-12 (including P1–P9) · not started
+> **Created:** 2026-11-12 · **Status:** approved 2026-11-12 (including P1–P9) · build started 2026-11-12
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-llm-foundation.md` into ordered,
 > verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan adds
@@ -95,15 +95,15 @@ LangChain tracing switches are rejected when `true` (LW8). `.env.example` and th
 variables.
 
 **Acceptance criteria:**
-- [ ] `GOOGLE_API_KEY` missing or empty → the startup error names the variable and never a value;
+- [x] `GOOGLE_API_KEY` missing or empty → the startup error names the variable and never a value;
   `TARGET_BASE_BRANCH` defaults to `main` and refuses `bad..name`, a leading or trailing `/`, `//` and a `.lock`
   ending (unit)
-- [ ] Each of the four switches set to `true` → the startup error says tracing must be off; unset or `false` →
+- [x] Each of the four switches set to `true` → the startup error says tracing must be off; unset or `false` →
   accepted (unit)
-- [ ] The integration suite boots with a made-up test value for the key (not shaped like a real key)
+- [x] The integration suite boots with a made-up test value for the key (not shaped like a real key)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/config/env.schema.ts` (+ `.spec.ts`), `.env.example`, `test/test-env.ts`
@@ -115,12 +115,12 @@ variables.
 `llm-error.ts` (`LlmError`, `LlmErrorCode`, `StepConfigError`), as in overview §4. Types and two classes only.
 
 **Acceptance criteria:**
-- [ ] Both files match overview §4 signature by signature
-- [ ] `LlmError` carries `kind`, `code` and `detail.retryAfterSeconds`; both classes set their own `name` (unit)
-- [ ] Nothing under `src/contracts` imports a `@langchain/*` package
+- [x] Both files match overview §4 signature by signature
+- [x] `LlmError` carries `kind`, `code` and `detail.retryAfterSeconds`; both classes set their own `name` (unit)
+- [x] Nothing under `src/contracts` imports a `@langchain/*` package
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/step.ts`, `src/contracts/llm-error.ts` (+ `.spec.ts`)
@@ -134,16 +134,16 @@ minor has moved on, I stop and ask). `ChatModelFactory` and `CHAT_MODEL_FACTORY`
 `ChatGoogle` with the key from config; `toLlmError` and `checkAnswer` (P3) map the spec's error table.
 
 **Acceptance criteria:**
-- [ ] `create()`: the model name and the key are passed, `maxRetries` is 0, and no `temperature`, `topP` or
+- [x] `create()`: the model name and the key are passed, `maxRetries` is 0, and no `temperature`, `topP` or
   `topK` is set (unit, no network)
-- [ ] Every row of the spec's error table, from hand-built errors and answers: each status, `429` with a retry
+- [x] Every row of the spec's error table, from hand-built errors and answers: each status, `429` with a retry
   delay from the header, from `RetryInfo` and with none, a key-invalid reason on a `400`, a blocked prompt, no
   response, each finish reason (unit)
-- [ ] No `LlmError` message holds the key, a header, the prompt or the answer; `@langchain/google` is imported
+- [x] No `LlmError` message holds the key, a header, the prompt or the answer; `@langchain/google` is imported
   only under `src/llm/google/` (unit + `grep`)
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` pass
 - [ ] Manual: Checkpoint 1
 
 **Dependencies:** T1, T2
@@ -160,14 +160,14 @@ on a failure, the HTTP status next to the mapped code. The checks are functions 
 the scripted fake factory, which is written here.
 
 **Acceptance criteria:**
-- [ ] Against the scripted fake: a valid answer → `PASS` with model, duration and tokens; an error → `FAIL` with
+- [x] Against the scripted fake: a valid answer → `PASS` with model, duration and tokens; an error → `FAIL` with
   its code and status; exit code 0 only on `PASS` (unit)
-- [ ] The output never holds the key, a header or the raw answer (unit on the captured output)
-- [ ] `test/fakes/scripted-chat-model.factory.ts` answers from a script (an answer, a malformed answer, an error),
+- [x] The output never holds the key, a header or the raw answer (unit on the captured output)
+- [x] `test/fakes/scripted-chat-model.factory.ts` answers from a script (an answer, a malformed answer, an error),
   records the messages it got, and throws when called with no script left (P8)
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 - [ ] Manual (real Google, your key in `.env`, `npm run dev` stopped): Checkpoint 1
 
 **Dependencies:** T3
@@ -744,5 +744,5 @@ None blocks the build.
 - **P1–P9** were confirmed on 2026-11-12. P2 and P3 changed the spec's `ChatModelFactory` block and step 3 of
   `LlmService.call()` the same day. P1–P9 touch files the spec's "Project structure" doesn't list: `test/app.ts`,
   `test/db.ts`, `src/github/github-startup.spec.ts` and the two new integration specs.
-- **Found at Checkpoint 1, not decided here:** what Google really answers for a wrong key (`401`, or `400` with a
-  key-invalid reason). The adapter covers both; the spec's row is corrected to the real answer.
+- **Found at Checkpoint 1 (2026-11-12):** a wrong key answers `400` `INVALID_ARGUMENT` with reason
+  `API_KEY_INVALID` (not `401`). The adapter covers both; the spec's row and open question say so.

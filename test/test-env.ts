@@ -9,4 +9,7 @@ export const testEnv = {
   GITHUB_APP_PRIVATE_KEY_PATH: 'test/fixtures/fake-app-key.txt',
   TARGET_REPO: 'test-owner/test-repo',
   NGROK_DOMAIN: '',
+  // Made up and not key-shaped: no test may reach Google.
+  GOOGLE_API_KEY: 'test-google-api-key',
+  TARGET_BASE_BRANCH: 'main',
 };
