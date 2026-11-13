@@ -83,8 +83,10 @@ measures.
   money is not stored.
 - **L12 A smoke script** (`npm run llm:smoke`) runs the whole chain once with a real Gemini call. The app never
   calls Google at startup.
-- **L13 Sandbox:** `gemini-4-argon` (standard) and `gemini-4-carbon` (max), on a paid Google account; five
-  placeholder skills. Each step's own spec writes its real skill.
+- **L13 Sandbox:** `gemini-4-hydrogen` (standard) and `gemini-4-carbon` (max), on a paid Google account; five
+  placeholder skills. Each step's own spec writes its real skill. (Changed 2026-11-13 at Checkpoint 3: standard
+  was `gemini-4-argon`, which kept answering `503` "high demand" or nothing within 300 s while carbon answered.
+  Hydrogen is the same family's everyday model: stable, structured output, cheaper.)
 
 **Added while writing (not asked in the interview; approved with this spec):**
 
@@ -173,7 +175,7 @@ step run starts
     "qualityGate": ".github-agent/skills/quality-gate"
   },
   "models": {
-    "standard": { "default": "gemini-4-argon" },
+    "standard": { "default": "gemini-4-hydrogen" },
     "max": { "default": "gemini-4-carbon" }
   }
 }
@@ -184,12 +186,12 @@ gives a step its own model for every issue, with no label:
 
 ```json
 "models": {
-  "standard": { "default": "gemini-4-argon", "spec": "gemini-4-carbon" },
+  "standard": { "default": "gemini-4-hydrogen", "spec": "gemini-4-carbon" },
   "max": { "default": "gemini-4-carbon" }
 }
 ```
 
-Here the Spec step of every issue uses `gemini-4-carbon`. The other steps use `gemini-4-argon`, unless the issue
+Here the Spec step of every issue uses `gemini-4-carbon`. The other steps use `gemini-4-hydrogen`, unless the issue
 has their `model: max-<step>` label.
 
 Validated with Zod. Any problem → `StepConfigError('invalid workflow.json: <what and where>')`.
@@ -903,12 +905,12 @@ rows.
 
 **Smoke: the whole chain**
 - [ ] `npm run llm:smoke -- --issue N --step spec` → every line `PASS`, exit code 0; the output shows a commit
-  SHA, the skill's one file, model `gemini-4-argon` (`standard`), token values and the four sizes.
+  SHA, the skill's one file, model `gemini-4-hydrogen` (`standard`), token values and the four sizes.
 - [ ] On `#N` afterwards: one comment from `<app>[bot]` with a one-sentence summary, `[REDACTED: github-token]`
-  where the test string was, and the line `Model: gemini-4-argon (standard)`.
+  where the test string was, and the line `Model: gemini-4-hydrogen (standard)`.
 - [ ] Add `model: max-spec` to `#N`, run the same command → model `gemini-4-carbon` (`max`) in the output, in the
   new comment's model line and in the newest `execution_logs` row.
-- [ ] With `model: max-spec` still on, `--step code` → `gemini-4-argon` (`standard`): the label is per step.
+- [ ] With `model: max-spec` still on, `--step code` → `gemini-4-hydrogen` (`standard`): the label is per step.
 - [ ] The newest rows: `status` `SUCCESS`, `attempt` 1, `run_id` starting with `smoke-`, `skill_chars` > 0,
   `untrusted_chars` > 0, token columns filled.
 - [ ] `SELECT prompt, answer FROM execution_logs ORDER BY created_at DESC LIMIT 1` → the prompt holds the frame,
