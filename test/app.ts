@@ -13,10 +13,12 @@ import { GitHubClient } from '../src/github/github-client.js';
 import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
 import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
 import { IntakeEventProcessor } from '../src/intake/intake-event.processor.js';
+import { CHAT_MODEL_FACTORY } from '../src/llm/chat-model.factory.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
 import { InMemoryRepoProvider } from './fakes/in-memory-repo-provider.js';
+import { ScriptedChatModelFactory } from './fakes/scripted-chat-model.factory.js';
 import { testEnv } from './test-env.js';
 
 /** Stands in for GitHubClient (plan P3): answers the startup steps and sends nothing. */
@@ -42,13 +44,15 @@ class OfflineGitHubClient {
 }
 
 /**
- * Replaces everything that could reach GitHub: the client (no request) and the two adapters (fakes). The port
- * tokens stay the app's own, so every test goes through the secret scanner's wrappers (spec 4, plan P4).
+ * Replaces everything that could reach GitHub or Google: the client (no request), the two adapters (fakes) and
+ * the model factory (the scripted fake, plan P8: it throws when called with no scripted answer). The port tokens
+ * stay the app's own, so every test goes through the secret scanner's wrappers (spec 4, plan P4).
  */
-export function offlineGitHub(
+export function offlineProviders(
   builder: TestingModuleBuilder,
   issues = new InMemoryIssueProvider(testEnv.TARGET_REPO),
   repo = new InMemoryRepoProvider(testEnv.TARGET_REPO),
+  models = new ScriptedChatModelFactory(),
 ): TestingModuleBuilder {
   return builder
     .overrideProvider(GitHubClient)
@@ -56,7 +60,9 @@ export function offlineGitHub(
     .overrideProvider(GitHubIssueProvider)
     .useValue(issues)
     .overrideProvider(GitHubRepoProvider)
-    .useValue(repo);
+    .useValue(repo)
+    .overrideProvider(CHAT_MODEL_FACTORY)
+    .useValue(models);
 }
 
 /** Same worker without the polling loop: tests call `drainOnce()` themselves. */
@@ -107,6 +113,7 @@ export interface TestApp {
   worker: EventsWorker;
   issues: InMemoryIssueProvider;
   repo: InMemoryRepoProvider;
+  models: ScriptedChatModelFactory;
   baseUrl: string;
 }
 
@@ -119,6 +126,8 @@ export interface StartOptions {
   issues?: InMemoryIssueProvider;
   /** The fake behind REPO_PROVIDER's scanner (default: a new one for TARGET_REPO). */
   repo?: InMemoryRepoProvider;
+  /** The fake behind CHAT_MODEL_FACTORY (default: a new one with no scripted answer). */
+  models?: ScriptedChatModelFactory;
   /** Registered with the worker in place of the app's own processor (plan P3). */
   processor?: EventProcessor;
 }
@@ -128,10 +137,12 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
   const issues =
     options.issues ?? new InMemoryIssueProvider(testEnv.TARGET_REPO);
   const repo = options.repo ?? new InMemoryRepoProvider(testEnv.TARGET_REPO);
-  let builder = offlineGitHub(
+  const models = options.models ?? new ScriptedChatModelFactory();
+  let builder = offlineProviders(
     Test.createTestingModule({ imports: [AppModule] }),
     issues,
     repo,
+    models,
   );
   if (!options.pollingWorker) {
     builder = builder
@@ -169,6 +180,7 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     worker: app.get(EventsWorker),
     issues,
     repo,
+    models,
     baseUrl: await app.getUrl(),
   };
 }

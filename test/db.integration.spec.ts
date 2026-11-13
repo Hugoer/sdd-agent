@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
-import { offlineGitHub } from './app.js';
+import { offlineProviders } from './app.js';
 import { resetDatabase } from './db.js';
 import { testEnv } from './test-env.js';
 
@@ -13,7 +13,7 @@ describe('database wiring', () => {
   let prisma: PrismaService;
 
   beforeAll(async () => {
-    const moduleRef = await offlineGitHub(
+    const moduleRef = await offlineProviders(
       Test.createTestingModule({ imports: [AppModule] }),
     ).compile();
     app = await moduleRef.createNestApplication().init();

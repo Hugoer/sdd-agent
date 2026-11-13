@@ -390,14 +390,14 @@ comment on `postComment` changes as in overview §4.
 "Model of a step run") and `stepsFor(lane, grillSkip)` (spec "Run-start check", step 1).
 
 **Acceptance criteria:**
-- [ ] Every rule of the table: each invalid form gives `invalid workflow.json: <what and where>`; unknown
+- [x] Every rule of the table: each invalid form gives `invalid workflow.json: <what and where>`; unknown
   top-level keys are ignored; a step missing from `skills` is valid (unit)
-- [ ] `resolveModel`: label or no label × a step entry or `default`, and the spec's edge cases (an entry only in
+- [x] `resolveModel`: label or no label × a step entry or `default`, and the spec's edge cases (an entry only in
   `standard` with the label on → `max.default`) (unit)
-- [ ] `stepsFor`: the three lanes, each with and without `grillSkip` (unit)
+- [x] `stepsFor`: the three lanes, each with and without `grillSkip` (unit)
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T2
 **Files:** `src/llm/workflow-config.ts` (+ `.spec.ts`)
@@ -409,15 +409,15 @@ comment on `postComment` changes as in overview §4.
 directory listing, the binary skip list, the 204,800-byte cap from the listing, reading, ordering, the log line.
 
 **Acceptance criteria:**
-- [ ] `SKILL.md` first, then the other files by path; known binary types are left out in any letter case; every
+- [x] `SKILL.md` first, then the other files by path; known binary types are left out in any letter case; every
   read uses the given commit SHA (unit, in-memory `RepoProvider`)
-- [ ] `missing skills: <step>` for no directory, no `SKILL.md`, an empty or whitespace-only `SKILL.md`;
+- [x] `missing skills: <step>` for no directory, no `SKILL.md`, an empty or whitespace-only `SKILL.md`;
   `skill too large: …` from the listing with no file read; `unreadable skill file: <path>` for a file that is
   not valid text, while a GitHub failure passes through as `ProviderError` (P6) (unit)
-- [ ] The log line has the counts and the skipped paths, never file content (unit on the captured log)
+- [x] The log line has the counts and the skipped paths, never file content (unit on the captured log)
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T2, T8
 **Files:** `src/llm/skill-loader.ts` (+ `.spec.ts`)
@@ -431,17 +431,17 @@ commit and map, then the listing-only checks for every step the run uses. `LlmMo
 `CHAT_MODEL_FACTORY` to the Google factory, and `AppModule` imports it; the harness binds the scripted fake (P8).
 
 **Acceptance criteria:**
-- [ ] `prepare`: returns the commit, the skill and the model (provider name from the factory); one `resolveRef`,
+- [x] `prepare`: returns the commit, the skill and the model (provider name from the factory); one `resolveRef`,
   and the map, the listing and every file are read at that SHA; a missing `workflow.json` →
   `invalid workflow.json` (unit, fakes)
-- [ ] `checkRun`: `missing skills: plan, code` names every missing step at once; an invalid `models` section
+- [x] `checkRun`: `missing skills: plan, code` names every missing step at once; an invalid `models` section
   fails even when the skills are fine; no skill file is read; an unknown base branch passes through as
   `ProviderError` (unit)
-- [ ] The app boots with `LlmModule`; after boot and after an intake event no model was created or called
+- [x] The app boots with `LlmModule`; after boot and after an intake event no model was created or called
   (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T3, T6, T8, T13, T14
 **Files:** `src/llm/step-config.service.ts` (+ `.spec.ts`), `src/llm/llm.module.ts`, `src/app.module.ts`,
@@ -457,14 +457,14 @@ models) and five `.github-agent/skills/<step>/SKILL.md` files, one line each: "P
 `--base` and checks 1–4; `--try` goes, and the provisional call uses the resolved model (P1).
 
 **Acceptance criteria:**
-- [ ] Checks 1–4 against the fakes: `PASS` with the commit SHA, the two maps, the files and sizes, the level and
+- [x] Checks 1–4 against the fakes: `PASS` with the commit SHA, the two maps, the files and sizes, the level and
   the name; check 2 is informative (a lane with missing steps doesn't fail the run); a broken map fails check 1
   and no model is called (unit)
-- [ ] Bad or missing options → the usage line and exit code 1 (unit)
-- [ ] The map and the five files are in your clone, `smoke-skill/` is untouched, and I committed nothing there
+- [x] Bad or missing options → the usage line and exit code 1 (unit)
+- [x] The map and the five files are in your clone, `smoke-skill/` is untouched, and I committed nothing there
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 - [ ] Manual (after your push): Checkpoint 3
 
 **Dependencies:** T4, T15
@@ -478,7 +478,7 @@ models) and five `.github-agent/skills/<step>/SKILL.md` files, one line each: "P
   `main`, the five skills, the placeholder's one file, `gemini-4-argon` (`standard`); the call passes
 - [ ] You add `model: max-spec` to `#N` → the same command shows `gemini-4-carbon` (`max`) and the call passes;
   `--step code` → `gemini-4-argon` (`standard`)
-- [ ] `--base no-such-branch` → check 1 `FAIL` naming the branch; no model call
+- [x] `--base no-such-branch` → check 1 `FAIL` naming the branch; no model call
 - [ ] You review and commit (both repos)
 
 ---
