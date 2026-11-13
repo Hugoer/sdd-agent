@@ -4,6 +4,7 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { LlmError, StepConfigError } from '../contracts/llm-error.js';
 import { ProviderError } from '../contracts/provider-error.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -148,7 +149,10 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Spec 3 worker rule: a permanent ProviderError fails at once; anything else retries (A2: rate-limit wait). */
+  /**
+   * Spec 3 worker rule, extended by spec 4: a permanent ProviderError or LlmError and every StepConfigError fail
+   * at once; anything else retries, never sooner than the provider's retryAfterSeconds (A2).
+   */
   private async fail(
     event: WebhookEvent,
     error: unknown,
@@ -156,7 +160,8 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
   ): Promise<void> {
     const lastError = messageOf(error).slice(0, MAX_ERROR_LENGTH);
     const permanent =
-      error instanceof ProviderError && error.kind === 'permanent';
+      error instanceof StepConfigError ||
+      (isProviderOrLlmError(error) && error.kind === 'permanent');
     if (permanent || event.attempts >= MAX_ATTEMPTS) {
       await this.prisma.webhookEvent.update({
         where: { id: event.id },
@@ -167,10 +172,9 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
       );
       return;
     }
-    const retryAfterMs =
-      error instanceof ProviderError
-        ? (error.detail.retryAfterSeconds ?? 0) * 1000
-        : 0;
+    const retryAfterMs = isProviderOrLlmError(error)
+      ? (error.detail.retryAfterSeconds ?? 0) * 1000
+      : 0;
     const delayMs = Math.max(BACKOFF_MS[event.attempts], retryAfterMs);
     await this.prisma.webhookEvent.update({
       where: { id: event.id },
@@ -184,6 +188,13 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
       `${label} attempt ${event.attempts}/${MAX_ATTEMPTS} failed, retry in ${delayMs / 1000} s: ${lastError}`,
     );
   }
+}
+
+/** The two errors that carry a kind and a retry delay. */
+function isProviderOrLlmError(
+  error: unknown,
+): error is ProviderError | LlmError {
+  return error instanceof ProviderError || error instanceof LlmError;
 }
 
 function messageOf(error: unknown): string {

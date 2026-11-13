@@ -3,8 +3,6 @@ import { Test, type TestingModuleBuilder } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
 import { AppModule } from '../src/app.module.js';
 import { appOptions, configureApp } from '../src/app.setup.js';
-import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
-import { REPO_PROVIDER } from '../src/contracts/repo-provider.js';
 import type {
   EventProcessor,
   ProcessResult,
@@ -12,6 +10,8 @@ import type {
 import { EventsWorker } from '../src/events/events.worker.js';
 import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
+import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
+import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
 import { IntakeEventProcessor } from '../src/intake/intake-event.processor.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { resetDatabase } from './db.js';
@@ -41,7 +41,10 @@ class OfflineGitHubClient {
   }
 }
 
-/** Replaces everything that could reach GitHub: the client (no request) and the provider ports (fakes). */
+/**
+ * Replaces everything that could reach GitHub: the client (no request) and the two adapters (fakes). The port
+ * tokens stay the app's own, so every test goes through the secret scanner's wrappers (spec 4, plan P4).
+ */
 export function offlineGitHub(
   builder: TestingModuleBuilder,
   issues = new InMemoryIssueProvider(testEnv.TARGET_REPO),
@@ -50,9 +53,9 @@ export function offlineGitHub(
   return builder
     .overrideProvider(GitHubClient)
     .useClass(OfflineGitHubClient)
-    .overrideProvider(ISSUE_PROVIDER)
+    .overrideProvider(GitHubIssueProvider)
     .useValue(issues)
-    .overrideProvider(REPO_PROVIDER)
+    .overrideProvider(GitHubRepoProvider)
     .useValue(repo);
 }
 
@@ -112,9 +115,9 @@ export interface StartOptions {
   pollingWorker?: boolean;
   /** Keep existing rows (default: empty the database before boot). */
   keepData?: boolean;
-  /** The fake behind ISSUE_PROVIDER (default: a new one for TARGET_REPO). */
+  /** The fake behind ISSUE_PROVIDER's scanner (default: a new one for TARGET_REPO). */
   issues?: InMemoryIssueProvider;
-  /** The fake behind REPO_PROVIDER (default: a new one for TARGET_REPO). */
+  /** The fake behind REPO_PROVIDER's scanner (default: a new one for TARGET_REPO). */
   repo?: InMemoryRepoProvider;
   /** Registered with the worker in place of the app's own processor (plan P3). */
   processor?: EventProcessor;

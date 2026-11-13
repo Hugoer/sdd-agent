@@ -7,6 +7,7 @@ import {
   TEST_INSTALLATION_ID,
   TEST_REPO,
   connectedTestClient,
+  type Scripted,
 } from '../../test/fakes/fake-github-fetch.js';
 import type { PullRequestRef } from '../contracts/repo-provider.js';
 import { GitHubRepoProvider } from './github-repo.provider.js';
@@ -238,6 +239,77 @@ describe('GitHubRepoProvider.listFiles', () => {
       expect(repoRequests(fake)).toEqual([]);
     },
   );
+});
+
+describe('GitHubRepoProvider.resolveRef', () => {
+  // Built at run time. GitHub answers this media type with `application/vnd.github.v3.sha; charset=utf-8` and the
+  // bare SHA (checked on a public repo, 2026-11-13), which Octokit reads as text.
+  const SHA = 'ab12'.repeat(10);
+  const asSha = {
+    text: SHA,
+    headers: { 'content-type': 'application/vnd.github.v3.sha; charset=utf-8' },
+  };
+
+  it("returns the branch's 40-character SHA with one request, asking for GitHub's sha media type", async () => {
+    const fake = new FakeGitHubFetch().on('GET', COMMIT_MAIN, asSha);
+    const repo = await providerWith(fake);
+
+    await expect(repo.resolveRef('main')).resolves.toBe(SHA);
+
+    expect(repoRequests(fake)).toEqual([`GET ${COMMIT_MAIN}`]);
+    expect(fake.to(COMMIT_MAIN)[0].accept).toBe(
+      'application/vnd.github.v3.sha',
+    );
+  });
+
+  it('sends a branch name with a slash as one path segment', async () => {
+    const fake = new FakeGitHubFetch().on('GET', /\/commits\//, asSha);
+    const repo = await providerWith(fake);
+
+    await expect(repo.resolveRef('smoke/spec-4-no-models')).resolves.toBe(SHA);
+
+    expect(fake.to(/\/commits\//).map((r) => r.path)).toEqual([
+      `/repos/${TEST_REPO}/commits/smoke%2Fspec-4-no-models`,
+    ]);
+  });
+
+  it('an unknown ref → permanent ProviderError naming the ref', async () => {
+    const fake = new FakeGitHubFetch().on('GET', /\/commits\/no-such-branch$/, {
+      status: 422,
+      body: { message: 'No commit found for SHA: no-such-branch' },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.resolveRef('no-such-branch')).rejects.toMatchObject({
+      kind: 'permanent',
+      detail: { status: 422 },
+      message: expect.stringContaining('"no-such-branch"') as string,
+    });
+  });
+
+  it.each<[string, Scripted]>([
+    ['a 503', { status: 503, body: { message: 'Unavailable' } }],
+    ['no response', 'no-response'],
+  ])('an outage (%s) → transient', async (_name, answer) => {
+    const fake = new FakeGitHubFetch().on('GET', COMMIT_MAIN, answer);
+    const repo = await providerWith(fake);
+
+    await expect(repo.resolveRef('main')).rejects.toMatchObject({
+      kind: 'transient',
+    });
+  });
+
+  it('an answer that is not a SHA → permanent', async () => {
+    const fake = new FakeGitHubFetch().on('GET', COMMIT_MAIN, {
+      body: { sha: SHA },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.resolveRef('main')).rejects.toMatchObject({
+      kind: 'permanent',
+      message: expect.stringContaining('not a commit SHA') as string,
+    });
+  });
 });
 
 describe('GitHubRepoProvider.getPushCredentials', () => {

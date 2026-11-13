@@ -9,7 +9,9 @@ import {
   isStatusLabel,
   laneLabel,
   laneOfLabel,
+  modelLabel,
   sameLabel,
+  stepOfModelLabel,
 } from '../github/labels.js';
 import { isApproveCommand } from './approve-command.js';
 import type { IgnoreReason } from './ignore-reason.js';
@@ -17,15 +19,19 @@ import type { IgnoreReason } from './ignore-reason.js';
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
 export type Needs = 'participant' | 'approver' | 'self';
 
-/** A label to revert: its canonical name and the key of its marker (spec 2, AW2). */
+/** A label to revert: its canonical name and the key of its marker (spec 2, AW2; spec 4 "Model labels"). */
 export interface Revert {
-  label: string; // `workflow: <lane>` or `grill: skip`
-  key: string; // `<lane>` or `grill-skip`
+  label: string; // `workflow: <lane>`, `grill: skip` or `model: max-<step>`
+  key: string; // `<lane>`, `grill-skip` or `model-max-<step>`
 }
 
-/** An ignore decided from the payload alone, or an input that still needs the sender's level. */
+/**
+ * An ignore decided from the payload alone, an input that still needs the sender's level, or an added model
+ * label (spec 4, plan P5): never a WorkflowInput; kept for an Approver, reverted for anyone lower.
+ */
 export type Classified =
   | { outcome: 'ignored'; reason: IgnoreReason }
+  | { outcome: 'model-label'; task: TaskRef; sender: string; revert: Revert }
   | {
       outcome: 'candidate';
       input: WorkflowInput;
@@ -198,7 +204,18 @@ function classifyLabel(
     );
   }
   if (isStatusLabel(label.name)) return ignored('status-label');
-  return ignored('other-label'); // also an unknown `workflow: *`
+  const step = stepOfModelLabel(label.name);
+  if (step) {
+    if (!added) return ignored('model-label');
+    const name = modelLabel(step);
+    return withIssue(env, payload, (task) => ({
+      outcome: 'model-label',
+      task,
+      sender: common.sender,
+      revert: { label: name, key: name.replace(': ', '-') },
+    }));
+  }
+  return ignored('other-label'); // also an unknown `workflow: *` or `model: *`
 }
 
 /** The `issue_comment` rows. The body is the text as it was created; later edits are ignored. */

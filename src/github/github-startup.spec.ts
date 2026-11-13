@@ -11,6 +11,7 @@ import {
 } from '../../test/fakes/fake-github-fetch.js';
 import { GitHubIssueProvider } from './github-issue.provider.js';
 import { GitHubStartup, GitHubStartupError } from './github-startup.js';
+import { BOT_LABELS, STEPS, modelLabel } from './labels.js';
 
 const INSTALLATION = `/repos/${TEST_REPO}/installation`;
 const LABELS = `/repos/${TEST_REPO}/labels`;
@@ -49,15 +50,35 @@ describe('GitHubStartup', () => {
 
     await startupWith(fake).onModuleInit();
 
-    expect(fake.to(LABELS, 'POST')).toHaveLength(11);
+    expect(fake.to(LABELS, 'POST')).toHaveLength(16);
     const lines = log.mock.calls.map(([line]) => String(line));
-    expect(lines).toContainEqual(expect.stringContaining('11 created'));
+    expect(lines).toContainEqual(
+      expect.stringContaining('16 created, 0 already present'),
+    );
     expect(lines).toContainEqual(
       expect.stringMatching(
         new RegExp(
           `test-app\\[bot\\].*${TEST_REPO}.*installation ${TEST_INSTALLATION_ID}`,
         ),
       ),
+    );
+  });
+
+  it('on a repo with the 11 labels of spec 3, creates only the five model labels', async () => {
+    const old = BOT_LABELS.filter((label) => !label.name.startsWith('model: '));
+    const fake = healthy().on('GET', LABELS, { body: old });
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+
+    await startupWith(fake).onModuleInit();
+
+    expect(old).toHaveLength(11);
+    expect(
+      fake
+        .to(LABELS, 'POST')
+        .map((request) => (request.body as { name: string }).name),
+    ).toEqual(STEPS.map(modelLabel));
+    expect(log.mock.calls.map(([line]) => String(line))).toContainEqual(
+      expect.stringContaining('5 created, 11 already present'),
     );
   });
 

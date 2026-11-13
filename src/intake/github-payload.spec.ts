@@ -357,12 +357,45 @@ describe('classifyGitHubEvent: issues labeled / unlabeled', () => {
     [issuesUnlabeled, 'workflow: unknown'],
     [issuesLabeled, 'workflow:full-sdd'],
     [issuesLabeled, 'grill: skip please'],
+    [issuesLabeled, 'model: turbo'],
+    [issuesUnlabeled, 'model: turbo'],
+    [issuesLabeled, 'model: max-qualityGate'],
+    [issuesLabeled, 'model:max-spec'],
   ])('%o %j → other-label', (build, label) => {
     expect(classify(build({ label }))).toEqual({
       outcome: 'ignored',
       reason: 'other-label',
     });
   });
+
+  it.each([
+    ['model: max-grill', 'model-max-grill'],
+    ['model: max-spec', 'model-max-spec'],
+    ['model: max-plan', 'model-max-plan'],
+    ['model: max-code', 'model-max-code'],
+    ['model: max-quality-gate', 'model-max-quality-gate'],
+    ['Model: Max-Quality-Gate', 'model-max-quality-gate'],
+  ])(
+    'labeled %j → model-label outcome, never an input; revert the canonical name with key %s',
+    (label, key) => {
+      expect(classify(issuesLabeled({ label }))).toEqual({
+        outcome: 'model-label',
+        task: task(),
+        sender: HUMAN,
+        revert: { label: label.toLowerCase(), key },
+      });
+    },
+  );
+
+  it.each(['model: max-spec', 'MODEL: MAX-CODE', 'model: max-quality-gate'])(
+    'unlabeled %j → model-label, nothing to look up',
+    (label) => {
+      expect(classify(issuesUnlabeled({ label }))).toEqual({
+        outcome: 'ignored',
+        reason: 'model-label',
+      });
+    },
+  );
 
   it("no label object (the sandbox's real delivery) → label-deleted", () => {
     expect(classify(issuesLabelDeleted())).toEqual({
@@ -403,6 +436,14 @@ describe('classifyGitHubEvent: issues labeled / unlabeled', () => {
       'a skip label with a string issue.number',
       withField(issuesLabeled({ label: 'grill: skip' }), 'issue.number', '7'),
     ],
+    [
+      'an added model label without issue.id',
+      withField(
+        issuesLabeled({ label: 'model: max-spec' }),
+        'issue.id',
+        undefined,
+      ),
+    ],
   ])('%s → invalid-payload', (_name, delivery) => {
     expect(classify(delivery)).toEqual({
       outcome: 'ignored',
@@ -422,6 +463,14 @@ describe('classifyGitHubEvent: issues labeled / unlabeled', () => {
     expect(
       classify(
         issuesUnlabeled({ label: 'workflow: code-only', sender: BOT_LOGIN }),
+      ),
+    ).toEqual({ outcome: 'ignored', reason: 'own-event' });
+  });
+
+  it("the bot's own revert of a model label → own-event, not model-label", () => {
+    expect(
+      classify(
+        issuesUnlabeled({ label: 'model: max-code', sender: BOT_LOGIN }),
       ),
     ).toEqual({ outcome: 'ignored', reason: 'own-event' });
   });

@@ -54,6 +54,40 @@ describe('InMemoryRepoProvider', () => {
     ).resolves.toBeNull();
   });
 
+  it('resolveRef: a seeded branch → a SHA where its files are read and listed, as they were then', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'skills/spec/SKILL.md', 'spec skill');
+
+    const sha = await repo.resolveRef('main');
+    repo.seedFile('main', 'skills/spec/notes.md', 'added later');
+    const moved = await repo.resolveRef('main');
+
+    expect(sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(moved).not.toBe(sha);
+    await expect(repo.resolveRef(sha)).resolves.toBe(sha);
+    await expect(repo.readFile(sha, 'skills/spec/SKILL.md')).resolves.toBe(
+      'spec skill',
+    );
+    await expect(repo.listFiles(sha, 'skills/spec')).resolves.toEqual([
+      { path: 'skills/spec/SKILL.md', size: 10, executable: false },
+    ]);
+    await expect(repo.listFiles(moved, 'skills/spec')).resolves.toHaveLength(2);
+  });
+
+  it('resolveRef: an unknown ref → permanent error naming it; failNext applies', async () => {
+    const repo = new InMemoryRepoProvider();
+
+    await expect(repo.resolveRef('no-such-branch')).rejects.toMatchObject({
+      kind: 'permanent',
+      message: expect.stringContaining('"no-such-branch"') as string,
+    });
+
+    repo.seedFile('main', 'README.md', 'x');
+    const down = new ProviderError('503', 'transient');
+    repo.failNext(down);
+    await expect(repo.resolveRef('main')).rejects.toBe(down);
+  });
+
   it('gives a new push token on every call', async () => {
     const repo = new InMemoryRepoProvider(REPO);
 

@@ -52,14 +52,21 @@ export class IntakeService {
       this.issues.isSelf(login),
     );
     if (classified.outcome === 'ignored') return classified;
+    if (classified.outcome === 'model-label')
+      return this.modelLabelAdded(classified);
 
     const { input, needs, subject, revert } = classified;
     if (needs === 'self') return accepted(input); // the bot's own PR event
 
     const level = await this.issues.getAccessLevel(subject, input.sender);
     if (allows(level, needs)) return accepted(input);
-    if (revert && level === 'none')
-      return this.revertLabel(subject, revert, input.sender);
+    if (revert && level === 'none') {
+      return this.revertLabel(
+        subject,
+        revert,
+        labelRevertComment(revert, input.sender),
+      );
+    }
     if (input.type === 'APPROVE' && level === 'participant')
       return this.denyApprove(input.task, input.comment.id, input.sender);
     return ignored('unauthorized');
@@ -81,6 +88,25 @@ export class IntakeService {
     return ignored('approve-denied');
   }
 
+  /** Spec 4 "Model labels → Intake" (LW7): one lookup; an Approver keeps the label, anyone lower has it reverted. */
+  private async modelLabelAdded({
+    task,
+    sender,
+    revert,
+  }: {
+    task: TaskRef;
+    sender: string;
+    revert: Revert;
+  }): Promise<IntakeResult> {
+    if ((await this.issues.getAccessLevel(task, sender)) === 'approver')
+      return ignored('model-label');
+    return this.revertLabel(
+      task,
+      revert,
+      modelLabelRevertComment(revert, sender),
+    );
+  }
+
   /**
    * Spec 2 "Label revert" (IA7): remove the label every time; post the comment once per issue and label.
    * A retry is safe: removing a label already gone succeeds, and the marker search stops a second comment.
@@ -88,12 +114,12 @@ export class IntakeService {
   private async revertLabel(
     task: TaskRef,
     revert: Revert,
-    sender: string,
+    comment: string,
   ): Promise<IntakeResult> {
     await this.issues.removeLabel(task, revert.label);
     const marker = labelRevertMarker(revert.key);
     if (!(await this.issues.findCommentByMarker(task, marker))) {
-      await this.issues.postComment(task, labelRevertComment(revert, sender));
+      await this.issues.postComment(task, comment);
     }
     return ignored('label-reverted');
   }
@@ -109,6 +135,15 @@ export function labelRevertComment(revert: Revert, login: string): string {
     `${labelRevertMarker(revert.key)}\n` +
     `The \`${revert.label}\` label was removed. It was added by \`${login}\`, who is not allowed to start or ` +
     'change a workflow on this repository (on GitHub that needs the Triage role or higher).'
+  );
+}
+
+/** Spec 4 "Model labels → Intake": fixed text, a validated login and a known label name; no `@` (IA11). */
+export function modelLabelRevertComment(revert: Revert, login: string): string {
+  return (
+    `${labelRevertMarker(revert.key)}\n` +
+    `The \`${revert.label}\` label was removed. It was added by \`${login}\`, who is not allowed to choose the ` +
+    'model on this repository (on GitHub that needs the Write role or higher).'
   );
 }
 

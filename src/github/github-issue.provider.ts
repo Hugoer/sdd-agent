@@ -9,14 +9,17 @@ import type {
   UnifiedTask,
 } from '../contracts/issue-provider.js';
 import { ProviderError } from '../contracts/provider-error.js';
+import type { StepName } from '../contracts/step.js';
 import { GitHubClient } from './github-client.js';
 import {
   BOT_LABELS,
   GRILL_SKIP,
   LANES,
+  STEPS,
   isHumanControlLabel,
   isStatusLabel,
   laneLabel,
+  modelLabel,
   sameLabel,
   statusLabel,
 } from './labels.js';
@@ -140,11 +143,11 @@ export class GitHubIssueProvider implements IssueProvider {
     }
   }
 
-  /** A4: only lane and modifier labels; a label already gone counts as removed. */
+  /** A4: only lane, modifier and model labels (spec 4); a label already gone counts as removed. */
   async removeLabel(task: TaskRef, label: string): Promise<void> {
     if (!isHumanControlLabel(label)) {
       throw new ProviderError(
-        `removeLabel refuses "${label}": only workflow: * and grill: skip`,
+        `removeLabel refuses "${label}": only workflow: *, grill: skip and the five model: max-* labels`,
         'permanent',
       );
     }
@@ -184,12 +187,17 @@ export class GitHubIssueProvider implements IssueProvider {
     return bot !== '' && login.toLowerCase() === bot.toLowerCase();
   }
 
-  readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean } {
+  readControls(task: UnifiedTask): {
+    lanes: Lane[];
+    grillSkip: boolean;
+    maxModelSteps: StepName[];
+  } {
     const has = (name: string) =>
       task.labels.some((label) => sameLabel(label, name));
     return {
       lanes: LANES.filter((lane) => has(laneLabel(lane))),
       grillSkip: has(GRILL_SKIP),
+      maxModelSteps: STEPS.filter((step) => has(modelLabel(step))),
     };
   }
 

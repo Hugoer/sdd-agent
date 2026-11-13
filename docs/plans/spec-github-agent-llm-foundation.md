@@ -144,7 +144,7 @@ minor has moved on, I stop and ask). `ChatModelFactory` and `CHAT_MODEL_FACTORY`
 
 **Verification:**
 - [x] `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` pass
-- [ ] Manual: Checkpoint 1
+- [x] Manual: Checkpoint 1
 
 **Dependencies:** T1, T2
 **Files:** `package.json`, `package-lock.json`, `src/llm/chat-model.factory.ts`,
@@ -168,7 +168,7 @@ the scripted fake factory, which is written here.
 
 **Verification:**
 - [x] `npm run typecheck`, `npm run lint`, `npm test` pass
-- [ ] Manual (real Google, your key in `.env`, `npm run dev` stopped): Checkpoint 1
+- [x] Manual (real Google, your key in `.env`, `npm run dev` stopped): Checkpoint 1
 
 **Dependencies:** T3
 **Files:** `src/llm/smoke/llm-smoke.ts`, `src/llm/smoke/run-llm-smoke.ts` (+ `.spec.ts`),
@@ -176,16 +176,19 @@ the scripted fake factory, which is written here.
 **Scope:** M
 
 ### Checkpoint 1 — Gemini answers
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] `npm run llm:smoke -- --try gemini-4-argon` → `PASS`: a duration, input and output tokens filled; the same
   for `--try gemini-4-carbon`
-- [ ] `--try no-such-model-xyz` → `FAIL` as `unknown-model` with status `404`
-- [ ] `GOOGLE_API_KEY=wrong-key-value npm run llm:smoke -- --try gemini-4-argon` → `FAIL` as `bad-api-key`; the
+  - 2026-11-12: argon `PASS`. Carbon gave no answer: `503` `UNAVAILABLE` twice, then nothing within 300 s, and a
+    plain request outside LangChain also got no answer in 300 s, so the cause is on Google's side. Both mapped to
+    `provider-unavailable` as specified. Carbon is tried again at Checkpoint 3 (`model: max-spec`).
+- [x] `--try no-such-model-xyz` → `FAIL` as `unknown-model` with status `404`
+- [x] `GOOGLE_API_KEY=wrong-key-value npm run llm:smoke -- --try gemini-4-argon` → `FAIL` as `bad-api-key`; the
   status it shows answers the spec's open build question. If Google answers differently, I correct the adapter's
   table and the spec's row before going on
-- [ ] `LANGSMITH_TRACING=true npm start` → the app refuses to start and says tracing must be off
-- [ ] No output of these runs holds the key
-- [ ] You review and commit
+- [x] `LANGSMITH_TRACING=true npm start` → the app refuses to start and says tracing must be off
+- [x] No output of these runs holds the key
+- [x] You review and commit
 
 ---
 
@@ -198,14 +201,14 @@ in total), and `labels.ts` gets the label ↔ step mapping. Spec 3's rule G10 is
 never edit or delete.
 
 **Acceptance criteria:**
-- [ ] 16 definitions; each model label maps to its step and back in any letter case; `model: turbo` maps to no
+- [x] 16 definitions; each model label maps to its step and back in any letter case; `model: turbo` maps to no
   step (unit)
-- [ ] A repo with the 11 old labels → 5 are created and the log says "5 created, 11 already present"; an empty
+- [x] A repo with the 11 old labels → 5 are created and the log says "5 created, 11 already present"; an empty
   repo → 16 (unit with scripted `fetch`, integration with the fake)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: Checkpoint 2's first row
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual: Checkpoint 2's first row
 
 **Dependencies:** T2
 **Files:** `src/github/labels.ts` (+ `.spec.ts`), `src/github/github-startup.spec.ts`,
@@ -219,14 +222,14 @@ accepts the five model labels next to `workflow: *` and `grill: skip`. The port 
 §4. The in-memory fake follows.
 
 **Acceptance criteria:**
-- [ ] `maxModelSteps` lists the steps whose label is on the task, in any letter case and in the fixed step order;
+- [x] `maxModelSteps` lists the steps whose label is on the task, in any letter case and in the fixed step order;
   `lanes` and `grillSkip` are unchanged (unit, adapter and fake)
-- [ ] `removeLabel` removes a model label; it still refuses `model: turbo`, a status label and any other label
+- [x] `removeLabel` removes a model label; it still refuses `model: turbo`, a status label and any other label
   (unit, adapter and fake)
-- [ ] `src/contracts/issue-provider.ts` matches overview §4
+- [x] `src/contracts/issue-provider.ts` matches overview §4
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T5
 **Files:** `src/contracts/issue-provider.ts`, `src/github/github-issue.provider.ts` (+ `.spec.ts`),
@@ -241,17 +244,17 @@ comment per issue and label with the spec's text and marker, ignored `label-reve
 no lookup. Any other `model: *` label → `other-label`.
 
 **Acceptance criteria:**
-- [ ] Classify: the four rows in any letter case; the bot's own `unlabeled` after a revert is still `own-event`
+- [x] Classify: the four rows in any letter case; the bot's own `unlabeled` after a revert is still `own-event`
   (unit)
-- [ ] Service: Approver → no label change, no comment; Participant and no access → removed, exactly one comment
+- [x] Service: Approver → no label change, no comment; Participant and no access → removed, exactly one comment
   across two events, the login in backticks without `@`; a failed lookup throws and nothing is removed or posted
   (unit)
-- [ ] End to end with the fakes: the rows end `IGNORED` with `model-label`, `label-reverted` or `other-label`;
+- [x] End to end with the fakes: the rows end `IGNORED` with `model-label`, `label-reverted` or `other-label`;
   spec 2's lane and skip rows pass unchanged (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: Checkpoint 2's label rows
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual: Checkpoint 2's label rows
 
 **Dependencies:** T6
 **Files:** `src/intake/ignore-reason.ts`, `src/intake/github-payload.ts` (+ `.spec.ts`),
@@ -265,14 +268,14 @@ request; an unknown ref is a permanent `ProviderError` naming it (spec 3, A3). F
 fixed SHA, and its files can be read and listed at that SHA.
 
 **Acceptance criteria:**
-- [ ] Adapter (scripted `fetch`): a branch → its 40-character SHA with one request; an unknown ref → permanent
+- [x] Adapter (scripted `fetch`): a branch → its 40-character SHA with one request; an unknown ref → permanent
   `ProviderError` naming the ref; an outage → transient (unit)
-- [ ] Fake: `resolveRef` of a seeded branch → a SHA; `readFile` and `listFiles` work at that SHA; an unknown ref →
+- [x] Fake: `resolveRef` of a seeded branch → a SHA; `readFile` and `listFiles` work at that SHA; an unknown ref →
   permanent error (unit)
-- [ ] `src/contracts/repo-provider.ts` matches overview §4
+- [x] `src/contracts/repo-provider.ts` matches overview §4
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/repo-provider.ts`, `src/github/github-repo.provider.ts` (+ `.spec.ts`),
@@ -286,14 +289,14 @@ transient `LlmError` is retried like a transient `ProviderError`; a permanent `L
 `StepConfigError` fail at once.
 
 **Acceptance criteria:**
-- [ ] A transient `LlmError`: 3 attempts, 5 s then 30 s, and at least `retryAfterSeconds` (integration, scripted
+- [x] A transient `LlmError`: 3 attempts, 5 s then 30 s, and at least `retryAfterSeconds` (integration, scripted
   processor)
-- [ ] A permanent `LlmError` and a `StepConfigError`: `FAILED` after 1 attempt, the message in `last_error`
+- [x] A permanent `LlmError` and a `StepConfigError`: `FAILED` after 1 attempt, the message in `last_error`
   (integration)
-- [ ] The existing worker tests pass untouched (`ProviderError` and any other error keep their rule)
+- [x] The existing worker tests pass untouched (`ProviderError` and any other error keep their rule)
 
 **Verification:**
-- [ ] `npm run test:integration` passes
+- [x] `npm run test:integration` passes
 
 **Dependencies:** T2
 **Files:** `src/events/events.worker.ts`, `src/events/event-processor.ts` (comment),
@@ -307,14 +310,14 @@ the values of `GITHUB_WEBHOOK_SECRET` and `GOOGLE_API_KEY` from config when they
 `SecretScanModule` exports the scanner.
 
 **Acceptance criteria:**
-- [ ] Each kind is found and replaced by `[REDACTED: <kind>]`; two hits in one text; a key block without its
+- [x] Each kind is found and replaced by `[REDACTED: <kind>]`; two hits in one text; a key block without its
   `END` line is redacted to the end of the text (unit)
-- [ ] Not matched: a 40-character SHA, a UUID, a delivery ID, a hidden marker, an own secret shorter than 8
+- [x] Not matched: a 40-character SHA, a UUID, a delivery ID, a hidden marker, an own secret shorter than 8
   characters (unit)
-- [ ] Test strings are built at run time: no token-shaped literal is written into the repo
+- [x] Test strings are built at run time: no token-shaped literal is written into the repo
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T1
 **Files:** `src/secret-scan/secret-patterns.ts`, `src/secret-scan/secret-scanner.ts` (+ `.spec.ts`),
@@ -328,14 +331,14 @@ the spec's "At the ports" table. Every other method passes through. One log line
 issue or pull request, the count and the kinds, never a value or the text.
 
 **Acceptance criteria:**
-- [ ] `postComment`, `openPullRequest` (title and body), `postPullRequestComment` and `setQualityResult`
+- [x] `postComment`, `openPullRequest` (title and body), `postPullRequestComment` and `setQualityResult`
   (summary) send the redacted text to the wrapped provider (unit)
-- [ ] Every other method reaches the wrapped provider with unchanged arguments and returns its result, `resolveRef`
+- [x] Every other method reaches the wrapped provider with unchanged arguments and returns its result, `resolveRef`
   and `readControls` included; a text without a secret is sent byte for byte (unit)
-- [ ] The log line holds no secret and no text (unit on the captured log)
+- [x] The log line holds no secret and no text (unit on the captured log)
 
 **Verification:**
-- [ ] `npm run typecheck`, `npm run lint`, `npm test` pass
+- [x] `npm run typecheck`, `npm run lint`, `npm test` pass
 
 **Dependencies:** T6, T8, T10
 **Files:** `src/secret-scan/scanning-issue.provider.ts` (+ `.spec.ts`),
@@ -349,15 +352,15 @@ wrappers around the adapters (LW4, P4). The test harness replaces the adapter cl
 comment on `postComment` changes as in overview §4.
 
 **Acceptance criteria:**
-- [ ] In the booted app a comment with a token-shaped string, posted through `ISSUE_PROVIDER`, arrives redacted
+- [x] In the booted app a comment with a token-shaped string, posted through `ISSUE_PROVIDER`, arrives redacted
   at the fake; the same for a pull request body through `REPO_PROVIDER` (integration)
-- [ ] Spec 2's revert comment and `/approve` reply arrive byte for byte unchanged, and the whole existing
+- [x] Spec 2's revert comment and `/approve` reply arrive byte for byte unchanged, and the whole existing
   integration suite passes through the wrappers (integration)
-- [ ] `grep`: no module provides a port token with an unwrapped adapter
+- [x] `grep`: no module provides a port token with an unwrapped adapter
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
-- [ ] Manual: Checkpoint 2's `github:smoke` row
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] Manual: Checkpoint 2's `github:smoke` row
 
 **Dependencies:** T11
 **Files:** `src/github/github.module.ts`, `src/contracts/issue-provider.ts` (comment), `test/app.ts`,
@@ -365,15 +368,16 @@ comment on `postComment` changes as in overview §4.
 **Scope:** M
 
 ### Checkpoint 2 — Model labels and the scanner on real GitHub
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] The app restarted (my instance on port 3000): the log says "5 created, 11 already present"; the Labels page
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] The app restarted (my instance on port 3000): the log says "5 created, 11 already present"; the Labels page
   shows the five `model: max-*` labels with the spec's color and descriptions; no other label changed
-- [ ] You add `model: max-spec` to a test issue → row `IGNORED` `model-label`, the label stays, NO comment; you
+- [x] You add `model: max-spec` to a test issue → row `IGNORED` `model-label`, the label stays, NO comment; you
   remove it → row `IGNORED` `model-label`
-- [ ] You add `model: max-code`; I send the signed `labeled` request with sender `octocat` → the label is
+- [x] You add `model: max-code`; I send the signed `labeled` request with sender `octocat` → the label is
   removed, one comment naming `octocat` in backticks, row `label-reverted`; the bot's own `unlabeled` row is
   `own-event` and nothing follows it
-- [ ] `npm run github:smoke -- --issue N` → every line `PASS` (the ports now go through the scanner)
+- [x] `npm run github:smoke -- --issue N` → every line `PASS` (the ports now go through the scanner)
+  - 2026-11-13, on sandbox issue #14 (the test issue for the rest of this build).
 - [ ] You review and commit
 
 ---

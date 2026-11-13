@@ -139,6 +139,7 @@ describe('GitHubIssueProvider.readControls', () => {
     expect(issues.readControls(task(['bug']))).toEqual({
       lanes: [],
       grillSkip: false,
+      maxModelSteps: [],
     });
   });
 
@@ -146,6 +147,7 @@ describe('GitHubIssueProvider.readControls', () => {
     expect(issues.readControls(task(['workflow: spec-code']))).toEqual({
       lanes: ['spec-code'],
       grillSkip: false,
+      maxModelSteps: [],
     });
   });
 
@@ -162,11 +164,32 @@ describe('GitHubIssueProvider.readControls', () => {
     ).toEqual({
       lanes: ['full-sdd'],
       grillSkip: true,
+      maxModelSteps: [],
     });
   });
 
   it('ignores an unknown workflow label', () => {
     expect(issues.readControls(task(['workflow: yolo'])).lanes).toEqual([]);
+  });
+
+  it('lists the steps of the model labels in the fixed step order, in any letter case', () => {
+    expect(
+      issues.readControls(
+        task([
+          'model: max-quality-gate',
+          'Model: Max-Spec',
+          'model: turbo',
+          'model: max-qualityGate',
+          'workflow: spec-code',
+          'MODEL: MAX-GRILL',
+          'grill: skip',
+        ]),
+      ),
+    ).toEqual({
+      lanes: ['spec-code'],
+      grillSkip: true,
+      maxModelSteps: ['grill', 'spec', 'qualityGate'],
+    });
   });
 });
 
@@ -473,20 +496,24 @@ describe('GitHubIssueProvider.setStatusLabel', () => {
 });
 
 describe('GitHubIssueProvider.removeLabel', () => {
-  it.each(['workflow: full-sdd', 'Workflow: Code-Only', 'grill: skip'])(
-    'removes "%s" with one request',
-    async (label) => {
-      const fake = new FakeGitHubFetch();
-      const issues = await providerWith(fake);
-      fake.on('DELETE', /\/issues\/5\/labels\/.+/, { body: [] });
+  it.each([
+    'workflow: full-sdd',
+    'Workflow: Code-Only',
+    'grill: skip',
+    'model: max-grill',
+    'model: max-spec',
+    'model: max-plan',
+    'model: max-code',
+    'Model: Max-Quality-Gate',
+  ])('removes "%s" with one request', async (label) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('DELETE', /\/issues\/5\/labels\/.+/, { body: [] });
 
-      await issues.removeLabel(task5, label);
+    await issues.removeLabel(task5, label);
 
-      expect(labelRequests(fake)).toEqual([
-        `DELETE ${ISSUE_5_LABELS}/${label}`,
-      ]);
-    },
-  );
+    expect(labelRequests(fake)).toEqual([`DELETE ${ISSUE_5_LABELS}/${label}`]);
+  });
 
   it('succeeds when the label is not on the issue (404)', async () => {
     const fake = new FakeGitHubFetch();
@@ -501,18 +528,23 @@ describe('GitHubIssueProvider.removeLabel', () => {
     ).resolves.toBeUndefined();
   });
 
-  it.each(['status: draft', 'bug', 'workflow', 'grill: skipped'])(
-    'refuses "%s" without a request',
-    async (label) => {
-      const fake = new FakeGitHubFetch();
-      const issues = await providerWith(fake);
+  it.each([
+    'status: draft',
+    'bug',
+    'workflow',
+    'grill: skipped',
+    'model: turbo',
+    'model: max-',
+    'model: max-qualityGate',
+  ])('refuses "%s" without a request', async (label) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
 
-      await expect(issues.removeLabel(task5, label)).rejects.toMatchObject({
-        kind: 'permanent',
-      });
-      expect(fake.to(/\/issues/)).toHaveLength(0);
-    },
-  );
+    await expect(issues.removeLabel(task5, label)).rejects.toMatchObject({
+      kind: 'permanent',
+    });
+    expect(fake.to(/\/issues/)).toHaveLength(0);
+  });
 
   it('throws on any other failure', async () => {
     const fake = new FakeGitHubFetch();

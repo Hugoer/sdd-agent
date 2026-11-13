@@ -14,8 +14,9 @@ export const IGNORE_REASONS = [
   'comment-deleted', // a comment was deleted
   'not-bot-pr', // a pull request the bot didn't open
   'unauthorized', // the sender's level is too low; nothing was done
-  'label-reverted', // a lane or skip label added with no access was removed
+  'label-reverted', // a lane or skip label added with no access, or a model label added below Approver, was removed
   'approve-denied', // a Participant's /approve was answered
+  'model-label', // a `model: max-*` label added by an Approver, or removed (spec 4)
 ] as const;
 
 export type IgnoreReason = (typeof IGNORE_REASONS)[number];

@@ -30,6 +30,9 @@ export interface RepoProvider {
   /** every regular file under dir at a ref, at any depth (a step skill is its whole directory);
    *  null = no such directory */
   listFiles(ref: string, dir: string): Promise<RepoFile[] | null>;
+  /** the commit SHA a branch or ref points to now, so a skill is read at one commit; unknown ref →
+   *  permanent ProviderError (added 2026-11-12, spec 4) */
+  resolveRef(ref: string): Promise<string>;
   openPullRequest(
     branch: string,
     base: string,

@@ -322,6 +322,109 @@ describe('IntakeService: label revert (a sender with no access adds a lane or sk
   });
 });
 
+describe('IntakeService: model labels (spec 4, only an Approver may add one)', () => {
+  function seeded(labels: string[]) {
+    const ctx = setup();
+    const task = ctx.issues.seedIssue({ number: 5, id: '6335695005', labels });
+    return { ...ctx, task };
+  }
+  const added = (label: string, sender = 'octocat') =>
+    storedEvent(issuesLabeled({ number: 5, label, sender }));
+  const CODE_TEXT =
+    '<!-- sdd-agent:label-revert:model-max-code -->\n' +
+    'The `model: max-code` label was removed. It was added by `octocat`, who is not allowed to choose the ' +
+    'model on this repository (on GitHub that needs the Write role or higher).';
+
+  it('an Approver → model-label after one lookup; the label stays and nothing is posted', async () => {
+    const { intake, issues, task } = seeded(['model: max-spec']);
+    issues.setAccessLevel('octocat', 'approver');
+
+    await expect(intake.intake(added('model: max-spec'))).resolves.toEqual({
+      outcome: 'ignored',
+      reason: 'model-label',
+    });
+
+    expect(issues.calls).toEqual([
+      { method: 'getAccessLevel', args: [task, 'octocat'] },
+    ]);
+    expect(issues.labelsOf(task)).toEqual(['model: max-spec']);
+    expect(issues.commentsOf(task)).toEqual([]);
+  });
+
+  it.each<AccessLevel>(['participant', 'none'])(
+    '%s → removed (canonical name), one comment with the spec text, label-reverted',
+    async (level) => {
+      const { intake, issues, task } = seeded(['model: max-code', 'bug']);
+      issues.setAccessLevel('octocat', level);
+
+      await expect(intake.intake(added('Model: Max-Code'))).resolves.toEqual({
+        outcome: 'ignored',
+        reason: 'label-reverted',
+      });
+
+      expect(issues.calls).toEqual([
+        { method: 'getAccessLevel', args: [task, 'octocat'] },
+        { method: 'removeLabel', args: [task, 'model: max-code'] },
+        {
+          method: 'findCommentByMarker',
+          args: [task, '<!-- sdd-agent:label-revert:model-max-code -->'],
+        },
+        { method: 'postComment', args: [task, CODE_TEXT] },
+      ]);
+      expect(issues.labelsOf(task)).toEqual(['bug']);
+      expect(CODE_TEXT).not.toContain('@');
+    },
+  );
+
+  it('two events for the same label → removed twice, exactly one comment; another step → its own comment', async () => {
+    const { intake, issues, task } = seeded(['model: max-code']);
+    issues.setAccessLevel('octocat', 'participant');
+    await intake.intake(added('model: max-code'));
+    issues.seedIssue({
+      number: 5,
+      id: '6335695005',
+      labels: ['model: max-code'],
+    });
+
+    await intake.intake(added('model: max-code'));
+
+    expect(issues.labelsOf(task)).toEqual([]);
+    expect(issues.commentsOf(task).map((c) => c.body)).toEqual([CODE_TEXT]);
+
+    await intake.intake(added('model: max-quality-gate'));
+    expect(issues.commentsOf(task).map((c) => c.body)).toEqual([
+      CODE_TEXT,
+      expect.stringMatching(
+        /^<!-- sdd-agent:label-revert:model-max-quality-gate -->\nThe `model: max-quality-gate` label was removed\./,
+      ) as string,
+    ]);
+  });
+
+  it('a failed lookup throws unchanged; nothing is removed or posted', async () => {
+    const { intake, issues, task } = seeded(['model: max-code']);
+    const error = new ProviderError('GitHub getAccessLevel → 503', 'transient');
+    issues.failNext(error);
+
+    await expect(intake.intake(added('model: max-code'))).rejects.toBe(error);
+
+    expect(issues.calls.map((call) => call.method)).toEqual(['getAccessLevel']);
+    expect(issues.labelsOf(task)).toEqual(['model: max-code']);
+    expect(issues.commentsOf(task)).toEqual([]);
+  });
+
+  it('removed → model-label with no provider call', async () => {
+    const { intake, issues } = setup();
+
+    await expect(
+      intake.intake(
+        storedEvent(issuesUnlabeled({ number: 5, label: 'model: max-spec' })),
+      ),
+    ).resolves.toEqual({ outcome: 'ignored', reason: 'model-label' });
+
+    expect(issues.calls).toEqual([]);
+  });
+});
+
 describe('IntakeService: COMMENT (Participant) and APPROVE (Approver)', () => {
   const comment = (body: string, sender = HUMAN) =>
     storedEvent(issueCommentCreated({ body, sender, number: 4 }));

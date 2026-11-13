@@ -1,4 +1,5 @@
 // Overview §4 (normative). Types and the DI token only; GitHub implementation: src/github.
+import type { StepName } from './step.js';
 
 export type Platform = 'GITHUB' | 'JIRA' | 'AZURE_DEVOPS';
 export type Lane = 'full-sdd' | 'spec-code' | 'code-only';
@@ -36,7 +37,8 @@ export interface CommentRef {
 
 export interface IssueProvider {
   getTaskDetails(task: TaskRef): Promise<UnifiedTask>;
-  /** body is already secret-scanned and carries its hidden marker */
+  /** body carries its hidden marker; the port redacts secrets before sending (spec 4, 2026-11-12;
+   *  was "body is already secret-scanned") */
   postComment(task: TaskRef, body: string): Promise<CommentRef>;
   getComment(
     task: TaskRef,
@@ -49,7 +51,8 @@ export interface IssueProvider {
   ): Promise<CommentRef | null>;
   /** projection of Task.status: sets this status label and removes any other `status: *` label */
   setStatusLabel(task: TaskRef, status: TaskStatus): Promise<void>;
-  /** only to revert a lane/modifier label added by a sender with no access (D21) */
+  /** only to revert a lane/modifier label added by a sender with no access (D21),
+   *  or a model label added below Approver (D23, 2026-11-12) */
   removeLabel(task: TaskRef, label: string): Promise<void>;
   /** the user's level on the task's repo or project, asked on every call (spec 2, 2026-11-11).
    *  GitHub: Write or higher → 'approver', Triage → 'participant', anything else or unknown user → 'none' */
@@ -57,8 +60,13 @@ export interface IssueProvider {
   /** true when login is the bot's own account (added 2026-11-11, spec 2) */
   isSelf(login: string): boolean;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
-  readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean };
-  /** creates missing status / workflow / modifier labels (startup) */
+  readControls(task: UnifiedTask): {
+    lanes: Lane[];
+    grillSkip: boolean;
+    maxModelSteps: StepName[];
+  };
+  // maxModelSteps: the steps whose `model: max-*` label is on the task (D23, spec 4, 2026-11-12)
+  /** creates missing status / workflow / modifier / model labels (startup) */
   ensureLabels(): Promise<void>;
 }
 

@@ -8,6 +8,7 @@ import {
   it,
   vi,
 } from 'vitest';
+import { LlmError, StepConfigError } from '../src/contracts/llm-error.js';
 import { ProviderError } from '../src/contracts/provider-error.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import { resetDatabase } from './db.js';
@@ -224,6 +225,91 @@ describe('EventsWorker (manual drain)', () => {
       expect(r).toMatchObject({ status: 'PENDING', attempts: 1 });
       expect(r.availableAt.getTime() - before).toBeGreaterThanOrEqual(waitMs);
       expect(r.availableAt.getTime() - before).toBeLessThan(waitMs + 1_000);
+    },
+  );
+
+  it('a transient LlmError: 3 attempts, 5 s then 30 s and at least retryAfterSeconds, then FAILED (spec 4)', async () => {
+    const event = await insertEvent();
+    const rateLimited = () =>
+      new LlmError(
+        'Google rate-limited model `m` (HTTP 429, RESOURCE_EXHAUSTED)',
+        'transient',
+        'rate-limited',
+        { retryAfterSeconds: 60 },
+      );
+    const down = () =>
+      new LlmError(
+        'Google could not serve model `m` (HTTP 503, UNAVAILABLE)',
+        'transient',
+        'provider-unavailable',
+      );
+
+    processor.failNext(rateLimited());
+    let before = Date.now();
+    await t.worker.drainOnce();
+    let r = await row(event.id);
+    expect(r).toMatchObject({ status: 'PENDING', attempts: 1 });
+    expect(r.availableAt.getTime() - before).toBeGreaterThanOrEqual(60_000);
+    expect(r.availableAt.getTime() - before).toBeLessThan(61_000);
+
+    await makeDue(event.id);
+    processor.failNext(down());
+    before = Date.now();
+    await t.worker.drainOnce();
+    r = await row(event.id);
+    expect(r).toMatchObject({ status: 'PENDING', attempts: 2 });
+    expect(r.availableAt.getTime() - before).toBeGreaterThanOrEqual(30_000);
+    expect(r.availableAt.getTime() - before).toBeLessThan(31_000);
+
+    await makeDue(event.id);
+    processor.failNext(down());
+    await t.worker.drainOnce();
+    expect(await row(event.id)).toMatchObject({
+      status: 'FAILED',
+      attempts: 3,
+      lastError: 'Google could not serve model `m` (HTTP 503, UNAVAILABLE)',
+    });
+  });
+
+  it('a transient LlmError without a delay → next attempt in 5 s', async () => {
+    const event = await insertEvent();
+    processor.failNext(
+      new LlmError('no answer in time', 'transient', 'provider-unavailable'),
+    );
+
+    const before = Date.now();
+    await t.worker.drainOnce();
+
+    const r = await row(event.id);
+    expect(r).toMatchObject({ status: 'PENDING', attempts: 1 });
+    expect(r.availableAt.getTime() - before).toBeGreaterThanOrEqual(5_000);
+    expect(r.availableAt.getTime() - before).toBeLessThan(6_000);
+  });
+
+  it.each<[string, Error]>([
+    [
+      'a permanent LlmError',
+      new LlmError(
+        'Google refused the key (HTTP 400, INVALID_ARGUMENT, API_KEY_INVALID): check GOOGLE_API_KEY',
+        'permanent',
+        'bad-api-key',
+      ),
+    ],
+    ['a StepConfigError', new StepConfigError('missing skills: plan, code')],
+  ])(
+    '%s → FAILED after the first attempt, its message in lastError (spec 4)',
+    async (_name, error) => {
+      const event = await insertEvent();
+      processor.failNext(error);
+
+      await t.worker.drainOnce();
+
+      expect(await row(event.id)).toMatchObject({
+        status: 'FAILED',
+        attempts: 1,
+        lastError: error.message,
+        processedAt: expect.any(Date) as Date,
+      });
     },
   );
 

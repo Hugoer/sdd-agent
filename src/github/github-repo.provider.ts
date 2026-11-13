@@ -11,6 +11,8 @@ import { GitHubClient } from './github-client.js';
 
 /** GitHub's JSON form of the Contents API carries files up to 1 MB (plan P8). */
 const MAX_FILE_BYTES = 1024 * 1024;
+/** SHA-1, or SHA-256 in a repository that uses it. */
+const COMMIT_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const QUALITY_GATE = 'Quality Gate';
 
 /** RepoProvider on GitHub (spec 3). Filled in task by task (T12–T14). */
@@ -130,6 +132,42 @@ export class GitHubRepoProvider implements RepoProvider {
         executable: entry.mode === '100755',
       }))
       .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  }
+
+  /**
+   * LW2: one request; GitHub's `sha` media type answers the bare SHA. An unknown branch or commit answers 422
+   * ("No commit found for SHA"); every other failure keeps the client's error.
+   */
+  async resolveRef(ref: string): Promise<string> {
+    const { owner, repo } = this.github;
+    let data: unknown;
+    try {
+      ({ data } = await this.github.request((octokit) =>
+        octokit.request('GET /repos/{owner}/{repo}/commits/{ref}', {
+          owner,
+          repo,
+          ref,
+          mediaType: { format: 'sha' },
+        }),
+      ));
+    } catch (error) {
+      if (error instanceof ProviderError && error.detail.status === 422) {
+        throw new ProviderError(
+          `resolveRef: no branch or commit "${ref}" in ${this.github.targetRepo} (422)`,
+          'permanent',
+          { status: 422 },
+        );
+      }
+      throw error;
+    }
+    const sha = typeof data === 'string' ? data.trim() : '';
+    if (!COMMIT_SHA.test(sha)) {
+      throw new ProviderError(
+        `resolveRef "${ref}": GitHub's answer is not a commit SHA`,
+        'permanent',
+      );
+    }
+    return sha;
   }
 
   /** A normal PR. No lookup first: a retry runs findPullRequest before this (overview §7 rule 7). */

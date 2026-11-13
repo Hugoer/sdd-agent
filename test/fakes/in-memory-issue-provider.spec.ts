@@ -98,21 +98,32 @@ describe('InMemoryIssueProvider', () => {
     expect(issues.labelsOf(task)).toEqual(['bug', 'status: grilling']);
   });
 
-  it('removes only workflow and grill-skip labels; a missing one is fine', async () => {
+  it('removes only workflow, grill-skip and model labels; a missing one is fine', async () => {
     const issues = new InMemoryIssueProvider(REPO);
     const task = issues.seedIssue({
       number: 1,
-      labels: ['bug', 'grill: skip', 'workflow: full-sdd'],
+      labels: [
+        'bug',
+        'grill: skip',
+        'workflow: full-sdd',
+        'model: max-code',
+        'model: max-quality-gate',
+        'model: turbo',
+      ],
     });
 
     await issues.removeLabel(task, 'grill: skip');
     await issues.removeLabel(task, 'grill: skip');
     await issues.removeLabel(task, 'workflow: full-sdd');
-    await expect(issues.removeLabel(task, 'bug')).rejects.toMatchObject({
-      kind: 'permanent',
-    });
+    await issues.removeLabel(task, 'Model: Max-Code');
+    await issues.removeLabel(task, 'model: max-quality-gate');
+    for (const refused of ['bug', 'model: turbo', 'status: draft']) {
+      await expect(issues.removeLabel(task, refused)).rejects.toMatchObject({
+        kind: 'permanent',
+      });
+    }
 
-    expect(issues.labelsOf(task)).toEqual(['bug']);
+    expect(issues.labelsOf(task)).toEqual(['bug', 'model: turbo']);
   });
 
   it('deleteComment removes a comment, so the marker search no longer finds it', async () => {
@@ -186,7 +197,7 @@ describe('InMemoryIssueProvider', () => {
     expect(issues.calls).toEqual([]);
   });
 
-  it('reads lanes in fixed order, the skip modifier, and ignores case and unknown lanes', () => {
+  it('reads lanes and model steps in fixed order, the skip modifier, and ignores case and unknown labels', () => {
     const issues = new InMemoryIssueProvider(REPO);
     const task = (labels: string[]) => ({
       platform: 'GITHUB' as const,
@@ -202,6 +213,7 @@ describe('InMemoryIssueProvider', () => {
     expect(issues.readControls(task([]))).toEqual({
       lanes: [],
       grillSkip: false,
+      maxModelSteps: [],
     });
     expect(
       issues.readControls(
@@ -212,7 +224,26 @@ describe('InMemoryIssueProvider', () => {
           'GRILL: SKIP',
         ]),
       ),
-    ).toEqual({ lanes: ['full-sdd', 'code-only'], grillSkip: true });
+    ).toEqual({
+      lanes: ['full-sdd', 'code-only'],
+      grillSkip: true,
+      maxModelSteps: [],
+    });
+    expect(
+      issues.readControls(
+        task([
+          'model: max-quality-gate',
+          'Model: Max-Spec',
+          'model: turbo',
+          'MODEL: MAX-GRILL',
+          'workflow: spec-code',
+        ]),
+      ),
+    ).toEqual({
+      lanes: ['spec-code'],
+      grillSkip: false,
+      maxModelSteps: ['grill', 'spec', 'qualityGate'],
+    });
   });
 
   it('creates the repo labels once', async () => {
@@ -221,7 +252,7 @@ describe('InMemoryIssueProvider', () => {
     await issues.ensureLabels();
     await issues.ensureLabels();
 
-    expect(issues.repoLabels).toHaveLength(11);
+    expect(issues.repoLabels).toHaveLength(16);
   });
 
   it('records every call and fails the next one on demand', async () => {

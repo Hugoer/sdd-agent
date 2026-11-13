@@ -13,12 +13,15 @@ export interface RecordedRequest {
   path: string;
   query: URLSearchParams;
   authorization: string;
+  accept: string;
   body: unknown;
 }
 
 export interface ScriptedResponse {
   status?: number;
   body?: unknown;
+  /** A body sent as it is (not JSON), e.g. GitHub's `sha` media type; `headers` gives its content type. */
+  text?: string;
   headers?: Record<string, string>;
 }
 
@@ -65,6 +68,7 @@ export class FakeGitHubFetch {
       path: url.pathname,
       query: url.searchParams,
       authorization: headers.get('authorization') ?? '',
+      accept: headers.get('accept') ?? '',
       body:
         typeof init?.body === 'string'
           ? (JSON.parse(init.body) as unknown)
@@ -114,8 +118,10 @@ function matches(path: string | RegExp, actual: string): boolean {
 function respond({
   status = 200,
   body,
+  text,
   headers = {},
 }: ScriptedResponse): Response {
+  if (text !== undefined) return new Response(text, { status, headers });
   if (status === 204 || body === undefined)
     return new Response(null, { status, headers });
   return new Response(JSON.stringify(body), {

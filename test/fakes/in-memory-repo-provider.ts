@@ -1,5 +1,6 @@
 // In-memory RepoProvider for specs 4 and later (spec 3, G13). Same rules as the GitHub adapter,
 // no network. Files are seeded per ref; a ref with no seeded file does not exist.
+import { createHash } from 'node:crypto';
 import type { CommentRef } from '../../src/contracts/issue-provider.js';
 import { ProviderError } from '../../src/contracts/provider-error.js';
 import type {
@@ -108,6 +109,32 @@ export class InMemoryRepoProvider implements RepoProvider {
         }))
         .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
       return found.length > 0 ? found : null;
+    });
+  }
+
+  /**
+   * The SHA of what the ref holds now: a hash of its files, so seeding a file moves the branch to a new SHA.
+   * The files are kept under the SHA as they are now, like a commit; a SHA resolves to itself.
+   */
+  resolveRef(ref: string): Promise<string> {
+    return this.call('resolveRef', [ref], () => {
+      const files = this.refs.get(ref);
+      if (!files) {
+        throw new ProviderError(
+          `resolveRef: no branch or commit "${ref}" in ${this.repo} (422)`,
+          'permanent',
+          { status: 422 },
+        );
+      }
+      const sha = createHash('sha1')
+        .update(
+          JSON.stringify(
+            [...files.entries()].sort(([a], [b]) => (a < b ? -1 : 1)),
+          ),
+        )
+        .digest('hex');
+      if (!this.refs.has(sha)) this.refs.set(sha, new Map(files));
+      return sha;
     });
   }
 

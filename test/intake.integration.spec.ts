@@ -6,6 +6,7 @@ import {
   describe,
   expect,
   it,
+  onTestFinished,
   vi,
 } from 'vitest';
 import { Logger } from '@nestjs/common';
@@ -291,6 +292,93 @@ describe('intake (signed webhooks → rows)', () => {
         'findCommentByMarker',
         'postComment',
       ]);
+    });
+  });
+
+  describe('model label events (spec 4)', () => {
+    it('an Approver adds model: max-spec → IGNORED model-label, the label stays, nothing posted; removing it → model-label with no call', async () => {
+      t.issues.setAccessLevel(HUMAN, 'approver');
+      const task = t.issues.seedIssue({
+        number: 71,
+        labels: ['model: max-spec'],
+      });
+
+      const added = await deliver(
+        issuesLabeled({ number: 71, label: 'model: max-spec' }),
+      );
+
+      expect(added).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'model-label',
+        attempts: 1,
+      });
+      expect(t.issues.labelsOf(task)).toEqual(['model: max-spec']);
+      expect(t.issues.commentsOf(task)).toEqual([]);
+      expect(t.issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+      ]);
+
+      t.issues.calls.length = 0;
+      const removed = await deliver(
+        issuesUnlabeled({ number: 71, label: 'model: max-spec' }),
+      );
+      expect(removed).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'model-label',
+      });
+      expect(t.issues.calls).toEqual([]);
+    });
+
+    it.each([
+      ['octocat', 'none', 72],
+      ['a-triager', 'participant', 73],
+    ] as const)(
+      '%s (%s) adds model: max-code twice → removed both times, exactly one comment, IGNORED label-reverted',
+      async (sender, level, number) => {
+        t.issues.setAccessLevel(sender, level);
+        onTestFinished(() => t.issues.setAccessLevel(sender, 'none'));
+        const labels = ['model: max-code', 'bug'];
+        const task = t.issues.seedIssue({ number, labels });
+
+        const first = await deliver(
+          issuesLabeled({ number, label: 'model: max-code', sender }),
+        );
+        t.issues.seedIssue({ number, labels });
+        const second = await deliver(
+          issuesLabeled({ number, label: 'model: max-code', sender }),
+        );
+
+        for (const row of [first, second]) {
+          expect(row).toMatchObject({
+            status: 'IGNORED',
+            ignoreReason: 'label-reverted',
+            attempts: 1,
+          });
+        }
+        expect(t.issues.labelsOf(task)).toEqual(['bug']);
+        expect(t.issues.commentsOf(task)).toEqual([
+          {
+            id: expect.any(String) as string,
+            byBot: true,
+            body:
+              '<!-- sdd-agent:label-revert:model-max-code -->\n' +
+              `The \`model: max-code\` label was removed. It was added by \`${sender}\`, who is not allowed to ` +
+              'choose the model on this repository (on GitHub that needs the Write role or higher).',
+          },
+        ]);
+      },
+    );
+
+    it.each([
+      [issuesLabeled({ label: 'model: turbo' }), 'other-label'],
+      [issuesUnlabeled({ label: 'model: turbo' }), 'other-label'],
+      [issuesUnlabeled({ label: 'Model: Max-Plan' }), 'model-label'],
+    ])('%# → IGNORED %s, no provider call', async (delivery, reason) => {
+      expect(await deliver(delivery)).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: reason,
+      });
+      expect(t.issues.calls).toEqual([]);
     });
   });
 

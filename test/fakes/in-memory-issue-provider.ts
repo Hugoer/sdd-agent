@@ -10,6 +10,7 @@ import type {
   UnifiedTask,
 } from '../../src/contracts/issue-provider.js';
 import { ProviderError } from '../../src/contracts/provider-error.js';
+import type { StepName } from '../../src/contracts/step.js';
 
 const STATUSES: TaskStatus[] = [
   'draft',
@@ -21,10 +22,19 @@ const STATUSES: TaskStatus[] = [
   'needs-human',
 ];
 const LANES: Lane[] = ['full-sdd', 'spec-code', 'code-only'];
+/** Spec 4 "Model labels", in the fixed step order. */
+const MODEL_LABELS: [StepName, string][] = [
+  ['grill', 'model: max-grill'],
+  ['spec', 'model: max-spec'],
+  ['plan', 'model: max-plan'],
+  ['code', 'model: max-code'],
+  ['qualityGate', 'model: max-quality-gate'],
+];
 const BOT_LABELS = [
   ...STATUSES.map((status) => `status: ${status}`),
   ...LANES.map((lane) => `workflow: ${lane}`),
   'grill: skip',
+  ...MODEL_LABELS.map(([, label]) => label),
 ];
 
 interface FakeIssue {
@@ -191,7 +201,11 @@ export class InMemoryIssueProvider implements IssueProvider {
   removeLabel(task: TaskRef, label: string): Promise<void> {
     return this.call('removeLabel', [task, label], () => {
       const name = label.toLowerCase();
-      if (!name.startsWith('workflow: ') && name !== 'grill: skip') {
+      const allowed =
+        name.startsWith('workflow: ') ||
+        name === 'grill: skip' ||
+        MODEL_LABELS.some(([, model]) => model === name);
+      if (!allowed) {
         throw new ProviderError(`removeLabel refuses "${label}"`, 'permanent');
       }
       const issue = this.issue(task);
@@ -212,11 +226,18 @@ export class InMemoryIssueProvider implements IssueProvider {
     return same(login, this.botLogin);
   }
 
-  readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean } {
+  readControls(task: UnifiedTask): {
+    lanes: Lane[];
+    grillSkip: boolean;
+    maxModelSteps: StepName[];
+  } {
     const names = task.labels.map((label) => label.toLowerCase());
     return {
       lanes: LANES.filter((lane) => names.includes(`workflow: ${lane}`)),
       grillSkip: names.includes('grill: skip'),
+      maxModelSteps: MODEL_LABELS.filter(([, label]) =>
+        names.includes(label),
+      ).map(([step]) => step),
     };
   }
 
