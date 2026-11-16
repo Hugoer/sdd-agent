@@ -2,7 +2,10 @@
 
 > **Created:** 2026-11-09 · **Status:** approved 2026-11-09 · amended 2026-11-11 (spec 2: D19–D21, approved with
 > that spec on 2026-11-11) · amended 2026-11-12 (spec 4 interview: D22, D23; spec 4's
-> contract changes in §1, §4 and §6, approved with that spec on 2026-11-12)
+> contract changes in §1, §4 and §6, approved with that spec on 2026-11-12) · amended 2026-11-16 (spec 5
+> interview: D24–D26, D1 and D7 annotated, §3 R1/R4/R5 and rows 3, 8, 28, 30, 31, §4 and §6; then its
+> follow-up interview: D6 and D26 annotated, rows 6, 7, 28 and the note under row 31; approved with that spec on
+> 2026-11-16)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#10) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -39,7 +42,8 @@ comments, without acting under the developer's identity or touching their checko
 ## Decisions (interview 2026-11-09, all confirmed)
 
 - **D1 `Task` holds the workflow state.** One row per issue: status (source of truth; the `status: *` label is
-  its projection), lane, current run and session lease. Replaces `GrillSession.lockedUntil`.
+  its projection), lane, current run and session lease. Replaces `GrillSession.lockedUntil`. **2026-11-16
+  (spec 5, D24):** the run itself is a `Run` row; `Task` points to its current run.
 - **D2 Leases renew by heartbeat** while a job runs. `SESSION_LEASE_SECONDS` (was `GRILL_LEASE_SECONDS`) is the
   expiry after a crash, not a time limit. PR events use the lease of their task; there is no separate PR lease.
 - **D3 Routing is plain NestJS:** a pure `decide(state, input) → action`, a dispatcher and step handlers
@@ -55,11 +59,15 @@ comments, without acting under the developer's identity or touching their checko
 - **D6 A restart starts from scratch.** A cancelled run's Grill answers are never reused. If it had answered
   rounds, one cancel comment lists them in a copyable block and says how to carry them over: edit the issue
   description before re-adding the label, paste them into the first answer of the new session, or edit the Spec
-  comment before `/approve`.
+  comment before `/approve`. **2026-11-16 (spec 5, RL18):** every cancel and restart now posts one run-ended
+  comment ("Run 2 (`full-sdd`) was cancelled …" / "… was replaced by run 3 …"); the answered rounds go into that
+  same comment, so a cancel still posts exactly one.
 - **D7 `needs-human` exits only through the label restart,** whatever the cause. Every entry posts exactly one
   comment with the cause and the next step. `/retry` → Future. **2026-11-12 (spec 4, L15):** spec 5's interview
   reconsiders `/retry` for causes outside the issue, now that a model call can fail for billing, key,
-  model-name or outage reasons.
+  model-name or outage reasons. **2026-11-16 (spec 5, D25):** a `needs-human` entered on a failure also exits
+  through `/retry`; a stop that is a result of the work (round limit, red, interrupted) still exits only
+  through the restart.
 - **D8 A Grill round asks 1..K questions,** chosen by the LLM; only questions whose answers don't affect each
   other go together. K = `GRILL_MAX_QUESTIONS_PER_ROUND` (default 3). Output `{ confidence, questions[], gaps }`;
   `GrillRound` = one row per bot comment.
@@ -120,6 +128,23 @@ comments, without acting under the developer's identity or touching their checko
   text an LLM step posts names it. Replaces "the model is a constant in spec 4". Reason: a human decides when a
   sensitive Spec or a hard coding task needs the most capable model; model names stay in a reviewed file, never in
   issue text or comments.
+- **D24 A `Run` table; one active run per issue (2026-11-16, spec 5 interview).** One row per run: a UUID key
+  (the run id in `ExecutionLog` and every later table of a run), a number per issue for people ("run 2", spec
+  8's branch name), lane, `grill: skip`, the event that started it, start and end, and its latest stop. `Task`
+  points to its current run. A new run ends the previous one; older runs and everything tied to them stay for
+  traceability and never act again (R1). Reason: Rewind (Future) must find an old run, and the usage data must
+  show how runs ended and why.
+- **D25 `/retry` after a failure (2026-11-16, spec 5 interview).** A comment whose whole text is `/retry`, from a
+  Participant, on an issue in `needs-human` entered on a failure (row 28), received after that stop: the issue
+  goes back to the status it had and the failed event is processed again in the **same run**; work already done
+  is not redone (markers). The stop comment suggests it next to the restart. Stops that are results of the work
+  (rows 14, 25, 26) keep the restart as the only exit. Replaces "`/retry` → Future" (D7). Reason: a run should
+  not lose its answers or approved documents because of credits, a key or an outage (spec 4, L15).
+- **D26 Closed issues freeze (2026-11-16, spec 5 interview).** Issue events on a closed issue are ignored and
+  recorded (`issue-closed`), with no comment; the run is not cancelled. Reopening unfreezes it. PR events are not
+  affected. The router reads `open` with the labels (`UnifiedTask.open`, §4). **Same day (spec 5, RL19):** a lane
+  label added, `/retry` or `/approve` on a closed issue gets one reply (reopen first); removing the run's own lane
+  label still cancels the run, but nothing starts on a closed issue.
 
 ## Contradictions found in the idea doc
 
@@ -150,7 +175,7 @@ Numbers are IDs, not build order.
 | 2 | `intake-authorization` | `IntakeModule` · `src/intake` | Payload → neutral input (`WorkflowInput`), the sender's access level (+ the App's own PR events), target-repo filter, ignore reasons, label revert, `/approve` reply | 1, 3 | xhigh |
 | 3 | `github-providers` | `GitHubModule` · `src/github` | App auth (JWT → installation token), GitHub `IssueProvider` + `RepoProvider`, label bootstrap | 1 | high |
 | 4 | `llm-foundation` | `LlmModule`, `SecretScanModule` · `src/llm`, `src/secret-scan` | Gemini client (`ChatGoogle`, D22), model per step (D23), Zod output + re-ask, `ExecutionLog` (prompt, answer, usage), input guard, secret scanner at the ports, step-skill loader + prompt assembly | 1, 3 | xhigh |
-| 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, cancel/restart, stale events | 2, 3 | xhigh |
+| 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` and `Run` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, run start, cancel/restart, stale events, closed issues, `needs-human` + `/retry` (2026-11-16) | 2, 3 | xhigh |
 | 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment | 4, 5 | max |
 | 7 | `spec-plan-approvals` | `DocumentsModule` · `src/documents` | Spec/Plan generation, `/approve` rules, approved snapshots | 6 | xhigh |
 | 8 | `workspace-git` | `WorkspaceModule` · `src/workspace` | git runner (`execFile`), bot worktree, workspace lease + queue, setup command, bot identity, per-command token | 3, 5 | max |
@@ -220,7 +245,9 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
   row), `grilling`, `spec-review`, `ready-for-dev`, `executing`, `in-review`, `needs-human`.
   "Run state" = any state except `draft`.
 - **Run:** started by a lane label. It owns its lane, Grill session, documents, approvals and PR, and ends only
-  when cancelled. A restart cancels the run and starts a new one from scratch (D6).
+  when cancelled. A restart cancels the run and starts a new one from scratch (D6). **2026-11-16 (D24, D25):**
+  one `Run` row per run; `needs-human` stops a run without ending it, and `/retry` continues a run stopped on a
+  failure.
 - **Lanes** (✋ = `/approve`): `full-sdd` = Grill → Spec ✋ → Plan ✋ → Coder → Quality Gate ·
   `spec-code` = Grill → Spec ✋ → Coder → Quality Gate · `code-only` = go-signal ✋ → Coder → Quality Gate.
   `grill: skip` drops Grill Me from the first two and is read only when a run starts.
@@ -234,10 +261,12 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 | `SKIP_ADDED` | `issues.labeled` with `grill: skip` |
 | `COMMENT` | `issue_comment.created` on the issue that isn't a command |
 | `APPROVE` | `issue_comment.created` whose whole text is `/approve` (D20, 2026-11-11; was "exact syntax: spec 7") |
+| `RETRY` | `issue_comment.created` whose whole text is `/retry` (D25, 2026-11-16) |
 | `PR_UPDATED` | `pull_request.opened` / `synchronize` on a bot PR |
 | Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` |
 
-The first six rows are the `WorkflowInput` type of §4, produced by intake (spec 2).
+The first seven rows are the `WorkflowInput` type of §4, produced by intake (spec 2). `RETRY` needs a
+Participant (2026-11-16).
 
 **Ignored at intake** (recorded with a reason, never routed; the reasons: spec 2): other repos; senders below the
 level the input needs (D19: `APPROVE` and a human's `PR_UPDATED` need Approver, every other input Participant;
@@ -258,15 +287,20 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 
 ### Rules applied before the table
 
-- **R1 Stale events:** an event received before the current run started is ignored.
+- **R1 Stale events:** an event received before the current run started is ignored. **2026-11-16 (spec 5,
+  RL10):** precisely, an event received before the **event that started** the issue's latest run is stale; the
+  run's own start event never is (so a retried run start still works).
 - **R2 Valid `/approve`:** posted after the document or go-signal the current status points to, and that document
   isn't approved yet (the event that recorded the approval may be retried).
 - **R3 One job per task:** while a job holds the lease, the task's other events wait, then run against the new
   state.
 - **R4 Failures:** after bounded retries, any step failure becomes `FAILED(cause)`: invalid `workflow.json`,
-  missing skill, unknown model (D23), guardrail block, API error, rejected push, ….
+  missing skill, unknown model (D23), guardrail block, API error, rejected push, …, and (2026-11-16, spec 5) a
+  step whose handler isn't registered (`step-not-built`). A failure stops only a running run; with no run, or a
+  run already stopped, the event is only `FAILED`.
 - **R5 `needs-human`:** every entry posts exactly one comment with the cause and "restart: remove and re-add the
-  `workflow:*` label". The restart is the only exit.
+  `workflow:*` label". The restart is the only exit. **2026-11-16 (D25):** an entry on a failure (row 28) also
+  suggests `/retry`, which is a second exit for it.
 - **R6 Skills check (D18, 2026-11-10):** a run goes on to rows 9–11 only if every step it will use has a skill in
   `workflow.json`: `full-sdd` → `grill`, `spec`, `plan`, `code`, `qualityGate`; `spec-code` → the same without
   `plan`; `code-only` → `code`, `qualityGate`; with `grill: skip` → without `grill`. Otherwise the run is created
@@ -280,12 +314,12 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 |---|---|---|---|---|
 | 1 | draft | `ISSUE_OPENED` | If no `Task` row exists: create it, set `status: draft` | draft |
 | 2 | draft | `LANE_ADDED`, exactly one lane label on the issue | Start a run (rows 9–11) | per lane |
-| 3 | draft | `LANE_ADDED`, two or more lane labels | One comment: keep exactly one `workflow:*` label | draft |
+| 3 | draft | `LANE_ADDED`, two or more lane labels | One comment: keep exactly one `workflow:*` label (2026-11-16: one per conflict, not per event) | draft |
 | 4 | draft | `LANE_REMOVED`, exactly one lane label left | Start a run with it (rows 9–11) | per lane |
 | 5 | draft | anything else | Ignored | draft |
-| 6 | run state | `LANE_REMOVED` of the run's lane | Cancel the run: close the Grill session (kept), cancel comment if it had answered rounds (D6). Exactly one lane label left → start a run with it | draft or per lane |
-| 7 | run state | `LANE_ADDED`, exactly one lane label now | Cancel as in row 6, then start a run with it (restart) | per lane |
-| 8 | run state | any other lane-label change (two or more lanes, or another lane removed) | Ignored; the run continues | unchanged |
+| 6 | run state | `LANE_REMOVED` of the run's lane | Cancel the run: close the Grill session (kept), cancel comment if it had answered rounds (D6). Exactly one lane label left → start a run with it. 2026-11-16: wins over row 8 whatever is left; one run-ended comment always (RL18); with two or more lanes left, a fresh reminder | draft or per lane |
+| 7 | run state | `LANE_ADDED`, exactly one lane label now | Cancel as in row 6, then start a run with it (restart). 2026-11-16 (RL12): only for a lane other than the run's own; adding the run's own lane is ignored, so a swap handled late gives one new run | per lane |
+| 8 | run state | any other lane-label change (two or more lanes, or another lane removed) | Ignored; the run continues. 2026-11-16: with two or more lanes, one reminder per conflict (the run keeps its lane; how to switch) | unchanged |
 | 9 | ↳ run start | `full-sdd` / `spec-code`, no `grill: skip` | Open a Grill session, first evaluation | rows 12–14 |
 | 10 | ↳ run start | `full-sdd` / `spec-code` + `grill: skip` | `GrillSession` SKIPPED + skip comment → generate and post the Spec | spec-review |
 | 11 | ↳ run start | `code-only` | Go-signal comment | ready-for-dev |
@@ -305,8 +339,14 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 25 | executing | `RED` (after `CODER_MAX_FIX_ATTEMPTS`) | Local commit only; comment with trimmed, scanned output + branch name; detach; release | needs-human |
 | 26 | executing | `INTERRUPTED` (the job's own event retried after a crash) | PR already opened → finish as `GREEN`. Otherwise comment, leave the worktree as is, release the workspace lease | in-review or needs-human |
 | 27 | in-review, needs-human | `COMMENT`, `APPROVE`, `SKIP_ADDED` | Ignored | unchanged |
-| 28 | any | `FAILED(cause)` | One comment naming the cause; release held leases | needs-human |
+| 28 | any with a running run | `FAILED(cause)` | One comment naming the run, the step and the cause, with `/retry` and the restart (2026-11-16); the stop is saved first; release held leases. A failing `/retry` event never stops the run (RL13) | needs-human |
 | 29 | any (the task has a bot PR) | `PR_UPDATED` | Quality Gate on the newest head commit (older heads skipped) → PR comment + check run | unchanged |
+| 30 | needs-human, entered on a failure (row 28) | `RETRY` received after the stop (2026-11-16, D25) | Back to the status before the stop; process the failed event again in the same run | status before the stop |
+| 31 | needs-human, entered as a result of the work (rows 14, 25, 26) | `RETRY` received after the stop (2026-11-16) | One reply per `/retry`: a restart is needed | needs-human |
+
+`RETRY` in any other case does nothing but gets one reply saying why (no run, not stopped, written before the
+stop; 2026-11-16, RL20). Closed issues are handled before this table (D26). The event that started the current
+run is checked before rows 6–8: running → it continues the run, stopped → ignored (RL14).
 
 Informative view (the table wins if they differ):
 
@@ -340,6 +380,10 @@ stateDiagram-v2
         Removing the run's lane label cancels the run (back to draft).
         Adding a lane label starts a run, or restarts an active one.
     end note
+
+    note left of needsHuman
+        After a failure, /retry goes back to the status before the stop (D25).
+    end note
 ```
 
 ## 4. Shared contracts
@@ -368,6 +412,7 @@ export interface UnifiedTask extends TaskRef {
   labels: string[];    // always read from the API, never from a webhook payload
   author: string;
   url: string;
+  open: boolean;       // false when the issue is closed (added 2026-11-16, spec 5, D26)
 }
 
 export interface CommentRef { id: string; url: string; createdAt: Date }
@@ -476,7 +521,7 @@ export type WorkflowInput = {
 } & (
   | { type: 'ISSUE_OPENED' | 'SKIP_ADDED'; task: TaskRef }
   | { type: 'LANE_ADDED' | 'LANE_REMOVED'; task: TaskRef; lane: Lane }
-  | { type: 'COMMENT' | 'APPROVE'; task: TaskRef; comment: TaskComment }
+  | { type: 'COMMENT' | 'APPROVE' | 'RETRY'; task: TaskRef; comment: TaskComment } // RETRY: 2026-11-16, D25
   | { type: 'PR_UPDATED'; pr: PullRequestRef; headSha: string }
 );
 ```
@@ -575,7 +620,8 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 |---|---|---|---|
 | `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
 | `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
-| `Task` | 5 | One row per issue: status (source of truth), lane, current run, session lease | — |
+| `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
+| `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, the merged answer, confidence before/after, gaps, comment IDs, post state | — |
 | `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time | — |
@@ -650,7 +696,10 @@ can be joined to it; the many calls of an agent loop are found by run and step.
   characters (L8); a skill is text only, read at one commit, 204,800 bytes at most (L6, LW2, LW3); the scanner
   wraps the ports (L9, LW4); model labels, `readControls` and the changes to specs 2 and 3 (L3, LW1, LW7); the
   error table and the single retry layer (L10); provider-neutral usage columns (L11).
-- **5:** "received" = the time the controller stored the event; several lane labels added at once → one reminder
+- **5:** → resolved 2026-11-16 in `spec-github-agent-router-session-lease.md`: run id and `Run` table
+  (RL2, D24), run-start order (RL3), failures → `needs-human` and recovery (RL4, RL5), `/retry` (RL6, D25), one
+  event at a time (RL7), one reminder per lane conflict (RL8), closed issues (RL9, D26), stale events (RL10, R1),
+  `last_error` kept as history (RL11). The original list: "received" = the time the controller stored the event; several lane labels added at once → one reminder
   comment, not one per event; events on closed issues; worker concurrency cap; the run-start skills check (R6)
   calls spec 4's loader. **Added 2026-11-11 (spec 2):** an `ISSUE_OPENED` processed after its issue's run started
   is stale (R1); spec 5 replaces spec 2's placeholder processor and adds its own ignore reasons; a task's
