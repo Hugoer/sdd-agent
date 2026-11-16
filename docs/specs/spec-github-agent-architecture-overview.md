@@ -320,7 +320,7 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 5 | draft | anything else | Ignored | draft |
 | 6 | run state | `LANE_REMOVED` of the run's lane | Cancel the run: close the Grill session (kept), cancel comment if it had answered rounds (D6). Exactly one lane label left → start a run with it. 2026-11-16: wins over row 8 whatever is left; one run-ended comment always (RL18); with two or more lanes left, a fresh reminder | draft or per lane |
 | 7 | run state | `LANE_ADDED`, exactly one lane label now | Cancel as in row 6, then start a run with it (restart). 2026-11-16 (RL12): only for a lane other than the run's own; adding the run's own lane is ignored, so a swap handled late gives one new run | per lane |
-| 8 | run state | any other lane-label change (two or more lanes, or another lane removed) | Ignored; the run continues. 2026-11-16: with two or more lanes, one reminder per conflict (the run keeps its lane; how to switch) | unchanged |
+| 8 | run state | any other lane-label change (two or more lanes, or another lane removed) | Ignored; the run continues. 2026-11-16: with two or more lanes, one reminder per conflict (the run keeps its lane; how to switch), and a fresh one whenever the set of labels changes (spec 5 plan, Checkpoint 2) | unchanged |
 | 9 | ↳ run start | `full-sdd` / `spec-code`, no `grill: skip` | Open a Grill session, first evaluation | rows 12–14 |
 | 10 | ↳ run start | `full-sdd` / `spec-code` + `grill: skip` | `GrillSession` SKIPPED + skip comment → generate and post the Spec | spec-review |
 | 11 | ↳ run start | `code-only` | Go-signal comment | ready-for-dev |
@@ -625,7 +625,7 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 | `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
 | `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
 | `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
-| `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) | — |
+| `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) and the event that ended the run (2026-11-16, spec 5 plan Checkpoint 2: so a late run-ended comment still names who changed the label) | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, the merged answer, confidence before/after, gaps, comment IDs, post state | — |
 | `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time | — |
@@ -702,7 +702,7 @@ can be joined to it; the many calls of an agent loop are found by run and step.
   error table and the single retry layer (L10); provider-neutral usage columns (L11).
 - **5:** → resolved 2026-11-16 in `spec-github-agent-router-session-lease.md`: run id and `Run` table
   (RL2, D24), run-start order (RL3), failures → `needs-human` and recovery (RL4, RL5), `/retry` (RL6, D25), one
-  event at a time (RL7), one reminder per lane conflict (RL8), closed issues (RL9, D26), stale events (RL10, R1),
+  event at a time (RL7), one reminder per lane conflict (RL8; per set of labels since spec 5's plan Checkpoint 2), closed issues (RL9, D26), stale events (RL10, R1),
   `last_error` kept as history (RL11). The original list: "received" = the time the controller stored the event; several lane labels added at once → one reminder
   comment, not one per event; events on closed issues; worker concurrency cap; the run-start skills check (R6)
   calls spec 4's loader. **Added 2026-11-11 (spec 2):** an `ISSUE_OPENED` processed after its issue's run started

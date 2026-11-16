@@ -26,6 +26,11 @@ export class EventsService {
     payload,
   }: EnqueueInput): Promise<{ duplicate: boolean; requeued: boolean }> {
     const action = actionOf(payload);
+    // Spec 5, plan P7: "received" is PostgreSQL's clock. Prisma would fill `@default(now())` from Node's, and the
+    // router compares it with times PostgreSQL wrote (`stopped_at`); Docker's clock and the Mac's can drift.
+    const [{ now }] = await this.prisma.$queryRaw<
+      { now: Date }[]
+    >`SELECT now() AS now`;
     // INSERT … ON CONFLICT DO NOTHING: a redelivery leaves the first row unchanged.
     const { count } = await this.prisma.webhookEvent.createMany({
       data: [
@@ -35,6 +40,7 @@ export class EventsService {
           action,
           payload: payload as Prisma.InputJsonValue,
           externalRef: externalRefOf(payload),
+          receivedAt: now,
         },
       ],
       skipDuplicates: true,

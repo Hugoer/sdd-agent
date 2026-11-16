@@ -45,7 +45,7 @@ green.
 | P4 | A step handler returns an outcome of overview §3 or nothing. The action from `decide()` names the handler calls (one or more, e.g. row 10: `grill` skip, then `spec`) and the status that follows when they return nothing (rows 10, 11, 13, 17). An outcome goes back into `decide()`. A work-result outcome (`LIMIT`, `WS_DIRTY`, `RED`, `INTERRUPTED` without a PR) carries the step's comment body; `decide()` turns it into a stop (not retryable, except `WS_DIRTY` if spec 8 decides it is, as the spec's "Agreed for later specs" leaves open; T0, 2026-11-16) and the router calls `NeedsHumanService.stop`. Steps never call `stop` themselves (recorded for specs 6, 8 and 9 in the spec's "Agreed for later specs"). | §3 "Inputs" has no outcome for "a document or the go-signal was posted", and a new input needs your OK. Steps still never call each other (D3). One stop path: if a step called `stop` and also returned `LIMIT`, the run would stop twice. |
 | P5 | The closed-issue rules (RL9, RL19) are rows of `decide()`, checked first (`state.open`). The router still reads `open` from the one `getTaskDetails`. | Boundaries: "decide transitions only in `decide()`"; a cancel on a closed issue is a transition. One table of tests covers it. |
 | P6 | Row 1 is "`ISSUE_OPENED` in `draft`, no status label shown yet (`shownStatus` null), no run so far" instead of "no `Task` row existed". A pending label is `shownStatus ≠ status`, except `draft` with `shownStatus` null (no label wanted: RLW5). | With "no row existed", a retried `opened` event (GitHub failing on `setStatusLabel`) finds the row and never sets the label. Only differs from the spec when a lane-conflict event came first: the `opened` then adds `status: draft` (harmless). |
-| P7 | Every time the router compares comes from PostgreSQL's clock: `receivedAt` (already a DB default), `startEventReceivedAt` (a copy), `stoppedAt` and the lease (`now()` in SQL). The lease claim and heartbeat are raw SQL updates. | Docker's VM clock and the Mac's can drift apart (after sleep); a `/retry` written right after a stop must never be judged "before the stop" because two clocks were compared. |
+| P7 | Every time the router compares comes from PostgreSQL's clock: `receivedAt` (`EventsService.enqueue` stores PostgreSQL's `now()`: found in T10 that Prisma fills `@default(now())` from Node's clock, not the database's), `startEventReceivedAt` (a copy), `stoppedAt` and the lease (`now()` in SQL). The lease claim and heartbeat are raw SQL updates. | Docker's VM clock and the Mac's can drift apart (after sleep); a `/retry` written right after a stop must never be judged "before the stop" because two clocks were compared. |
 | P8 | The `/retry` restore and the re-queue commit in one transaction: `EventsService.requeue(eventId, tx?)` takes the router's transaction client. It re-queues the event if it ended `FAILED`, `IGNORED` or `DONE` (not while `PENDING` or `PROCESSING`), keeping `last_error`. | A crash between the two would leave a running run whose event is never processed (stuck), and the next `/retry` would say "isn't stopped". A redelivery of the stopped event (RL5's recovery path) ends it `IGNORED` `no-transition`; "`FAILED` only" would then make `/retry` re-queue nothing. Changes the spec's `requeue` line. |
 | P9 | An accepted `/retry` whose job fails after its write (the label, the lane-conflict check, any later GitHub call) ends `FAILED` at once: the error is rethrown as a permanent `ProviderError` with the same message. The re-queued event completes the label first (pending side effect). | RL13 says it ends `FAILED`, silent. A worker retry would find the run no longer stopped and answer the person's accepted `/retry` with "isn't stopped" (or "written before the stop" after a new stop). |
 | P10 | The failure hook finds the lease taken (only possible with two instances on one database): an error line in the log; the event stays `FAILED` only. | The hook can't wait. A redelivery of the event (IA13) runs it again. |
@@ -84,6 +84,8 @@ every task changes `router.service.ts`, so nothing else could run in parallel.
 **Your part (the build stops for these):**
 
 1. **After T5:** run `npm run db:migrate` (two new tables, `tasks` and `runs`; nothing existing changes).
+   **Before Checkpoint 4** (Q2, Q3): run it once more (T17 adds `runs.end_event_id`; T18 replaces
+   `tasks.lane_conflict_open` with `tasks.lane_conflict_lanes`).
 2. **Checkpoints 3, 4, 5 and T23:** stop `npm run dev` (the tunnel stays). I run my instance on port 3000 with the
    dev database and its log in the scratchpad, as in spec 4's build. Then your GitHub UI steps on the sandbox
    (new issues `#A`–`#E`, labels, comments, close and reopen), one step per message.
@@ -229,8 +231,8 @@ against the test database (P14). `resetDatabase` empties the two new tables. `Ru
 ### Checkpoint 1 — Seams and tables
 - [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [x] `SESSION_LEASE_SECONDS=10 node dist/main.js` → the app refuses to start, naming the variable
-- [ ] You run `npm run db:migrate`; `\d tasks` and `\d runs` show the spec's columns
-- [ ] You review and commit
+- [x] You run `npm run db:migrate`; `\d tasks` and `\d runs` show the spec's columns
+- [x] You review and commit
 
 ---
 
@@ -248,15 +250,15 @@ lane-conflict reminder (`draft` and run wordings, the labels listed), the closed
 spec's table (P1 order).
 
 **Acceptance criteria:**
-- [ ] Each text equals the spec's example for the same input, marker first; the login is in backticks without `@`
+- [x] Each text equals the spec's example for the same input, marker first; the login is in backticks without `@`
   (unit)
-- [ ] Cause table: `StepNotBuiltError` → `step-not-built`; `StepConfigError` → `step-config` + its message;
+- [x] Cause table: `StepNotBuiltError` → `step-not-built`; `StepConfigError` → `step-config` + its message;
   `LlmError` → its code + message; `ProviderError` → `provider-error`, "after 3 attempts" only when transient;
   anything else → `internal-error` with the delivery ID and never the error's own message (unit)
-- [ ] No text includes issue text, a stack trace or `Error:` (unit over every text)
+- [x] No text includes issue text, a stack trace or `Error:` (unit over every text)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/workflow/workflow-errors.ts`, `src/workflow/workflow-comments.ts` (+ `.spec.ts`),
@@ -272,17 +274,17 @@ own lane (RL12, RL15). Then rows 1–8, keyed on whether a run is current (P15).
 one → close; a cancel or restart closes it first, RL15). `decide()` takes no clock, no Prisma, no port.
 
 **Acceptance criteria:**
-- [ ] One test per row 1–8, and per pre-check: RL14 running → continue, stopped → `no-transition`; RL12 own lane
+- [x] One test per row 1–8, and per pre-check: RL14 running → continue, stopped → `no-transition`; RL12 own lane
   added → `no-transition`; RL15 own lane removed with two left → cancel (unit)
-- [ ] A swap in both orders with both events seeing the final labels → exactly one start (unit)
-- [ ] P15: `draft` with a current run (running or stopped) → a lane label added or removed follows rows 6–8, never
+- [x] A swap in both orders with both events seeing the final labels → exactly one start (unit)
+- [x] P15: `draft` with a current run (running or stopped) → a lane label added or removed follows rows 6–8, never
   rows 2–4; the start event of the current run on a closed issue → `issue-closed`, no reply (unit)
-- [ ] Every row of RL19's table (own lane removed → cancel without a start, even with one lane left; lane added,
+- [x] Every row of RL19's table (own lane removed → cancel without a start, even with one lane left; lane added,
   `/retry`, `/approve` → reply; the rest → `issue-closed` silent) (unit)
-- [ ] Lane conflict: open / already open / closed by at most one lane / closed by a cancel then reopened (unit)
+- [x] Lane conflict: open / already open / closed by at most one lane / closed by a cancel then reopened (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None (T6 for the reply kinds' names only)
 **Files:** `src/workflow/decide.ts` (+ `.spec.ts`), `src/workflow/lane-conflict.ts` (+ `.spec.ts`)
@@ -298,14 +300,14 @@ row 30 (accept), row 31 and RL20's replies (no run, not stopped, before the stop
 latest run's start event; equal times not stale).
 
 **Acceptance criteria:**
-- [ ] One test per row 9–31 (with rows 1–8 from T7: every row of overview §3 has its test, RLW7)
-- [ ] Every case of the spec's `/retry` table, each with its reply kind; `/retry` received at the same instant as
+- [x] One test per row 9–31 (with rows 1–8 from T7: every row of overview §3 has its test, RLW7)
+- [x] Every case of the spec's `/retry` table, each with its reply kind; `/retry` received at the same instant as
   the stop counts as "before" (unit)
-- [ ] `isStale`: before → stale, equal → not, after → not; no run ever → not (unit)
-- [ ] Unregistered steps aren't `decide()`'s concern: it names the handler; T14 resolves it
+- [x] `isStale`: before → stale, equal → not, after → not; no run ever → not (unit)
+- [x] Unregistered steps aren't `decide()`'s concern: it names the handler; T14 resolves it
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T7
 **Files:** `src/workflow/decide.ts` (+ `.spec.ts`)
@@ -324,15 +326,15 @@ it finds another owner; `release` in `finally`, owner only. `withLease(taskId, e
 and answers "taken". Guarded writes throw T6's `LeaseLostError` (temporary: the worker retries it).
 
 **Acceptance criteria:**
-- [ ] Two claims at once for two events → exactly one wins; an expired lease is taken by another event; the same
+- [x] Two claims at once for two events → exactly one wins; an expired lease is taken by another event; the same
   event takes its own lease back at once; release by a non-owner changes nothing (integration)
-- [ ] The heartbeat fires every third of the lease while the job runs and stops when it ends, also when it throws
+- [x] The heartbeat fires every third of the lease while the job runs and stops when it ends, also when it throws
   (unit, fake timers); a renew that finds another owner logs an error (integration)
-- [ ] Expiry is compared with PostgreSQL's `now()`, never Node's clock (code review + a test that sets
+- [x] Expiry is compared with PostgreSQL's `now()`, never Node's clock (code review + a test that sets
   `lease_expires_at` from SQL)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T1, T5, T6
 **Files:** `src/workflow/session-lease.service.ts` (+ `.spec.ts`), `test/session-lease.integration.spec.ts`
@@ -350,17 +352,17 @@ IDs. Every write is a transaction that first checks the lease owner (an update o
 `lease_owner = <event>` in the condition); no row → `LeaseLostError`, nothing written.
 
 **Acceptance criteria:**
-- [ ] Run numbers go 1, 2, 3 per issue; a restart leaves exactly one run with `ended_at` null; `create` with a
+- [x] Run numbers go 1, 2, 3 per issue; a restart leaves exactly one run with `ended_at` null; `create` with a
   current run outside the restart transaction throws and writes nothing (P15) (integration)
-- [ ] Ending a stopped run keeps its `stop_*` fields and `stopped_at` (RLW1: "wasted by cause" is one query)
+- [x] Ending a stopped run keeps its `stop_*` fields and `stopped_at` (RLW1: "wasted by cause" is one query)
   (integration)
-- [ ] A write with the wrong owner throws `LeaseLostError` and changes nothing, `runs` included (integration)
-- [ ] Accepting a `/retry` restores the status, clears the stop and re-queues the stop's event in one
+- [x] A write with the wrong owner throws `LeaseLostError` and changes nothing, `runs` included (integration)
+- [x] Accepting a `/retry` restores the status, clears the stop and re-queues the stop's event in one
   transaction; a failure inside rolls all three back (integration)
-- [ ] `stoppedAt` and `startEventReceivedAt` come from PostgreSQL (integration)
+- [x] `stoppedAt` and `startEventReceivedAt` come from PostgreSQL (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T4, T5, T9
 **Files:** `src/workflow/task.service.ts`, `src/workflow/run.service.ts`, `test/workflow-tables.integration.spec.ts`
@@ -375,13 +377,13 @@ lane, skip), the input and the heartbeat, and returns an outcome (a work-result 
 nothing (P4); an optional cancel hook returns a block of text or null and must be safe to call twice. `test/fakes/scripted-step-handler.ts` answers from a script.
 
 **Acceptance criteria:**
-- [ ] Register + resolve; a duplicate → error naming the handler; unregistered → `StepNotBuiltError` whose message
+- [x] Register + resolve; a duplicate → error naming the handler; unregistered → `StepNotBuiltError` whose message
   is "this version of the bot has no `<step>` step yet" (unit)
-- [ ] A test module outside `src/workflow` registers the scripted handler in its `onModuleInit` (spec success
+- [x] A test module outside `src/workflow` registers the scripted handler in its `onModuleInit` (spec success
   criterion: later specs plug in without changing `src/workflow`) (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T6
 **Files:** `src/workflow/step-handler.registry.ts` (+ `.spec.ts`), `test/fakes/scripted-step-handler.ts`
@@ -389,7 +391,7 @@ nothing (P4); an optional cancel hook returns a block of text or null and must b
 
 ### Checkpoint 2 — The core
 - [x] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] `decide.spec.ts` has one named test per row 1–31 (list printed)
+- [x] `decide.spec.ts` has one named test per row 1–31 (list printed)
 - [ ] You review and commit
 
 ---
@@ -507,7 +509,7 @@ pending first, then `no-transition`. Log `#12 run 2 stopped at spec: access-deni
 
 ### Checkpoint 3 — The router on real GitHub
 My instance on port 3000, dev database; your clicks on the sandbox.
-- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [ ] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Startup": both rows
 - [ ] Matrix "Run start, stop and `/retry`": the first two rows (`#A` opened → `status: draft`; `code-only` →
   run 1 stopped at `go-signal`, one comment, no injection warning)
@@ -554,6 +556,8 @@ conflict closed. Restart (row 6 with one lane left, row 7 with a different lane,
 run N+1 in one transaction, the "replaced" comment, then T14's run start. Q1: a run-ended comment not yet posted
 (the issue's last ended run has `endCommentId` null) is a pending side effect: the next event on the issue posts
 it first (marker check, the cancel hooks asked for their block again), then records `endCommentId`. Logs `#12 run 2 cancelled`, `#12 run 2 restarted → run 3 (spec-code)`.
+Q2 (decided at Checkpoint 2): the end also saves `Run.endEventId` (a new nullable column, one migration in this
+task); the comment's login is that event's sender, also when a later event posts it.
 
 **Acceptance criteria:**
 - [ ] Cancel of a running and of a stopped run → one comment with the sender in backticks, no `@`; `status: draft`;
@@ -565,25 +569,31 @@ it first (marker check, the cancel hooks asked for their block again), then reco
 - [ ] GitHub down at the run-ended comment → `endCommentId` stays null; the next event on the issue posts it
   once and records its id; a retry after the post but before the record finds the marker and posts nothing
   (integration)
+- [ ] That late comment, posted by another sender's event, names the sender of the event that ended the run
+  (`endEventId`, Q2) (integration)
 
 **Verification:**
 - [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T16
 **Files:** `src/workflow/router.service.ts`, `src/workflow/run.service.ts`, `src/workflow/step-handler.registry.ts`,
-`test/cancel-restart.integration.spec.ts`
+`test/cancel-restart.integration.spec.ts`, `prisma/schema.prisma` + one migration (`endEventId`, Q2)
 **Scope:** M
 
 ### Task 18: The lane-conflict reminder
 
 **Description:** After the action of every routed event on an open issue: T7's check. Post first (marker
-`lane-conflict:<laneConflicts + 1>`, searched before posting), then record `laneConflictOpen` and the count, so a
+`lane-conflict:<laneConflicts + 1>`, searched before posting), then record the listed labels and the count, so a
 retried job never posts twice. Wording by whether a run is current after the action. Rows 3 and 8 end `IGNORED`
-`lane-conflict`. Log `#12 lane conflict (reminder posted)`.
+`lane-conflict`. Log `#12 lane conflict (reminder posted)`. Q3 (decided at Checkpoint 2): one reminder per set of
+labels: `Task.laneConflictLanes` (text[]) replaces `laneConflictOpen` (one migration in this task); T7's check
+compares the set read with it; the text gives the count and the list ("has N" / "still has N", T6's text changes).
 
 **Acceptance criteria:**
 - [ ] Two lane labels added in one go (two events) → one reminder, both `lane-conflict`, no run; remove one → run
   starts; add it again → a new reminder `…:2` (integration)
+- [ ] Q3: three lanes, one removed → a fresh "still has 2 …" reminder; a third added while two are listed → a
+  fresh reminder listing three; an event that reads the listed set → nothing (integration)
 - [ ] Three lanes with a run, the run's lane removed → cancel comment, no run, a fresh reminder in the `draft`
   wording (RL15) (integration)
 - [ ] The reminder post failing → retried → posted once; failing in the job of an accepted `/retry` → that event
@@ -594,11 +604,12 @@ retried job never posts twice. Wording by whether a run is current after the act
 
 **Dependencies:** T17
 **Files:** `src/workflow/router.service.ts`, `src/workflow/lane-conflict.ts`, `src/workflow/task.service.ts`,
-`test/lane-conflict.integration.spec.ts`
+`test/lane-conflict.integration.spec.ts`; Q3: `src/workflow/decide.ts` (state), `src/workflow/workflow-comments.ts`,
+`prisma/schema.prisma` + one migration
 **Scope:** S
 
 ### Checkpoint 4 — `/retry`, restarts and conflicts on real GitHub
-- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [ ] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Run start, stop and `/retry`": the remaining rows (`/retry`, `please /retry`, `  /RETRY `, cancel,
   `/retry` with no run, `full-sdd` run 2)
 - [ ] Matrix "Restart and lane conflicts": every row except `#D` (it needs the stale rule, T20: Checkpoint 5)
@@ -664,7 +675,7 @@ stops, retries.
 **Scope:** XS
 
 ### Checkpoint 5 — Closed, stale, lease and refused inputs on real GitHub
-- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [ ] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Closed issues", "Stale events" and "Lease": every row
 - [ ] Matrix "Restart and lane conflicts": the `#D` row (labels set in the creation form)
 - [ ] Matrix "Refused and other inputs": the two signed requests
@@ -749,6 +760,14 @@ fixes if a row fails
   their block again (they must be safe to call twice: noted for spec 6). Alternative: post the comment before the
   database write (its marker prevents a duplicate; no column), which breaks "the database moves first" (D13) for
   this one comment.
+- **Q2 (answered at Checkpoint 2, 2026-11-16: yes, `Run.endEventId`; was "Ask first" for a new column):** a
+  run-ended comment posted later by another event (Q1) didn't know who changed the label. The end now saves the
+  event that ended the run; the comment names its sender. Alternative declined: leave the login out in that case.
+- **Q3 (answered at Checkpoint 2, 2026-11-16: one reminder per set of labels; was "Ask first" for a column):** the
+  reminder listed the labels once, then stayed silent while two or more remained, so removing one of three (or
+  adding a third) left the person waiting with a wrong list. Now a different set of two or more posts a fresh
+  reminder with the count and the list. Declined: a reminder after every change (three for labels ticked at once),
+  editing the reminder (no notification; the GitHub adapter can't edit comments).
 - **P1–P16** confirmed 2026-11-16. P4 also sets a rule for specs 6, 8 and 9 (return the work-result
   outcome with its body; never call `stop`). T0 writes the spec and overview lines they change before any code.
 

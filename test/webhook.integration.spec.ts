@@ -1,5 +1,13 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { EventsService } from '../src/events/events.service.js';
 import { externalRefOf } from '../src/events/external-ref.js';
 import { resetDatabase } from './db.js';
@@ -268,6 +276,25 @@ describe('POST /webhooks/github', () => {
         payload,
       });
       expect(result).toEqual({ duplicate: false, requeued: false });
+    });
+
+    it('received_at is PostgreSQL’s clock, not Node’s (spec 5, plan P7)', async () => {
+      const deliveryId = newDeliveryId();
+      // Node's clock two hours ahead: a Node timestamp would show it.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(Date.now() + 2 * 3_600_000));
+      try {
+        await t.app
+          .get(EventsService)
+          .enqueue({ deliveryId, eventName: 'issues', payload });
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const [{ seconds }] = await t.prisma.$queryRaw<{ seconds: number }[]>`
+        SELECT round(extract(epoch FROM now() - received_at))::int AS seconds
+        FROM webhook_events WHERE delivery_id = ${deliveryId}`;
+      expect(Math.abs(seconds)).toBeLessThan(60);
     });
   });
 

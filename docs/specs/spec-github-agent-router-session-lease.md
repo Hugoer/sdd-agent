@@ -109,7 +109,10 @@ the issue through the overview's state machine, so that:
   once the issue has at most one lane label again, the conflict is over, and a new conflict gets a new
   reminder. During a run (any run state) the run keeps its lane and the reminder says how to switch. Reason:
   ticking two labels at once sends two events, and a silent second label leaves someone waiting for a switch
-  that never comes.
+  that never comes. **2026-11-16 (decided at the plan's Checkpoint 2): one reminder per set of labels.** The
+  reminder gives the count and lists the labels. A later change that leaves a different set of two or more posts
+  a fresh one ("still has 2 …"): someone who removes one of three labels, or adds a third, would otherwise wait
+  in silence with a wrong list. Events that read the same set (labels ticked at once) still post nothing.
 - **RL9 Closed issues freeze** (overview D26, new). Every issue event on a closed issue is ignored as
   `issue-closed`, without a comment; the run stays exactly where it was (not cancelled). Reopening unfreezes
   it: the next comment or label change works as usual. PR events are not affected (the PR decides, not its
@@ -278,7 +281,7 @@ interface RouterState {
   lanesOnIssue: Lane[];                // from readControls, read now
   grillSkipOnIssue: boolean;
   open: boolean;                       // UnifiedTask.open, read now (plan P5)
-  laneConflictOpen: boolean;           // RL8
+  laneConflictLanes: Lane[];           // RL8: the labels the open reminder lists; empty = none open
 }
 ```
 
@@ -394,7 +397,7 @@ flowchart TD
   job. The new run's first step posts right after.
 - `LANE_ADDED` of the current run's own lane → `no-transition` (RL12).
 - A run in `needs-human` is a run state: removing its label cancels it, as in any other run state.
-- A cancel or restart closes the open lane conflict (`laneConflictOpen = false`), so the conflict check that
+- A cancel or restart closes the open lane conflict (`laneConflictLanes` emptied), so the conflict check that
   follows posts a fresh reminder if two or more lanes remain (RL15).
 
 **Run-ended comment** (RL18; marker per run, so a retried job never posts it twice):
@@ -411,7 +414,8 @@ Run 2 (`full-sdd`) was replaced by run 3 (`spec-code`): `octocat` changed the wo
 ```
 
 The login is the event's sender, in backticks without `@`. Spec 6's answered-rounds block (D6) goes below these
-lines, in the same comment.
+lines, in the same comment. (2026-11-16, decided at the plan's Checkpoint 2: "the event" is the one that ended
+the run, saved as `Run.endEventId`, so a comment posted later by another event still names who changed the label.)
 
 **Recorded in `Run.endCommentId`** (2026-11-16, plan Q1): the run's end is saved first, with the comment pending
 (RL5). If GitHub fails before it is posted, the next event on the issue posts it first: the marker is checked,
@@ -419,9 +423,10 @@ the cancel hooks are asked for their block again, and the comment id is recorded
 
 ### Lane-conflict reminder (rows 3 and 8; RL8)
 
-- Every routed issue event compares the lane labels it read. Two or more and `Task.laneConflictOpen` false →
-  post one reminder, set it true, count it (`Task.laneConflicts`). Two or more and already true → nothing. At
-  most one → set it false.
+- Every routed issue event compares the lane labels it read with `Task.laneConflictLanes` (the labels the open
+  reminder lists; 2026-11-16, plan Checkpoint 2). Two or more and a different set → post one reminder, store the
+  set, count it (`Task.laneConflicts`): "has N" when none was open, "still has N" when one was. Two or more and
+  the same set → nothing. At most one → empty it.
 - Row 3 (`draft`, `LANE_ADDED` with two or more lanes) and row 8 (run state, a lane-label change that leaves two
   or more, **other than removing the run's own lane**, RL15) end `IGNORED` `lane-conflict`. Nothing starts or is
   cancelled.
@@ -455,15 +460,23 @@ sequenceDiagram
 
 ```text
 <!-- sdd-agent:lane-conflict:<laneConflicts> -->
-This issue has more than one `workflow:` label (`workflow: full-sdd`, `workflow: code-only`). Keep exactly one:
-the bot starts a run when one is left.
+This issue has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. Keep exactly one: the bot
+starts a run when one is left.
+```
+
+After a change that still leaves two or more (2026-11-16, plan Checkpoint 2):
+
+```text
+<!-- sdd-agent:lane-conflict:<laneConflicts> -->
+This issue still has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. Keep exactly one: the
+bot starts a run when one is left.
 ```
 
 During a run:
 
 ```text
 <!-- sdd-agent:lane-conflict:<laneConflicts> -->
-This issue has more than one `workflow:` label (`workflow: full-sdd`, `workflow: code-only`). Run 2 keeps
+This issue has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. Run 2 keeps
 `workflow: full-sdd`. To switch, remove `workflow: full-sdd`; to stay, remove the others.
 ```
 
@@ -581,14 +594,19 @@ the project's billing. (`access-denied`)
   (`step-not-built`)", with the same two lines.
 - A stop that is a result of the work (rows 14, 25, 26; specs 6 and 9) uses the same service with
   `retryable = false`: the step supplies the body, spec 5 adds the marker and only the restart line.
+  (2026-11-16, decided at the plan's Checkpoint 2.) That line reads "- To start again from scratch: remove the
+  `workflow: full-sdd` label and add it again." (no "Or": there is no `/retry` line). Its `stopCause`, seen only
+  in the database: `grill-limit` (the Grill's round limit), `workspace-dirty` (uncommitted changes in the bot's
+  workspace; spec 8 may make this one retryable), `coder-red` (lint or tests still red after the Coder's fix
+  attempts), `coder-interrupted` (the Coder job cut off before it opened a PR).
 
 ### `/retry` (new rows 30, 31; RL6, RLW3, RL20)
 
 | Status | Condition | Action | Result |
 |---|---|---|---|
 | `needs-human` | the run's stop is retryable and the `/retry` was received after it | `Task.status` = the status before the stop (label set); `retries + 1`; the stop's event re-queued (`EventsService.requeue`: `PENDING`, now, attempts 0, `last_error` kept; in the same transaction, plan P8) | `DONE`; the re-queued event runs next (it is older) |
-| `needs-human` | the stop is not retryable, received after it | one reply: a restart is needed | `IGNORED` `retry-refused` |
-| `needs-human` | received before the stop | one reply: it didn't count, comment it again | `IGNORED` `retry-refused` |
+| `needs-human` | the stop is not retryable, received before or after it (2026-11-16, plan Checkpoint 2: "comment it again" would not work, so the restart reply wins) | one reply: a restart is needed | `IGNORED` `retry-refused` |
+| `needs-human` | the stop is retryable, received before it | one reply: it didn't count, comment it again | `IGNORED` `retry-refused` |
 | any other run status | — | one reply: the run isn't stopped (its status) | `IGNORED` `retry-refused` |
 | `draft` (no run) | — | one reply: no run, how to start one | `IGNORED` `retry-refused` |
 | closed issue | — | RL19's reply | `IGNORED` `issue-closed` |
@@ -765,7 +783,7 @@ Mapped to snake_case like `webhook_events`. Migration: `prisma/migrations/<ts>_t
 | `runCount` | int, default 0 | the last run number |
 | `leaseOwner` | uuid, nullable | the `webhook_events.id` holding the lease |
 | `leaseExpiresAt` | timestamptz, nullable | |
-| `laneConflictOpen` | bool, default false | RL8 |
+| `laneConflictLanes` | text[], default empty | RL8: the labels the open reminder lists; empty = no reminder open (2026-11-16, plan Checkpoint 2: replaces `laneConflictOpen`) |
 | `laneConflicts` | int, default 0 | reminder count (marker) |
 | `createdAt`, `updatedAt` | timestamptz | |
 
@@ -789,6 +807,7 @@ Mapped to snake_case like `webhook_events`. Migration: `prisma/migrations/<ts>_t
 | `statusBeforeStop` | text, nullable | the status `/retry` restores |
 | `stopCommentId` | text, nullable | null while the comment is pending (RL5) |
 | `endCommentId` | text, nullable | the run-ended comment; null on an ended run while it is pending (RL5; 2026-11-16, plan Q1) |
+| `endEventId` | uuid, nullable | the event that cancelled or replaced it; its sender is the login in the run-ended comment (2026-11-16, plan Checkpoint 2) |
 | `stops`, `retries` | int, default 0 | |
 
 Indexes: `runs (task_id, number)` unique; `runs (task_id, started_at)`. `execution_logs.run_id` stays text (no FK:
@@ -982,6 +1001,9 @@ handler is registered (specs 6–10 not built), so every run stops at its first 
   ONE reminder (the `draft` wording); both events `IGNORED` `lane-conflict`; no run.
 - [ ] Remove `workflow: code-only` → run 1 `full-sdd` starts on `#E` and stops at `grill`.
 - [ ] Add `workflow: code-only` again → a NEW reminder (marker `…:2`).
+- [ ] Add `workflow: spec-code` too → a FRESH reminder "This issue still has 3 `workflow:` labels: …" listing all
+  three (`…:3`). Remove `workflow: spec-code` → a FRESH reminder "still has 2 …" (`…:4`), the event `IGNORED`
+  `lane-conflict`. NO path posts a reminder whose list matches the last one's.
 - [ ] New issue `#D` created with `workflow: code-only` already set in the creation form → exactly one run; the
   `opened` event is `DONE`, `IGNORED` `stale`, or `IGNORED` `no-transition` when `labeled` was received first
   (2026-11-16, plan P6), never a second run.
@@ -1077,7 +1099,10 @@ during a job and the heartbeat; two claims racing; GitHub down while posting the
   run-ended comment is posted later (plan Q1), so calling it again must return the same block and change
   nothing more.)
 - **Spec 7:** registers `spec`, `plan`, `go-signal`; R2 (`/approve` validity) inside its handler; documents store
-  the run id; `/approve` on a closed issue is already answered by spec 5 (RL19).
+  the run id; `/approve` on a closed issue is already answered by spec 5 (RL19). (2026-11-16, decided at the
+  plan's Checkpoint 2: R2 is a yes/no check spec 7 provides and the router asks before `decide()`; a "no" ends
+  the event ignored, with its reason. Until spec 7 registers it, every `/approve` counts, which no one can see:
+  without spec 7 no run ever waits for an `/approve`.)
 - **Spec 8:** whether `WS_DIRTY` (row 22) is a retryable stop (recommended: yes, it is outside the issue); the
   branch name uses `Run.number`.
 - **Spec 9:** maps a bot PR to its issue, which ends `no-task` for its PRs; red (row 25) and interrupted (row 26)
