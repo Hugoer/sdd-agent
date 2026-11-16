@@ -710,7 +710,7 @@ a name it lists.
 - [x] `AGENTS.md` says spec 4 is built and names the next spec (5, `router-session-lease`)
 
 **Verification:**
-- [ ] Manual: you read the changed guide sections once
+- [x] Manual: you read the changed guide sections once
 
 **Dependencies:** T24
 **Files:** `docs/guides/setup-github-agent-local.md`, `AGENTS.md`, `README.md`
@@ -742,7 +742,7 @@ fixes if a row fails
 
 ### Checkpoint 5 — Complete
 - [x] The spec's "Success criteria" are all checked
-- [ ] You review and commit; spec 5 (`router-session-lease`) is next in the build order
+- [x] You review and commit; spec 5 (`router-session-lease`) is next in the build order
 
 ---
 
