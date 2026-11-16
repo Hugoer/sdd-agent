@@ -21,6 +21,22 @@ describe('InMemoryIssueProvider', () => {
     });
   });
 
+  it('answers open by default, closed after setOpen(false), and does not record setOpen', async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const task = issues.seedIssue({ number: 7 });
+
+    expect((await issues.getTaskDetails(task)).open).toBe(true);
+    issues.setOpen(task, false);
+    expect((await issues.getTaskDetails(task)).open).toBe(false);
+    issues.setOpen(task, true);
+    expect((await issues.getTaskDetails(task)).open).toBe(true);
+    expect(issues.calls.map((call) => call.method)).toEqual([
+      'getTaskDetails',
+      'getTaskDetails',
+      'getTaskDetails',
+    ]);
+  });
+
   it('throws a permanent 404 for an unknown issue', async () => {
     const issues = new InMemoryIssueProvider(REPO);
     const missing = {
@@ -208,6 +224,7 @@ describe('InMemoryIssueProvider', () => {
       labels,
       author: 'a',
       url: '',
+      open: true,
     });
 
     expect(issues.readControls(task([]))).toEqual({

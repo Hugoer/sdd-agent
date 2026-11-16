@@ -427,6 +427,45 @@ describe('intake (signed webhooks → rows)', () => {
       ]);
     });
 
+    it('a Participant comments /retry → DONE, one lookup, nothing posted (spec 5)', async () => {
+      t.issues.setAccessLevel(HUMAN, 'participant');
+      const task = t.issues.seedIssue({ number: 33 });
+
+      const row = await deliver(
+        issueCommentCreated({ number: 33, body: '/retry' }),
+      );
+
+      expect(row).toMatchObject({ status: 'DONE', ignoreReason: null });
+      expect(t.issues.commentsOf(task)).toEqual([]);
+      expect(t.issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+      ]);
+    });
+
+    it('/retry from a sender with no access → IGNORED unauthorized, no reply, no label change (spec 5, D21)', async () => {
+      const task = t.issues.seedIssue({
+        number: 34,
+        labels: ['status: needs-human', 'workflow: full-sdd'],
+      });
+
+      const row = await deliver(
+        issueCommentCreated({ number: 34, body: '/retry', sender: 'octocat' }),
+      );
+
+      expect(row).toMatchObject({
+        status: 'IGNORED',
+        ignoreReason: 'unauthorized',
+      });
+      expect(t.issues.commentsOf(task)).toEqual([]);
+      expect(t.issues.labelsOf(task)).toEqual([
+        'status: needs-human',
+        'workflow: full-sdd',
+      ]);
+      expect(t.issues.calls.map((call) => call.method)).toEqual([
+        'getAccessLevel',
+      ]);
+    });
+
     it('a comment on a pull request → IGNORED pr-comment, with the PR reference', async () => {
       expect(
         await deliver(

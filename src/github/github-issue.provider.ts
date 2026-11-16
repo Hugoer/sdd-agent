@@ -49,6 +49,7 @@ export class GitHubIssueProvider implements IssueProvider {
         .filter((name): name is string => !!name),
       author: data.user?.login ?? '',
       url: data.html_url,
+      open: data.state === 'open',
     };
   }
 

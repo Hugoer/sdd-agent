@@ -522,6 +522,35 @@ describe('classifyGitHubEvent: issue_comment', () => {
     },
   );
 
+  it.each(['/retry', '  /RETRY ', '/Retry\n'])(
+    'created %j → RETRY; Participant; the body as written (spec 5)',
+    (body) => {
+      const result = classify(issueCommentCreated({ body }));
+      expect(result).toMatchObject({
+        outcome: 'candidate',
+        input: { type: 'RETRY', task: task(), comment: { body } },
+        needs: 'participant',
+        subject: task(),
+      });
+    },
+  );
+
+  it.each(['please /retry', '/retry now', '/retry2', '> /retry'])(
+    'created %j → COMMENT (spec 5)',
+    (body) => {
+      expect(classify(issueCommentCreated({ body }))).toMatchObject({
+        input: { type: 'COMMENT' },
+        needs: 'participant',
+      });
+    },
+  );
+
+  it('created /retry on a pull request → pr-comment (spec 5)', () => {
+    expect(
+      classify(issueCommentCreated({ body: '/retry', onPullRequest: true })),
+    ).toEqual({ outcome: 'ignored', reason: 'pr-comment' });
+  });
+
   it.each(['/approve thanks', 'LGTM, /approve', '> /approve', '/approved', ''])(
     'created %j → COMMENT',
     (body) => {

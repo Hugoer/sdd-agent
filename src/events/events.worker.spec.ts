@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import type { EventProcessor } from './event-processor.js';
@@ -5,6 +6,7 @@ import { EventsWorker } from './events.worker.js';
 
 const done: EventProcessor = {
   process: () => Promise.resolve({ status: 'DONE' }),
+  failed: () => Promise.resolve(),
 };
 
 /** A worker on a stub database that has no due event. */
@@ -57,5 +59,26 @@ describe('EventsWorker.registerProcessor (spec 2, AW5)', () => {
       where: { status: 'PROCESSING' },
       data: { status: 'PENDING' },
     });
+  });
+});
+
+describe('EventsWorker startup log (spec 5 matrix "Startup")', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('names the registered processor', async () => {
+    const log = vi
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    class WorkflowEventProcessor implements EventProcessor {
+      process = () => Promise.resolve({ status: 'DONE' as const });
+      failed = () => Promise.resolve();
+    }
+    const { worker } = workerWithStubDb();
+    worker.registerProcessor(new WorkflowEventProcessor());
+
+    await worker.onApplicationBootstrap();
+    await worker.onModuleDestroy();
+
+    expect(log).toHaveBeenCalledWith('event processor: WorkflowEventProcessor');
   });
 });

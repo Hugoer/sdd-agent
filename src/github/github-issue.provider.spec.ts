@@ -133,6 +133,7 @@ describe('GitHubIssueProvider.readControls', () => {
     labels,
     author: 'a',
     url: '',
+    open: true,
   });
 
   it('finds no lane and no skip on a plain issue', () => {
@@ -223,6 +224,7 @@ describe('GitHubIssueProvider.getTaskDetails', () => {
         labels: [{ name: 'bug' }, { name: 'workflow: spec-code' }],
         user: { login: 'octocat' },
         html_url: `https://github.com/${TEST_REPO}/issues/5`,
+        state: 'open',
       },
     });
 
@@ -235,8 +237,29 @@ describe('GitHubIssueProvider.getTaskDetails', () => {
       labels: ['bug', 'workflow: spec-code'],
       author: 'octocat',
       url: `https://github.com/${TEST_REPO}/issues/5`,
+      open: true,
     });
     expect(fake.to(ISSUE_5)).toHaveLength(1);
+  });
+
+  it('maps a closed issue to open: false', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('GET', ISSUE_5, {
+      body: {
+        id: 1,
+        title: 't',
+        body: 'b',
+        labels: [],
+        user: { login: 'octocat' },
+        html_url: 'u',
+        state: 'closed',
+      },
+    });
+
+    const details = await issues.getTaskDetails(task5);
+
+    expect(details.open).toBe(false);
   });
 
   it("gives '' for an issue without a body", async () => {

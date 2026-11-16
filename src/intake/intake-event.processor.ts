@@ -28,4 +28,9 @@ export class IntakeEventProcessor implements EventProcessor, OnModuleInit {
       ? { status: 'DONE' }
       : { status: 'IGNORED', reason: result.reason };
   }
+
+  /** Spec 5 (RLW11): nothing to stop before the router exists; the row stays FAILED, silent (IA9). */
+  failed(): Promise<void> {
+    return Promise.resolve();
+  }
 }

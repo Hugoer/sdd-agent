@@ -47,6 +47,30 @@ export class EventsService {
     return { duplicate, requeued };
   }
 
+  /**
+   * Spec 5 (RLW11, plan P8): `/retry` queues a stopped run's event again. Only an event that ended (FAILED,
+   * IGNORED or DONE) changes; one PENDING or PROCESSING is left as it is. `lastError` is kept; the ignore
+   * reason goes with the old ending. `tx`: the `/retry` transaction, so the restore and this commit together.
+   */
+  async requeue(
+    eventId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const { count } = await tx.webhookEvent.updateMany({
+      where: { id: eventId, status: { in: ['FAILED', 'IGNORED', 'DONE'] } },
+      data: {
+        status: 'PENDING',
+        attempts: 0,
+        availableAt: new Date(),
+        processedAt: null,
+        ignoreReason: null,
+      },
+    });
+    this.logger.log(
+      `event=${eventId} ${count === 1 ? 'requeued for /retry' : 'not requeued (still pending or processing)'}`,
+    );
+  }
+
   /** One update that only matches a FAILED row, so two redeliveries at once queue it once. */
   private async requeueFailed(deliveryId: string): Promise<boolean> {
     const { count } = await this.prisma.webhookEvent.updateMany({

@@ -17,6 +17,10 @@ export type WorkflowInput = {
 } & (
   | { type: 'ISSUE_OPENED' | 'SKIP_ADDED'; task: TaskRef }
   | { type: 'LANE_ADDED' | 'LANE_REMOVED'; task: TaskRef; lane: Lane }
-  | { type: 'COMMENT' | 'APPROVE'; task: TaskRef; comment: TaskComment }
+  | {
+      type: 'COMMENT' | 'APPROVE' | 'RETRY'; // RETRY: 2026-11-16, D25
+      task: TaskRef;
+      comment: TaskComment;
+    }
   | { type: 'PR_UPDATED'; pr: PullRequestRef; headSha: string }
 );

@@ -44,7 +44,7 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.requireProcessor();
+    this.logProcessor();
     await this.resetInterrupted();
     this.schedule(0);
   }
@@ -58,6 +58,13 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
       );
     }
     return this.processor;
+  }
+
+  /** Spec 5 matrix "Startup": the log names the registered processor (after requireProcessor's check). */
+  protected logProcessor(): void {
+    this.logger.log(
+      `event processor: ${this.requireProcessor().constructor.name}`,
+    );
   }
 
   /** Stop claiming, let the current event finish (runs before Prisma disconnects). */
@@ -133,6 +140,10 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
     const label = `delivery=${event.deliveryId} event=${event.eventName} action=${event.action ?? '-'}`;
     try {
       const result = await this.requireProcessor().process(event);
+      if (result.status === 'WAIT') {
+        await this.wait(event, result.delayMs, label);
+        return;
+      }
       await this.prisma.webhookEvent.update({
         where: { id: event.id },
         data: {
@@ -163,13 +174,14 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
       error instanceof StepConfigError ||
       (isProviderOrLlmError(error) && error.kind === 'permanent');
     if (permanent || event.attempts >= MAX_ATTEMPTS) {
-      await this.prisma.webhookEvent.update({
+      const failed = await this.prisma.webhookEvent.update({
         where: { id: event.id },
         data: { status: 'FAILED', lastError, processedAt: new Date() },
       });
       this.logger.error(
         `${label} FAILED after ${event.attempts} attempt(s)${permanent ? ' (permanent error)' : ''}: ${lastError}`,
       );
+      await this.notifyFailed(failed, error, label);
       return;
     }
     const retryAfterMs = isProviderOrLlmError(error)
@@ -187,6 +199,44 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
     this.logger.warn(
       `${label} attempt ${event.attempts}/${MAX_ATTEMPTS} failed, retry in ${delayMs / 1000} s: ${lastError}`,
     );
+  }
+
+  /**
+   * Spec 5 (RLW11): back to PENDING after the delay, the attempt taken back (claimNext counted it). No
+   * lastError: waiting is not a failure. The processor logs why it waits.
+   */
+  private async wait(
+    event: WebhookEvent,
+    delayMs: number,
+    label: string,
+  ): Promise<void> {
+    await this.prisma.webhookEvent.update({
+      where: { id: event.id },
+      data: {
+        status: 'PENDING',
+        attempts: { decrement: 1 },
+        availableAt: new Date(Date.now() + delayMs),
+      },
+    });
+    this.logger.debug(`${label} WAIT ${delayMs / 1000} s`);
+  }
+
+  /**
+   * Spec 5 (RLW11): the processor's failure hook, once per FAILED row, awaited here so its writes (a stop)
+   * are saved before the next event is claimed (RL7). Its own error only goes to the log.
+   */
+  private async notifyFailed(
+    event: WebhookEvent,
+    error: unknown,
+    label: string,
+  ): Promise<void> {
+    try {
+      await this.requireProcessor().failed(event, error);
+    } catch (hookError) {
+      this.logger.error(
+        `${label} failure hook failed, the row stays FAILED: ${messageOf(hookError)}`,
+      );
+    }
   }
 }
 

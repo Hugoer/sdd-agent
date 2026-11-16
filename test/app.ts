@@ -68,12 +68,13 @@ export function offlineProviders(
 /** Same worker without the polling loop: tests call `drainOnce()` themselves. */
 class ManualEventsWorker extends EventsWorker {
   override async onApplicationBootstrap(): Promise<void> {
-    this.requireProcessor();
+    this.logProcessor();
     await this.resetInterrupted();
   }
 }
 
 type Step = (event: WebhookEvent) => Promise<ProcessResult>;
+type FailedHook = (event: WebhookEvent, error: unknown) => Promise<void>;
 
 /**
  * A processor the test scripts (plan P3): the worker's rules are tested without any real processor.
@@ -82,6 +83,10 @@ type Step = (event: WebhookEvent) => Promise<ProcessResult>;
 export class ScriptedProcessor implements EventProcessor {
   /** Delivery IDs in the order they were processed. */
   readonly processed: string[] = [];
+  /** Spec 5: every failed() call, with the row as the worker saved it and the error. */
+  readonly failedCalls: { event: WebhookEvent; error: unknown }[] = [];
+  /** Spec 5: what failed() does after it is recorded (default: nothing). */
+  onFailed: FailedHook = () => Promise.resolve();
   private readonly steps: Step[] = [];
 
   /** The next calls run these steps, in order. */
@@ -104,6 +109,19 @@ export class ScriptedProcessor implements EventProcessor {
     this.processed.push(event.deliveryId);
     const step = this.steps.shift();
     return step ? step(event) : Promise.resolve({ status: 'DONE' });
+  }
+
+  failed(event: WebhookEvent, error: unknown): Promise<void> {
+    this.failedCalls.push({ event, error });
+    return this.onFailed(event, error);
+  }
+
+  /** Forgets what earlier tests scripted and recorded. */
+  reset(): void {
+    this.processed.length = 0;
+    this.failedCalls.length = 0;
+    this.steps.length = 0;
+    this.onFailed = () => Promise.resolve();
   }
 }
 

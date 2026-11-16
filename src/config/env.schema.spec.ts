@@ -47,7 +47,18 @@ describe('validateEnv', () => {
       PORT: 3000,
       NGROK_DOMAIN: '',
       TARGET_BASE_BRANCH: 'main',
+      SESSION_LEASE_SECONDS: 120,
     });
+  });
+
+  it.each([
+    ['30', 30],
+    ['300', 300],
+  ])('accepts SESSION_LEASE_SECONDS=%s', (value, expected) => {
+    expect(
+      validateEnv({ ...valid, SESSION_LEASE_SECONDS: value })
+        .SESSION_LEASE_SECONDS,
+    ).toBe(expected);
   });
 
   it('coerces PORT and keeps a bare NGROK_DOMAIN', () => {
@@ -87,6 +98,9 @@ describe('validateEnv', () => {
     ['TARGET_BASE_BRANCH', 'has space'],
     ['TARGET_BASE_BRANCH', 'a~b'],
     ['TARGET_BASE_BRANCH', 'x'.repeat(256)],
+    ['SESSION_LEASE_SECONDS', '10'],
+    ['SESSION_LEASE_SECONDS', 'abc'],
+    ['SESSION_LEASE_SECONDS', '30.5'],
   ])('rejects %s=%s naming the variable', (name, value) => {
     expect(errorOf({ ...valid, [name]: value })).toMatch(
       new RegExp(`- ${name}: `),

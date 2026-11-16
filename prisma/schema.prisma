@@ -93,3 +93,79 @@ model ExecutionLog {
   @@index([step, model])
   @@map("execution_logs")
 }
+
+/// One row per issue (spec 5, "Owned tables"). `status` is the source of truth; `shownStatus` is the `status: *`
+/// label GitHub shows (null = none set). Only TaskService writes it; every write inside a job checks the lease.
+model Task {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// `TaskRef.platform`.
+  platform         String
+  /// `TaskRef.id`.
+  platformId       String    @map("platform_id")
+  /// `owner/repo#number`, refreshed from every event.
+  externalRef      String    @map("external_ref")
+  /// A `TaskStatus`.
+  status           String    @default("draft")
+  shownStatus      String?   @map("shown_status")
+  /// Null when no run is current.
+  currentRunId     String?   @unique @map("current_run_id") @db.Uuid
+  currentRun       Run?      @relation("CurrentRun", fields: [currentRunId], references: [id])
+  /// The last run number.
+  runCount         Int       @default(0) @map("run_count")
+  /// The `webhook_events.id` holding the session lease.
+  leaseOwner       String?   @map("lease_owner") @db.Uuid
+  leaseExpiresAt   DateTime? @map("lease_expires_at") @db.Timestamptz
+  /// RL8: a lane-conflict reminder was posted and the conflict is not over.
+  laneConflictOpen Boolean   @default(false) @map("lane_conflict_open")
+  /// Reminders posted so far (their marker's number).
+  laneConflicts    Int       @default(0) @map("lane_conflicts")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  runs             Run[]     @relation("TaskRuns")
+
+  @@unique([platform, platformId])
+  @@map("tasks")
+}
+
+/// One row per run (spec 5, D24): its id is the run id everywhere (`execution_logs.run_id`, specs 6–10). A stop
+/// (`needs-human`) pauses a run; only a cancel or a restart ends it (RLW1). Only RunService writes it.
+model Run {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId               String    @map("task_id") @db.Uuid
+  task                 Task      @relation("TaskRuns", fields: [taskId], references: [id])
+  /// 1, 2, 3 … per task.
+  number               Int
+  lane                 String
+  /// `grill: skip`, read at run start.
+  grillSkip            Boolean   @map("grill_skip")
+  /// The `webhook_events` row that started it.
+  startEventId         String    @map("start_event_id") @db.Uuid
+  /// A copy of that event's `received_at`, for the stale rule (RL10).
+  startEventReceivedAt DateTime  @map("start_event_received_at") @db.Timestamptz
+  startedAt            DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  endedAt              DateTime? @map("ended_at") @db.Timestamptz
+  /// `cancelled` or `restarted`.
+  endReason            String?   @map("end_reason")
+  /// Set while stopped (`needs-human`); cleared by `/retry`.
+  stoppedAt            DateTime? @map("stopped_at") @db.Timestamptz
+  /// The latest stop, kept after `/retry` and after the run ends.
+  stopStep             String?   @map("stop_step")
+  stopCause            String?   @map("stop_cause")
+  stopMessage          String?   @map("stop_message")
+  stopRetryable        Boolean?  @map("stop_retryable")
+  /// The event `/retry` re-queues.
+  stopEventId          String?   @map("stop_event_id") @db.Uuid
+  /// The status `/retry` restores.
+  statusBeforeStop     String?   @map("status_before_stop")
+  /// Null while the stop comment is pending (RL5).
+  stopCommentId        String?   @map("stop_comment_id")
+  /// The run-ended comment; null on an ended run while it is pending (RL5, plan Q1).
+  endCommentId         String?   @map("end_comment_id")
+  stops                Int       @default(0)
+  retries              Int       @default(0)
+  currentFor           Task?     @relation("CurrentRun")
+
+  @@unique([taskId, number])
+  @@index([taskId, startedAt])
+  @@map("runs")
+}

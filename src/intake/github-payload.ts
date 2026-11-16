@@ -15,6 +15,7 @@ import {
 } from '../github/labels.js';
 import { isApproveCommand } from './approve-command.js';
 import type { IgnoreReason } from './ignore-reason.js';
+import { isRetryCommand } from './retry-command.js';
 
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
 export type Needs = 'participant' | 'approver' | 'self';
@@ -245,13 +246,24 @@ function classifyComment(
     body: raw.body,
     createdAt: new Date(raw.created_at),
   };
-  return isApproveCommand(raw.body)
-    ? candidate({ ...common, type: 'APPROVE', task, comment }, 'approver', task)
-    : candidate(
-        { ...common, type: 'COMMENT', task, comment },
-        'participant',
-        task,
-      );
+  if (isApproveCommand(raw.body))
+    return candidate(
+      { ...common, type: 'APPROVE', task, comment },
+      'approver',
+      task,
+    );
+  // Spec 5 (RL6): `/retry` needs a Participant; a sender with no access is `unauthorized`, no reply (D21).
+  if (isRetryCommand(raw.body))
+    return candidate(
+      { ...common, type: 'RETRY', task, comment },
+      'participant',
+      task,
+    );
+  return candidate(
+    { ...common, type: 'COMMENT', task, comment },
+    'participant',
+    task,
+  );
 }
 
 /**

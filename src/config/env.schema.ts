@@ -68,6 +68,12 @@ export const envSchema = z.object({
       'must be a branch name: letters, digits, ".", "_", "-", "/"; no leading or trailing "/", no "..", no "//", no ".lock" ending',
     )
     .default('main'),
+  // Spec 5: how long an issue's session lease lasts without a heartbeat (one every third of it).
+  SESSION_LEASE_SECONDS: z.coerce
+    .number()
+    .int('must be an integer of at least 30')
+    .min(30, 'must be an integer of at least 30')
+    .default(120),
   LANGSMITH_TRACING: tracingOff,
   LANGSMITH_TRACING_V2: tracingOff,
   LANGCHAIN_TRACING: tracingOff,

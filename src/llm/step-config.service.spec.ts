@@ -77,6 +77,7 @@ const task = (labels: string[] = []): UnifiedTask => ({
   labels,
   author: 'octocat',
   url: `https://github.com/${REPO}/issues/14`,
+  open: true,
 });
 
 async function configError(promise: Promise<unknown>): Promise<string> {

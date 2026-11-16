@@ -27,6 +27,7 @@ export interface UnifiedTask extends TaskRef {
   labels: string[]; // always read from the API, never from a webhook payload
   author: string;
   url: string;
+  open: boolean; // false when the issue is closed (added 2026-11-16, spec 5, D26)
 }
 
 export interface CommentRef {

@@ -125,12 +125,12 @@ number, as spec 4's plan did for its P2 and P3.
 gets it with a one-line comment.
 
 **Acceptance criteria:**
-- [ ] `10`, `abc` and `30.5` → the startup error names `SESSION_LEASE_SECONDS`; unset → 120; `30` → accepted
+- [x] `10`, `abc` and `30.5` → the startup error names `SESSION_LEASE_SECONDS`; unset → 120; `30` → accepted
   (unit)
-- [ ] `.env.example` lists it with its default
+- [x] `.env.example` lists it with its default
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/config/env.schema.ts` (+ `.spec.ts`), `.env.example`
@@ -143,12 +143,12 @@ gets it with a one-line comment.
 already records every `setStatusLabel` call (spec "Fakes").
 
 **Acceptance criteria:**
-- [ ] The adapter maps `state: 'open'` → `true` and `state: 'closed'` → `false` (unit, fake fetch)
-- [ ] The fake answers `open: true` by default and `false` after `setOpen(task, false)` (unit)
-- [ ] `src/contracts/issue-provider.ts` matches overview §4's `UnifiedTask` line by line
+- [x] The adapter maps `state: 'open'` → `true` and `state: 'closed'` → `false` (unit, fake fetch)
+- [x] The fake answers `open: true` by default and `false` after `setOpen(task, false)` (unit)
+- [x] `src/contracts/issue-provider.ts` matches overview §4's `UnifiedTask` line by line
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/issue-provider.ts`, `src/github/github-issue.provider.ts` (+ `.spec.ts`),
@@ -162,14 +162,14 @@ classify gets the row "`issue_comment` · `created`, the text is `/retry` → `R
 "any other text". `WorkflowInput` gets `RETRY` (overview §4). Until T12 the placeholder ends it `DONE`.
 
 **Acceptance criteria:**
-- [ ] `/retry`, `  /RETRY ` and `/Retry\n` → true; `please /retry`, `/retry now`, `/retry2` → false (unit)
-- [ ] A Participant's `/retry` → `RETRY` with the comment; a sender with no access → `IGNORED` `unauthorized`, no
+- [x] `/retry`, `  /RETRY ` and `/Retry\n` → true; `please /retry`, `/retry now`, `/retry2` → false (unit)
+- [x] A Participant's `/retry` → `RETRY` with the comment; a sender with no access → `IGNORED` `unauthorized`, no
   reply, no label change (D21) (unit + integration)
-- [ ] `src/contracts/workflow-input.ts` matches overview §4; spec 2's other classify rows are unchanged (their
+- [x] `src/contracts/workflow-input.ts` matches overview §4; spec 2's other classify rows are unchanged (their
   tests pass untouched)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/workflow-input.ts`, `src/intake/retry-command.ts` (+ `.spec.ts`),
@@ -186,19 +186,19 @@ registered processor's class name (matrix "Startup"). The placeholder gets a no-
 `ScriptedProcessor` records its `failed()` calls.
 
 **Acceptance criteria:**
-- [ ] `WAIT` → `PENDING`, `availableAt` ≈ now + delay, `attempts` unchanged across the wait, no `last_error`
+- [x] `WAIT` → `PENDING`, `availableAt` ≈ now + delay, `attempts` unchanged across the wait, no `last_error`
   written (integration)
-- [ ] `failed()` is called exactly once per `FAILED` row, with the error, for a permanent error and after the 3rd
+- [x] `failed()` is called exactly once per `FAILED` row, with the error, for a permanent error and after the 3rd
   temporary one; never for a retried attempt; a throwing `failed()` leaves the row `FAILED` and the worker running
   (integration)
-- [ ] `failed()` is awaited inside the worker's handling of the event, before the next event is claimed (RL7:
+- [x] `failed()` is awaited inside the worker's handling of the event, before the next event is claimed (RL7:
   the stop is saved before a later `/retry` is judged) (integration)
-- [ ] `requeue`: `FAILED`, `IGNORED` and `DONE` → `PENDING`, now, `attempts` 0, `last_error` kept; `PENDING` and
+- [x] `requeue`: `FAILED`, `IGNORED` and `DONE` → `PENDING`, now, `attempts` 0, `last_error` kept; `PENDING` and
   `PROCESSING` unchanged; inside a rolled-back transaction nothing changes (integration)
-- [ ] The startup log names the registered processor (unit, `Logger` spy)
+- [x] The startup log names the registered processor (unit, `Logger` spy)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/events/event-processor.ts`, `src/events/events.worker.ts` (+ `.spec.ts`),
@@ -214,21 +214,21 @@ against the test database (P14). `resetDatabase` empties the two new tables. `Ru
 `endCommentId` (text, Q1): null on an ended run means its run-ended comment is still to post.
 
 **Acceptance criteria:**
-- [ ] The migration applies to an empty test database; `prisma migrate diff` from the migrations to the schema is
+- [x] The migration applies to an empty test database; `prisma migrate diff` from the migrations to the schema is
   empty
-- [ ] Inserting two runs with the same `(task_id, number)` fails (integration)
-- [ ] `execution_logs.run_id` is unchanged (text, no foreign key)
+- [x] Inserting two runs with the same `(task_id, number)` fails (integration)
+- [x] `execution_logs.run_id` is unchanged (text, no foreign key)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `prisma/schema.prisma`, `prisma/migrations/<ts>_tasks_runs/migration.sql`, `test/db.ts`
 **Scope:** S
 
 ### Checkpoint 1 — Seams and tables
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] `SESSION_LEASE_SECONDS=10 node dist/main.js` → the app refuses to start, naming the variable
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `SESSION_LEASE_SECONDS=10 node dist/main.js` → the app refuses to start, naming the variable
 - [ ] You run `npm run db:migrate`; `\d tasks` and `\d runs` show the spec's columns
 - [ ] You review and commit
 
@@ -388,7 +388,7 @@ nothing (P4); an optional cancel hook returns a block of text or null and must b
 **Scope:** S
 
 ### Checkpoint 2 — The core
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] `decide.spec.ts` has one named test per row 1–31 (list printed)
 - [ ] You review and commit
 
@@ -507,7 +507,7 @@ pending first, then `no-transition`. Log `#12 run 2 stopped at spec: access-deni
 
 ### Checkpoint 3 — The router on real GitHub
 My instance on port 3000, dev database; your clicks on the sandbox.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Startup": both rows
 - [ ] Matrix "Run start, stop and `/retry`": the first two rows (`#A` opened → `status: draft`; `code-only` →
   run 1 stopped at `go-signal`, one comment, no injection warning)
@@ -598,7 +598,7 @@ retried job never posts twice. Wording by whether a run is current after the act
 **Scope:** S
 
 ### Checkpoint 4 — `/retry`, restarts and conflicts on real GitHub
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Run start, stop and `/retry`": the remaining rows (`/retry`, `please /retry`, `  /RETRY `, cancel,
   `/retry` with no run, `full-sdd` run 2)
 - [ ] Matrix "Restart and lane conflicts": every row except `#D` (it needs the stale rule, T20: Checkpoint 5)
@@ -664,7 +664,7 @@ stops, retries.
 **Scope:** XS
 
 ### Checkpoint 5 — Closed, stale, lease and refused inputs on real GitHub
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
 - [ ] Matrix "Closed issues", "Stale events" and "Lease": every row
 - [ ] Matrix "Restart and lane conflicts": the `#D` row (labels set in the creation form)
 - [ ] Matrix "Refused and other inputs": the two signed requests

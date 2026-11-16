@@ -43,6 +43,7 @@ interface FakeIssue {
   description: string;
   labels: string[];
   author: string;
+  open: boolean;
 }
 
 interface FakeComment {
@@ -89,8 +90,14 @@ export class InMemoryIssueProvider implements IssueProvider {
       description: issue.description ?? '',
       labels: [...(issue.labels ?? [])],
       author: issue.author ?? 'issue-author',
+      open: true,
     });
     return task;
+  }
+
+  /** A human closes or reopens the issue (not a provider method; not recorded). */
+  setOpen(task: TaskRef, open: boolean): void {
+    this.issue(task).open = open;
   }
 
   seedComment(
@@ -140,6 +147,7 @@ export class InMemoryIssueProvider implements IssueProvider {
         labels: [...issue.labels],
         author: issue.author,
         url: this.url(task),
+        open: issue.open,
       };
     });
   }

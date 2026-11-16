@@ -9,5 +9,5 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
   if (db !== TEST_DATABASE_NAME) {
     throw new Error(`refusing to reset database "${db}"`);
   }
-  await prisma.$executeRaw`TRUNCATE webhook_events, execution_logs`;
+  await prisma.$executeRaw`TRUNCATE webhook_events, execution_logs, tasks, runs`;
 }

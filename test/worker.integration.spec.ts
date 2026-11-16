@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import { LlmError, StepConfigError } from '../src/contracts/llm-error.js';
 import { ProviderError } from '../src/contracts/provider-error.js';
+import { EventsService } from '../src/events/events.service.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import { resetDatabase } from './db.js';
 import {
@@ -60,7 +61,7 @@ describe('EventsWorker (manual drain)', () => {
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);
-    processor.processed.length = 0;
+    processor.reset();
   });
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => {
@@ -312,6 +313,189 @@ describe('EventsWorker (manual drain)', () => {
       });
     },
   );
+
+  describe('spec 5 seams (RLW11)', () => {
+    const permanent = () =>
+      new ProviderError('GitHub POST … → 404: Not Found', 'permanent', {
+        status: 404,
+      });
+
+    it('WAIT → PENDING after the delay, the attempt taken back, no lastError; once due it runs', async () => {
+      const event = await insertEvent();
+      processor.then(() => Promise.resolve({ status: 'WAIT', delayMs: 5_000 }));
+
+      const before = Date.now();
+      await t.worker.drainOnce();
+
+      const r = await row(event.id);
+      expect(r).toMatchObject({
+        status: 'PENDING',
+        attempts: 0,
+        lastError: null,
+        processedAt: null,
+      });
+      expect(r.availableAt.getTime() - before).toBeGreaterThanOrEqual(5_000);
+      expect(r.availableAt.getTime() - before).toBeLessThan(6_000);
+      expect(await t.worker.drainOnce()).toBe(0); // waiting: not due yet
+
+      await makeDue(event.id);
+      await t.worker.drainOnce();
+      expect(await row(event.id)).toMatchObject({
+        status: 'DONE',
+        attempts: 1,
+      });
+      expect(processor.failedCalls).toEqual([]);
+    });
+
+    it('WAIT after a failed attempt keeps that attempt and its lastError', async () => {
+      const event = await insertEvent();
+      processor.failNext(unavailable());
+      await t.worker.drainOnce();
+      await makeDue(event.id);
+      processor.then(() => Promise.resolve({ status: 'WAIT', delayMs: 5_000 }));
+
+      await t.worker.drainOnce();
+
+      expect(await row(event.id)).toMatchObject({
+        status: 'PENDING',
+        attempts: 1,
+        lastError: 'GitHub POST … → 503: Unavailable',
+      });
+    });
+
+    it('failed() once for a permanent error, with the row as saved and the error', async () => {
+      const event = await insertEvent();
+      const error = permanent();
+      processor.failNext(error);
+
+      await t.worker.drainOnce();
+
+      expect(processor.failedCalls).toHaveLength(1);
+      expect(processor.failedCalls[0].error).toBe(error);
+      expect(processor.failedCalls[0].event).toMatchObject({
+        id: event.id,
+        status: 'FAILED',
+        attempts: 1,
+        lastError: 'GitHub POST … → 404: Not Found',
+      });
+    });
+
+    it('failed() never for a retried attempt, once after the 3rd temporary error', async () => {
+      const event = await insertEvent();
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        processor.failNext(unavailable());
+        await t.worker.drainOnce();
+        expect(processor.failedCalls).toHaveLength(attempt < 3 ? 0 : 1);
+        if (attempt < 3) await makeDue(event.id);
+      }
+
+      expect(processor.failedCalls[0].event).toMatchObject({
+        id: event.id,
+        status: 'FAILED',
+        attempts: 3,
+      });
+      expect(await t.worker.drainOnce()).toBe(0);
+      expect(processor.failedCalls).toHaveLength(1);
+    });
+
+    it('a throwing failed() leaves the row FAILED and the worker running', async () => {
+      const event = await insertEvent();
+      processor.failNext(permanent());
+      processor.onFailed = () => Promise.reject(new Error('hook broke'));
+
+      await t.worker.drainOnce();
+      const next = await insertEvent();
+      await t.worker.drainOnce();
+
+      expect(await row(event.id)).toMatchObject({
+        status: 'FAILED',
+        lastError: 'GitHub POST … → 404: Not Found',
+      });
+      expect(await row(next.id)).toMatchObject({ status: 'DONE' });
+    });
+
+    it('failed() is awaited before the next event is claimed (RL7)', async () => {
+      const base = Date.now() - 10_000;
+      const first = await insertEvent({ receivedAt: new Date(base) });
+      const second = await insertEvent({ receivedAt: new Date(base + 1) });
+      processor.failNext(permanent());
+      let processedWhenHookEnded: string[] = [];
+      processor.onFailed = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        processedWhenHookEnded = [...processor.processed];
+      };
+
+      expect(await t.worker.drainOnce()).toBe(2);
+
+      expect(processedWhenHookEnded).toEqual([first.deliveryId]);
+      expect(processor.processed).toEqual([
+        first.deliveryId,
+        second.deliveryId,
+      ]);
+    });
+
+    it.each(['FAILED', 'IGNORED', 'DONE'] as const)(
+      'requeue: %s → PENDING now, attempts 0, lastError kept, ignore reason and processedAt cleared (plan P8)',
+      async (status) => {
+        const event = await insertEvent({
+          status,
+          attempts: 3,
+          lastError: 'GitHub POST … → 404: Not Found',
+          ignoreReason: status === 'IGNORED' ? 'no-transition' : null,
+          processedAt: new Date(),
+          availableAt: new Date(Date.now() - 60_000),
+        });
+
+        const before = Date.now();
+        await t.app.get(EventsService).requeue(event.id);
+
+        const r = await row(event.id);
+        expect(r).toMatchObject({
+          status: 'PENDING',
+          attempts: 0,
+          lastError: 'GitHub POST … → 404: Not Found',
+          ignoreReason: null,
+          processedAt: null,
+        });
+        expect(r.availableAt.getTime()).toBeGreaterThanOrEqual(before - 1_000);
+        expect(r.availableAt.getTime()).toBeLessThanOrEqual(Date.now());
+      },
+    );
+
+    it.each(['PENDING', 'PROCESSING'] as const)(
+      'requeue: %s → unchanged',
+      async (status) => {
+        const event = await insertEvent({
+          status,
+          attempts: 1,
+          availableAt: new Date(Date.now() + 60_000),
+        });
+
+        await t.app.get(EventsService).requeue(event.id);
+
+        expect(await row(event.id)).toEqual(event);
+      },
+    );
+
+    it('requeue inside a rolled-back transaction changes nothing', async () => {
+      const event = await insertEvent({
+        status: 'FAILED',
+        attempts: 1,
+        lastError: 'boom',
+        processedAt: new Date(),
+      });
+      const events = t.app.get(EventsService);
+
+      await expect(
+        t.prisma.$transaction(async (tx) => {
+          await events.requeue(event.id, tx);
+          throw new Error('roll back');
+        }),
+      ).rejects.toThrow('roll back');
+
+      expect(await row(event.id)).toEqual(event);
+    });
+  });
 
   it('truncates lastError to 2,000 characters', async () => {
     processor.failNext(unavailable('e'.repeat(5_000)));
