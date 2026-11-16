@@ -24,6 +24,7 @@
     "db:test:down": "docker compose -f docker-compose.test.yml down",
     "db:migrate": "prisma migrate dev",
     "db:events": "docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c \"SELECT delivery_id, event_name, action, external_ref, payload->'sender'->>'login' AS sender, status, ignore_reason, attempts, left(last_error, 80) AS last_error, received_at FROM webhook_events ORDER BY received_at DESC LIMIT 20\"",
+    "db:usage": "docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c \"SELECT step, model, model_level AS level, count(*) AS calls, count(*) FILTER (WHERE status = 'ERROR') AS errors, count(*) FILTER (WHERE attempt > 1) AS reasks, sum(input_tokens) AS input_tok, sum(output_tokens) AS output_tok, sum(cached_input_tokens) AS cached_tok, sum(reasoning_tokens) AS reasoning_tok, sum(frame_chars) AS frame_chars, sum(skill_chars) AS skill_chars, sum(untrusted_chars) AS untrusted_chars, sum(other_chars) AS other_chars, round(avg(duration_ms)) AS avg_ms FROM execution_logs GROUP BY step, model, model_level ORDER BY step, model, model_level\"",
     "postinstall": "prisma generate",
     "tunnel": "node --env-file-if-exists=.env scripts/tunnel.mjs",
     "github:smoke": "nest build && node dist/github/smoke/github-smoke.js",

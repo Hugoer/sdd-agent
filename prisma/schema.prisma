@@ -38,3 +38,58 @@ model WebhookEvent {
   @@index([externalRef, receivedAt])
   @@map("webhook_events")
 }
+
+/// One row per model call attempt (spec 4, L11): a re-ask is a new row, a worker retry makes new rows. Only
+/// inserted by ExecutionLogService; never updated or deleted by the app. Token columns: empty = not reported.
+model ExecutionLog {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// When the attempt ended.
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  platform          String
+  taskId            String   @map("task_id")
+  externalRef       String   @map("external_ref")
+  /// The run (spec 5 defines it); `smoke-<id>` for the smoke script.
+  runId             String?  @map("run_id")
+  lane              String?
+  step              String
+  provider          String
+  /// The model name sent.
+  model             String
+  modelLevel        String   @map("model_level")
+  /// The base-branch commit the skill and the map were read at.
+  skillCommit       String   @map("skill_commit")
+  /// 1 = first ask, 2 and 3 = re-asks.
+  attempt           Int
+  /// `SUCCESS` or `ERROR`.
+  status            String
+  errorCode         String?  @map("error_code")
+  /// At most 2,000 characters.
+  errorMessage      String?  @map("error_message")
+  /// The model call only.
+  durationMs        Int      @map("duration_ms")
+  inputTokens       Int?     @map("input_tokens")
+  outputTokens      Int?     @map("output_tokens")
+  cachedInputTokens Int?     @map("cached_input_tokens")
+  reasoningTokens   Int?     @map("reasoning_tokens")
+  frameChars        Int      @map("frame_chars")
+  skillChars        Int      @map("skill_chars")
+  untrustedChars    Int      @map("untrusted_chars")
+  otherChars        Int      @map("other_chars")
+  answerChars       Int?     @map("answer_chars")
+  /// Kinds matched in this call's untrusted texts; empty = none.
+  injectionKinds    String[] @map("injection_kinds")
+  /// Source keys of the untrusted texts that were cut.
+  cutSources        String[] @map("cut_sources")
+  /// The messages as sent (LangChain StoredMessage[], after wrapping and cutting).
+  prompt            Json     @db.JsonB
+  /// The answer as received, before the schema check; empty when the call itself failed.
+  answer            Json?    @db.JsonB
+  /// LangChain's usage_metadata, as received.
+  providerUsage     Json?    @map("provider_usage") @db.JsonB
+  /// LangChain's response_metadata, as received.
+  providerMeta      Json?    @map("provider_meta") @db.JsonB
+
+  @@index([platform, taskId, createdAt])
+  @@index([step, model])
+  @@map("execution_logs")
+}

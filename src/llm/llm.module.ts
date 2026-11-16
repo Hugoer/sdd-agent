@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { GitHubModule } from '../github/github.module.js';
 import { CHAT_MODEL_FACTORY } from './chat-model.factory.js';
+import { ExecutionLogService } from './execution-log.service.js';
 import { GoogleChatModelFactory } from './google/google-chat-model.factory.js';
+import { InjectionWarningService } from './injection-warning.service.js';
+import { LlmService } from './llm.service.js';
 import { StepConfigService } from './step-config.service.js';
 
 /**
@@ -13,7 +16,16 @@ import { StepConfigService } from './step-config.service.js';
   providers: [
     { provide: CHAT_MODEL_FACTORY, useClass: GoogleChatModelFactory },
     StepConfigService,
+    InjectionWarningService,
+    ExecutionLogService,
+    LlmService,
   ],
-  exports: [CHAT_MODEL_FACTORY, StepConfigService],
+  exports: [
+    LlmService,
+    CHAT_MODEL_FACTORY,
+    StepConfigService,
+    InjectionWarningService,
+    ExecutionLogService,
+  ],
 })
 export class LlmModule {}

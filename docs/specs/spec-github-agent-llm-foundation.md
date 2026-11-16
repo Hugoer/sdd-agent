@@ -980,3 +980,10 @@ None blocks this spec. For the build and later specs:
 - **Spec 7:** its document table keeps the text as posted (L17).
 - **Specs 9 and 10:** retrying a single call inside the loop; each loop turn stores only what was new (L18);
   tools together with a schema-checked final answer; the diff scan before a push.
+- **Later (raised 2026-11-16, not built in this spec):** whether to run the injection patterns over a skill's
+  files when it is loaded. Today a skill on the base branch is trusted by design (overview §4 "Trust") and goes
+  into the system message unchecked; the risk left is a hostile skill merged by someone with write access. The
+  candidate: `skill-loader.ts` calls `findInjectionKinds` on each file and logs one warning line (the step, the
+  path and the kinds, never the text); the skill still loads. Small: no contract, table or other module changes.
+  To decide: warn only or refuse the skill, and whether a warning also goes somewhere visible (a comment, an
+  `ExecutionLog` column). Decide before spec 6 writes the first real skill.

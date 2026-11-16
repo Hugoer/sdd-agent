@@ -1,6 +1,6 @@
-// `npm run llm:smoke` (spec 4, dev-only). Second form (plan P1, T16): checks 1–4 read the target repo's setup at
-// the base branch, then one provisional model call with the step's model. Config, GitHubModule and LlmModule
-// only: no HTTP server, no worker, no database yet. Stop `npm run dev` first (both build into dist/).
+// `npm run llm:smoke` (spec 4 "Smoke script", L12, dev-only): the whole chain once with a real model call. A Nest
+// application context with config, Prisma, GitHubModule and LlmModule: no HTTP server, no worker. Rows go to the
+// dev database with run_id `smoke-<id>`. Stop `npm run dev` first (both build into dist/).
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -15,11 +15,11 @@ import {
 } from '../../contracts/repo-provider.js';
 import { GitHubModule } from '../../github/github.module.js';
 import { GitHubStartupError } from '../../github/github-startup.js';
-import {
-  CHAT_MODEL_FACTORY,
-  type ChatModelFactory,
-} from '../chat-model.factory.js';
+import { PrismaModule } from '../../prisma/prisma.module.js';
+import { PrismaService } from '../../prisma/prisma.service.js';
+import { InjectionWarningService } from '../injection-warning.service.js';
 import { LlmModule } from '../llm.module.js';
+import { LlmService } from '../llm.service.js';
 import { StepConfigService } from '../step-config.service.js';
 import {
   LLM_SMOKE_USAGE,
@@ -30,6 +30,7 @@ import {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    PrismaModule,
     GitHubModule,
     LlmModule,
   ],
@@ -57,17 +58,43 @@ try {
 }
 
 const config = context.get<ConfigService<Env, true>>(ConfigService);
+const prisma = context.get(PrismaService);
+const runId = `smoke-${Date.now().toString(36)}`;
 const ok = await runLlmSmoke(
   {
-    factory: context.get<ChatModelFactory>(CHAT_MODEL_FACTORY),
     stepConfig: context.get(StepConfigService),
+    warnings: context.get(InjectionWarningService),
+    llm: context.get(LlmService),
     issues: context.get<IssueProvider>(ISSUE_PROVIDER),
     repo: context.get<RepoProvider>(REPO_PROVIDER),
+    rowsOf: (id) =>
+      prisma.executionLog.findMany({
+        where: { runId: id },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          attempt: true,
+          status: true,
+          errorCode: true,
+          model: true,
+          modelLevel: true,
+          durationMs: true,
+          inputTokens: true,
+          outputTokens: true,
+          cachedInputTokens: true,
+          reasoningTokens: true,
+          frameChars: true,
+          skillChars: true,
+          untrustedChars: true,
+          otherChars: true,
+        },
+      }),
     targetRepo: config.get('TARGET_REPO', { infer: true }),
   },
   {
     ...options,
     base: options.base ?? config.get('TARGET_BASE_BRANCH', { infer: true }),
+    runId,
   },
   print,
 );
