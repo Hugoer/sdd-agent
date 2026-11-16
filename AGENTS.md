@@ -14,9 +14,15 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (`src/intake/github-payload.ts` is the only reader of a GitHub payload) and authorizes its sender with
   `getAccessLevel` (Participant / Approver); accepted events end `DONE`, the rest `IGNORED` with a reason; a lane or
   skip label added without access is reverted. The hello comment is gone; `webhook_events.external_ref` holds
-  `owner/repo#number`; a redelivery of a `FAILED` event queues it again. Next in the build order: spec 4
-  (`llm-foundation`; spec and plan approved 2026-11-12, not built). Repo: `Hugoer/sdd-agent`;
-  target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  `owner/repo#number`; a redelivery of a `FAILED` event queues it again. Spec 4 (`llm-foundation`) built
+  2026-11-16: `LlmModule` (`src/llm`): `StepConfigService` reads `.github-agent/workflow.json` and the step's
+  skill at one commit of `TARGET_BASE_BRANCH` and picks the model (`standard`, or `max` with a `model: max-<step>`
+  label); `LlmService.call()` guards untrusted text (cut, wrapped, injection warning comment), calls Gemini
+  through `ChatGoogle` behind `CHAT_MODEL_FACTORY` (300 s, no hidden retry), judges the answer with Zod, re-asks
+  up to twice and writes one `execution_logs` row per attempt. `SecretScanModule` wraps both ports; five model
+  labels (16 in all); `npm run llm:smoke` and `npm run db:usage`. No workflow step calls a model yet. Sandbox
+  models: `gemini-4-hydrogen` (standard), `gemini-4-carbon` (max). Next in the build order: spec 5
+  (`router-session-lease`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
@@ -46,10 +52,12 @@ npm run db:down           stop dev Postgres (keeps data)
 npm run db:migrate        prisma migrate dev (create/apply migrations)
 npm run db:reset          prisma migrate reset (wipes dev data; asks first)
 npm run db:events         last 20 webhook_events rows (external_ref, sender, status, ignore_reason)
+npm run db:usage          LLM calls, tokens and prompt sizes by step, model and level (execution_logs)
 npm run db:test:up        test Postgres on 127.0.0.1:5434 (in-memory data)
 npm run db:test:down      remove the test Postgres
 npm run tunnel            ngrok on NGROK_DOMAIN → PORT
 npm run github:smoke      every GitHub method once on TARGET_REPO (-- --issue <n>; stop npm run dev first)
+npm run llm:smoke         the whole LLM chain once on a real issue (-- --issue <n> --step <step>; stop npm run dev first)
 ```
 
 Before declaring work done: `npm run typecheck && npm run lint && npm test && npm run test:integration`.

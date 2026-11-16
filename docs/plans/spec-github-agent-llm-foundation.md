@@ -1,6 +1,7 @@
 # Implementation Plan — Spec #4: LLM Foundation
 
-> **Created:** 2026-11-12 · **Status:** approved 2026-11-12 (including P1–P9) · build started 2026-11-12
+> **Created:** 2026-11-12 · **Status:** approved 2026-11-12 (including P1–P9) · build started 2026-11-12 ·
+> built and verified 2026-11-16
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-llm-foundation.md` into ordered,
 > verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan adds
@@ -177,11 +178,12 @@ the scripted fake factory, which is written here.
 
 ### Checkpoint 1 — Gemini answers
 - [x] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] `npm run llm:smoke -- --try gemini-4-argon` → `PASS`: a duration, input and output tokens filled; the same
+- [x] `npm run llm:smoke -- --try gemini-4-argon` → `PASS`: a duration, input and output tokens filled; the same
   for `--try gemini-4-carbon`
   - 2026-11-12: argon `PASS`. Carbon gave no answer: `503` `UNAVAILABLE` twice, then nothing within 300 s, and a
     plain request outside LangChain also got no answer in 300 s, so the cause is on Google's side. Both mapped to
     `provider-unavailable` as specified. Carbon is tried again at Checkpoint 3 (`model: max-spec`).
+  - 2026-11-13: carbon passed at Checkpoint 3 (70.8 s, then 6.5 s) and again at T26 (288 s, under the limit).
 - [x] `--try no-such-model-xyz` → `FAIL` as `unknown-model` with status `404`
 - [x] `GOOGLE_API_KEY=wrong-key-value npm run llm:smoke -- --try gemini-4-argon` → `FAIL` as `bad-api-key`; the
   status it shows answers the spec's open build question. If Google answers differently, I correct the adapter's
@@ -378,7 +380,7 @@ comment on `postComment` changes as in overview §4.
   `own-event` and nothing follows it
 - [x] `npm run github:smoke -- --issue N` → every line `PASS` (the ports now go through the scanner)
   - 2026-11-13, on sandbox issue #14 (the test issue for the rest of this build).
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -488,7 +490,7 @@ models) and five `.github-agent/skills/<step>/SKILL.md` files, one line each: "P
   - 2026-11-13, #14: carbon `max`, the call `PASS` in 70.8 s, and again in 6.5 s at `76d626d`. `--step code` →
     `gemini-4-hydrogen` `standard`, every line `PASS`, the call in 4.1 s.
 - [x] `--base no-such-branch` → check 1 `FAIL` naming the branch; no model call
-- [ ] You review and commit (both repos)
+- [x] You review and commit (both repos)
 
 ---
 
@@ -563,7 +565,7 @@ new table.
   empty token columns when no usage was reported, an error message cut at 2,000 characters (integration, real
   PostgreSQL)
 - [x] The service only inserts: `grep` finds no update or delete of `executionLog` in `src`
-- [ ] `npm run db:usage` runs and prints its columns per step, model and level (manual, after your
+- [x] `npm run db:usage` runs and prints its columns per step, model and level (manual, after your
   `npm run db:migrate`)
 
 **Verification:**
@@ -686,7 +688,7 @@ provisional call of T4 is deleted. Rows get `run_id` `smoke-<id>`.
     injected sentence is only in the user message, inside the data block; `injection_kinds` has both kinds.
 - [x] `grep` of the smoke output and my app log for the key, `AIza`, `ghs_` and the injected sentence → no match
   - Six smoke outputs (no app instance ran at this checkpoint): 0 matches for each, 44 `PASS` lines found.
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -700,12 +702,12 @@ sections "Check the LLM with the smoke script" and "Usage data", the three refer
 a name it lists.
 
 **Acceptance criteria:**
-- [ ] Every command in the guide exists in `package.json`; the guide's labels equal `BOT_LABELS` (16) and its
+- [x] Every command in the guide exists in `package.json`; the guide's labels equal `BOT_LABELS` (16) and its
   ignore reasons equal `ignore-reason.ts`; troubleshooting lists every `LlmErrorCode` and every `StepConfigError`
   message with its fix
-- [ ] No living doc (the guide, `README.md`, `AGENTS.md`, `.env.example`) names `ANTHROPIC_API_KEY`, a model
+- [x] No living doc (the guide, `README.md`, `AGENTS.md`, `.env.example`) names `ANTHROPIC_API_KEY`, a model
   constant in the bot, or an empty `workflow.json` as enough
-- [ ] `AGENTS.md` says spec 4 is built and names the next spec (5, `router-session-lease`)
+- [x] `AGENTS.md` says spec 4 is built and names the next spec (5, `router-session-lease`)
 
 **Verification:**
 - [ ] Manual: you read the changed guide sections once
@@ -722,13 +724,16 @@ GitHub UI steps, one step per message. Results are ticked in the spec; the spec'
 set.
 
 **Acceptance criteria:**
-- [ ] Every matrix row is ticked or reported as failing with its output (no silent skips); the rows "Not checked
+- [x] Every matrix row is ticked or reported as failing with its output (no silent skips); the rows "Not checked
   by hand" stay as the spec lists them
-- [ ] The spec's success criteria are checked: `src/contracts` against overview §4 signature by signature, and
+- [x] The spec's success criteria are checked: `src/contracts` against overview §4 signature by signature, and
   the list of files a provider change would touch
+  - 2026-11-16: 32 rows, all passed (the spec's matrix has the run note). `src/contracts` matches overview §4
+    (only each error class's own `name` added). Outside `src/llm/google/` only `llm.module.ts` (the binding),
+    `env.schema.ts` (`GOOGLE_API_KEY`) and `secret-scanner.ts` (the own-secret list) name Google in code.
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
 
 **Dependencies:** T25
 **Files:** `docs/specs/spec-github-agent-llm-foundation.md` and this plan (checkboxes and status only), plus
@@ -736,7 +741,7 @@ fixes if a row fails
 **Scope:** S (more if a row fails)
 
 ### Checkpoint 5 — Complete
-- [ ] The spec's "Success criteria" are all checked
+- [x] The spec's "Success criteria" are all checked
 - [ ] You review and commit; spec 5 (`router-session-lease`) is next in the build order
 
 ---
