@@ -5,7 +5,8 @@
 > contract changes in §1, §4 and §6, approved with that spec on 2026-11-12) · amended 2026-11-16 (spec 5
 > interview: D24–D26, D1 and D7 annotated, §3 R1/R4/R5 and rows 3, 8, 28, 30, 31, §4 and §6; then its
 > follow-up interview: D6 and D26 annotated, rows 6, 7, 28 and the note under row 31; approved with that spec on
-> 2026-11-16)
+> 2026-11-16) · amended 2026-11-16 (spec 5's plan, approved that day: §1 row 5, §3 row 1 and the note under
+> row 31, §6 `Run`)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#10) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -175,7 +176,7 @@ Numbers are IDs, not build order.
 | 2 | `intake-authorization` | `IntakeModule` · `src/intake` | Payload → neutral input (`WorkflowInput`), the sender's access level (+ the App's own PR events), target-repo filter, ignore reasons, label revert, `/approve` reply | 1, 3 | xhigh |
 | 3 | `github-providers` | `GitHubModule` · `src/github` | App auth (JWT → installation token), GitHub `IssueProvider` + `RepoProvider`, label bootstrap | 1 | high |
 | 4 | `llm-foundation` | `LlmModule`, `SecretScanModule` · `src/llm`, `src/secret-scan` | Gemini client (`ChatGoogle`, D22), model per step (D23), Zod output + re-ask, `ExecutionLog` (prompt, answer, usage), input guard, secret scanner at the ports, step-skill loader + prompt assembly | 1, 3 | xhigh |
-| 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` and `Run` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, run start, cancel/restart, stale events, closed issues, `needs-human` + `/retry` (2026-11-16) | 2, 3 | xhigh |
+| 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` and `Run` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, run start, cancel/restart, stale events, closed issues, `needs-human` + `/retry` (2026-11-16) | 2, 3, 4 (2026-11-16, spec 5 plan: the run-start check and the injection warning) | xhigh |
 | 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment | 4, 5 | max |
 | 7 | `spec-plan-approvals` | `DocumentsModule` · `src/documents` | Spec/Plan generation, `/approve` rules, approved snapshots | 6 | xhigh |
 | 8 | `workspace-git` | `WorkspaceModule` · `src/workspace` | git runner (`execFile`), bot worktree, workspace lease + queue, setup command, bot identity, per-command token | 3, 5 | max |
@@ -312,7 +313,7 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 
 | # | State | Input | Action | Next |
 |---|---|---|---|---|
-| 1 | draft | `ISSUE_OPENED` | If no `Task` row exists: create it, set `status: draft` | draft |
+| 1 | draft | `ISSUE_OPENED` | If no `Task` row exists: create it, set `status: draft`. 2026-11-16 (spec 5 plan P6): precisely, while no status label is shown yet and the issue never had a run; a row a lane event created first is used as is, and a retried `opened` whose label failed sets it then | draft |
 | 2 | draft | `LANE_ADDED`, exactly one lane label on the issue | Start a run (rows 9–11) | per lane |
 | 3 | draft | `LANE_ADDED`, two or more lane labels | One comment: keep exactly one `workflow:*` label (2026-11-16: one per conflict, not per event) | draft |
 | 4 | draft | `LANE_REMOVED`, exactly one lane label left | Start a run with it (rows 9–11) | per lane |
@@ -346,7 +347,10 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 
 `RETRY` in any other case does nothing but gets one reply saying why (no run, not stopped, written before the
 stop; 2026-11-16, RL20). Closed issues are handled before this table (D26). The event that started the current
-run is checked before rows 6–8: running → it continues the run, stopped → ignored (RL14).
+run is checked before rows 6–8: running → it continues the run, stopped → ignored (RL14). 2026-11-16 (spec 5
+plan P15): rows 2–5 apply only while the issue has no current run, and rows 6–8 whenever it has one, even in
+`draft` (before the first step sets a status, or after `/retry` of a stop at the first step). A run is never
+created beside a current one, except by a restart, which ends the current run first.
 
 Informative view (the table wins if they differ):
 
@@ -621,7 +625,7 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 | `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
 | `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
 | `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
-| `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts | — |
+| `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, the merged answer, confidence before/after, gaps, comment IDs, post state | — |
 | `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time | — |
