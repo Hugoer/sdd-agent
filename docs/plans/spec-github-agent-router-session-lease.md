@@ -744,6 +744,19 @@ fixes if a row fails
 
 ---
 
+## Noticed during the build (not changed)
+
+Recorded 2026-11-17 for later specs; none affects spec 5's behavior.
+
+- The `status: needs-human` label's description (created by the bot at startup) still says only "Remove and
+  re-add the workflow label to restart"; it doesn't mention `/retry`. The bot never edits an existing label, so a
+  new description reaches only repos where the label is created new (or an edit by hand).
+- `runs.started_at` looks filled on the app side by Prisma's `@default(now())` (millisecond precision, the Mac's
+  clock), unlike the times the router compares (PostgreSQL's, P7). Nothing compares it today; `db:runs` only shows
+  it. A later spec that compares it should set it in SQL.
+- While an issue's lease is held, its waiting event runs intake again every 5 s: one `getAccessLevel` call per
+  wait. With one worker a lease is only held after a crash or by a second instance, so it stops at the expiry.
+
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
