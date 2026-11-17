@@ -21,8 +21,15 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   through `ChatGoogle` behind `CHAT_MODEL_FACTORY` (300 s, no hidden retry), judges the answer with Zod, re-asks
   up to twice and writes one `execution_logs` row per attempt. `SecretScanModule` wraps both ports; five model
   labels (16 in all); `npm run llm:smoke` and `npm run db:usage`. No workflow step calls a model yet. Sandbox
-  models: `gemini-4-hydrogen` (standard), `gemini-4-carbon` (max). Next in the build order: spec 5
-  (`router-session-lease`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  models: `gemini-4-hydrogen` (standard), `gemini-4-carbon` (max). Spec 5 (`router-session-lease`) built
+  2026-11-17: `WorkflowModule` (`src/workflow`): `WorkflowEventProcessor` (intake, then the router) replaces
+  spec 2's placeholder; `tasks` and `runs` tables (`TaskService`, `RunService`); a session lease per issue
+  (`SESSION_LEASE_SECONDS`, heartbeat); pure `decide()` with overview §3's rows; the router runs the action, the
+  pending side effects and the lane-conflict reminder (one per set of labels); run start (check, injection
+  warning), cancel and restart with one run-ended comment, `needs-human` with one stop comment and `/retry`,
+  closed issues, stale events. Steps plug in through `StepHandlerRegistry` (none registered yet, so every run
+  stops at its first step with `step-not-built`); `npm run db:runs`. Next in the build order: spec 6
+  (`grill-me`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)
@@ -53,6 +60,7 @@ npm run db:migrate        prisma migrate dev (create/apply migrations)
 npm run db:reset          prisma migrate reset (wipes dev data; asks first)
 npm run db:events         last 20 webhook_events rows (external_ref, sender, status, ignore_reason)
 npm run db:usage          LLM calls, tokens and prompt sizes by step, model and level (execution_logs)
+npm run db:runs           last 20 runs: issue, number, lane, skip, started, ended (why), stop, stops, retries
 npm run db:test:up        test Postgres on 127.0.0.1:5434 (in-memory data)
 npm run db:test:down      remove the test Postgres
 npm run tunnel            ngrok on NGROK_DOMAIN → PORT

@@ -1,7 +1,8 @@
 # Implementation Plan — Spec #5: Router & Session Lease
 
-> **Created:** 2026-11-16 · **Status:** approved 2026-11-16, not built (fresh-context review 2026-11-16, its 12
-> findings applied the same day: see "Review"; Q1 answered yes and P1–P16 confirmed the same day)
+> **Created:** 2026-11-16 · **Status:** approved 2026-11-16, **built and verified 2026-11-17** (fresh-context
+> review 2026-11-16, its 12 findings applied the same day: see "Review"; Q1 answered yes and P1–P16 confirmed the
+> same day; Q2 and Q3 decided at Checkpoint 2)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-router-session-lease.md` into
 > ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec stays normative: this plan
@@ -703,9 +704,9 @@ issue is in `needs-human`" section (`/retry` or restart), the router's ignore re
 lines changed in T0), and any line the build itself had to change.
 
 **Acceptance criteria:**
-- [ ] Every command in the guide exists in `package.json`; the guide's ignore reasons equal intake's list plus the
+- [x] Every command in the guide exists in `package.json`; the guide's ignore reasons equal intake's list plus the
   router's six (RLW8)
-- [ ] `AGENTS.md` says spec 5 is built and names the next spec (6, `grill-me`, per overview §1)
+- [x] `AGENTS.md` says spec 5 is built and names the next spec (6, `grill-me`, per overview §1)
 
 **Verification:**
 - [ ] Manual: you read the changed guide sections once
@@ -723,14 +724,14 @@ Rows already passed at Checkpoints 3–5 are run again only where a later task t
 ticked in the spec; the spec's and the plan's status lines are set.
 
 **Acceptance criteria:**
-- [ ] Every matrix row is ticked or reported as failing with its output (no silent skips); the "Invariants" are
+- [x] Every matrix row is ticked or reported as failing with its output (no silent skips); the "Invariants" are
   scoped to rows stored since the new code went live
-- [ ] The spec's success criteria are checked: one passing `decide()` test per row 1–31; `src/contracts` against
+- [x] The spec's success criteria are checked: one passing `decide()` test per row 1–31; `src/contracts` against
   overview §4; a later spec can register handlers and use `NeedsHumanService`, `RunService` and the run id
   without changing `src/workflow` (T11's test)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
 
 **Dependencies:** T22
 **Files:** `docs/specs/spec-github-agent-router-session-lease.md` and this plan (checkboxes and status only), plus
@@ -738,7 +739,7 @@ fixes if a row fails
 **Scope:** S (more if a row fails)
 
 ### Checkpoint 6 — Complete
-- [ ] The spec's "Success criteria" are all checked
+- [x] The spec's "Success criteria" are all checked
 - [ ] You review and commit; spec 6 is next in the build order
 
 ---

@@ -11,15 +11,21 @@
 > **Updated:** 2026-11-16 for spec #4 (`docs/specs/spec-github-agent-llm-foundation.md`): the Google API key and
 > base branch, `workflow.json` with skills and models, the five model labels, the secret scanner, the LLM smoke
 > script, usage data, the LLM errors.
+> **Updated:** 2026-11-17 for spec #5 (`docs/specs/spec-github-agent-router-session-lease.md`): the router (status
+> labels, runs, the stop comment), `SESSION_LEASE_SECONDS`, `npm run db:runs`, "When an issue is in
+> `needs-human`" (`/retry` or a restart), the router's ignore reasons.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
-and accepted: `npm run db:events` shows the row `DONE` and the app log shows `accepted ISSUE_OPENED`. The bot
-posts nothing yet; the workflow that answers comes with later specs. The model call it will use is in place:
-`npm run llm:smoke` (section 12) runs it once on a real issue with Gemini.
+and accepted: `npm run db:events` shows the row `DONE`, the app log shows `accepted ISSUE_OPENED`, and the issue
+gets the `status: draft` label. A `workflow:` label starts a run; the workflow steps (Grill Me onwards) come with
+later specs, so for now every run stops at its first step with `status: needs-human` and one comment saying so.
+The model call the steps will use is in place: `npm run llm:smoke` (section 12) runs it once on a real issue
+with Gemini.
 
 **How the pieces connect:** GitHub sends a webhook → your ngrok static domain → the NestJS app on
 `localhost:3000` → PostgreSQL (Docker) → a background worker → intake: what the event is and whether its sender
-may do it, asked through the GitHub App.
+may do it, asked through the GitHub App → the router: the issue's state and run, one event per issue at a time,
+and what to do next.
 
 You will collect six values on the way. They all go into `.env` in step 5:
 
@@ -277,11 +283,15 @@ TARGET_REPO=<you>/sdd-agent-sandbox
 NGROK_DOMAIN=<step 2>
 GOOGLE_API_KEY=<Google AI Studio>
 TARGET_BASE_BRANCH=main
+SESSION_LEASE_SECONDS=120
 ```
 
 `.env` and `*.pem` are gitignored. Never commit them. Use an absolute path for the key: `~` is not expanded.
 
 - `TARGET_BASE_BRANCH` is the sandbox branch `workflow.json` and the skills are read from (default `main`).
+- `SESSION_LEASE_SECONDS` (default `120`, at least `30`): the bot handles one event per issue at a time and holds
+  the issue's lease while it does, renewing it every third of this time. It only matters after a crash: the
+  issue's other events wait at most this long. A smaller value makes the app refuse to start, naming it.
 - **Never set a LangChain tracing switch** (`LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2`, `LANGCHAIN_TRACING`,
   `LANGCHAIN_TRACING_V2`) to `true`, in `.env` or in your shell: it would send every prompt to LangSmith. The app
   refuses to start and names the switch.
@@ -295,7 +305,7 @@ npm run db:migrate   # applies the migrations
 
 **After pulling new code**, run `npm run db:migrate` again before `npm run dev`: a spec can add a column or a
 table (spec 2 added `external_ref` and filled it for the rows you already have; spec 4 added the
-`execution_logs` table). Nothing is deleted.
+`execution_logs` table; spec 5 added the `tasks` and `runs` tables). Nothing is deleted.
 
 **Your data** lives in a named Docker volume and survives `npm run db:down` / `db:up`, `docker compose
 restart`, `docker compose down` / `up` and a Docker Desktop restart. Only `docker compose down -v` or
@@ -341,10 +351,11 @@ then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
 ## 8. Smoke test
 
 1. Open an issue in the sandbox repo.
-2. Within about 5 seconds the app log shows two lines for it:
+2. Within about 5 seconds the app log shows these lines for it:
 
    ```text
    LOG [IntakeService] delivery=<id> event=issues action=opened sender=<you> accepted ISSUE_OPENED <you>/sdd-agent-sandbox#<n>
+   LOG [RouterService] #<n> status: draft
    LOG [EventsWorker] delivery=<id> event=issues action=opened DONE
    ```
 
@@ -355,13 +366,17 @@ then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
    ```
 
    You should see one `issues` / `opened` row with `external_ref` `<you>/sdd-agent-sandbox#<n>`, your login as
-   sender, status `DONE` and attempts `1`. No comment appears on the issue.
+   sender, status `DONE` and attempts `1`. The issue has the `status: draft` label and no comment. (The bot's own
+   `labeled` event follows as `IGNORED` / `own-event`.)
 
 You can also redeliver the App's earlier failed `ping` (step 9): it's stored as `IGNORED` / `ping`.
 
-Try a label: add `workflow: full-sdd` → `accepted LANE_ADDED full-sdd`; add `bug` → `IGNORED` / `other-label`;
-add `model: max-spec` → `IGNORED` / `model-label` (you're an Approver, so it stays). Comment on the issue →
-`accepted COMMENT`; the log never contains the comment's text.
+Try a label: add `workflow: full-sdd` → `accepted LANE_ADDED full-sdd`, `run 1 started (full-sdd)`, then the run
+stops at its first step (`grill`, not built yet): the row is `FAILED` with that reason, the issue shows
+`status: needs-human` and one comment ("Run 1 stopped at step `grill` …"), and `npm run db:runs` shows the run.
+Add `bug` → `IGNORED` / `other-label`; add `model: max-spec` → `IGNORED` / `model-label` (you're an Approver, so
+it stays). Comment on the issue → `accepted COMMENT`, `IGNORED` / `no-transition`; the log never contains the
+comment's text.
 
 ## 9. Troubleshooting
 
@@ -384,12 +399,16 @@ add `model: max-spec` → `IGNORED` / `model-label` (you're an Approver, so it s
 | `npm run tunnel` says `NGROK_DOMAIN is not set` | `.env` | Set it to your static domain (bare hostname) |
 | `npm run dev` fails with a database connection error, or a delivery shows `500` | `docker compose ps` | Postgres isn't running (e.g. after a Docker Desktop restart). Run `npm run db:up`, then restart the app / **Redeliver** |
 | `npm run db:up` fails: port 5432 already allocated | `docker ps` | Another Postgres is using 5432. Stop it |
+| An issue shows `status: needs-human` | the bot's last comment on it; `npm run db:runs` | The run stopped. See "When an issue is in `needs-human`" below |
+| An event stays `PENDING`; the log repeats `#<n> lease taken, waiting 5 s` | `npm run db:events` | Another event of the same issue holds its lease: after a crash, or with two app instances on one database (not supported; stop one). It waits at most `SESSION_LEASE_SECONDS` and is not counted as an attempt |
 
 GitHub never retries a failed delivery automatically. While the app is down, deliveries are lost until you
 **Redeliver** them. A redelivery is always accepted (`202`):
 
 - of a `FAILED` row: the same row is queued again (attempts back to `0`) and runs from the start; the log shows
-  `requeued`. Safe: every bot comment is guarded by a hidden marker, so none is posted twice.
+  `requeued`. Safe: every bot comment is guarded by a hidden marker, so none is posted twice. If the row stopped
+  a run, the redelivery only finishes what the stop left pending (its label or comment) and ends
+  `no-transition`: to continue the run, comment `/retry`.
 - of a row in any other status: nothing changes; the log shows `duplicate`.
 
 **Ignore reasons.** What `ignore_reason` holds for an `IGNORED` row:
@@ -413,6 +432,17 @@ GitHub never retries a failed delivery automatically. While the app is down, del
 | `label-reverted` | a lane or skip label added with no access, or a model label added below Approver, was removed, with one comment per label |
 | `approve-denied` | a Participant's `/approve` was answered |
 | `model-label` | a `model: max-*` label added by an Approver, or removed (nothing to do until a step runs) |
+
+From the router (spec 5), for an event intake accepted:
+
+| Reason | Meaning |
+|---|---|
+| `no-transition` | nothing to do for this event in the issue's state (the log line names the status), e.g. a comment on a stopped run, or `please /retry` |
+| `lane-conflict` | the issue has two or more `workflow:` labels: nothing started; one reminder lists them (a new one only when the set changes) |
+| `retry-refused` | a `/retry` that did nothing, answered with one reply saying why |
+| `issue-closed` | the issue is closed: nothing starts or continues; a lane label added, `/retry` or `/approve` gets one reply |
+| `stale` | received before the issue's latest run started (e.g. an older event retried late); nothing done |
+| `no-task` | a pull request event: mapping a bot pull request to its issue comes with a later spec |
 
 Rows stored before spec 2 can still show `not-handled` or `no-installation`; they are no longer written.
 
@@ -565,6 +595,29 @@ row_of <id>
 The stored prompt holds whatever users wrote in the issue, inside `untrusted-data-…` blocks, as `webhook_events`
 already does. It never holds the bot's own keys.
 
+## When an issue is in `needs-human`
+
+A run stops with the `status: needs-human` label and one comment that names the step, the reason and its code in
+backticks (e.g. `step-not-built`, `credits-exhausted`, `step-config`), and the ways out:
+
+- **`/retry`** (a comment that is only `/retry`; spaces and case don't matter): after you fix the cause, the bot
+  puts the issue back in the status it had and runs the failed step again, in the same run. Work already done is
+  not redone. If it fails again, the run stops again with a new comment.
+- **A restart:** remove the `workflow:` label and add it again. The run ends ("Run 2 (`full-sdd`) was
+  cancelled …"), and a new run starts from scratch. Swapping to another `workflow:` label replaces the run in one
+  go ("Run 2 … was replaced by run 3 …").
+
+A stop that is a result of the work (e.g. the Grill round limit) can only be restarted: `/retry` gets a reply
+saying so. A `/retry` that can't do anything always gets one reply: no run on the issue, the run isn't stopped,
+or it was written before the run stopped (comment it again). Until the workflow steps are built (spec 6 on),
+every run stops at its first step with `step-not-built`; `/retry` then stops it again the same way.
+
+Every run, newest first (the last 20):
+
+```sh
+npm run db:runs   # issue, run number, lane, grill: skip, started, ended and why, latest stop (step: cause), stops, retries
+```
+
 ## History of an issue
 
 Every stored event has an `external_ref`: `<owner>/<repo>#<number>` of its issue or pull request (a comment on a
@@ -624,7 +677,7 @@ The bot asks GitHub for the sender's role on the repo each time it processes an 
 
 | Level | GitHub role on the repo | May |
 |---|---|---|
-| **Participant** | Triage or higher | open an issue, add or remove a `workflow: *` label, add `grill: skip`, comment |
+| **Participant** | Triage or higher | open an issue, add or remove a `workflow: *` label, add `grill: skip`, comment, comment `/retry` |
 | **Approver** | Write, Maintain or Admin | everything a Participant may, plus comment `/approve`, push to the bot's pull request, and add or remove a `model: max-*` label |
 | none | Read, or no role | nothing: the event is `IGNORED` / `unauthorized` |
 
