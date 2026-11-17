@@ -634,13 +634,13 @@ the replies with marker `issue-closed:<deliveryId>`, the silent rest; no reminde
 switch becomes exhaustive and P12's fallback goes.
 
 **Acceptance criteria:**
-- [ ] Every row of the spec's closed-issue table (integration)
-- [ ] The frozen run is unchanged by everything but the own-lane removal; reopened, a lane label starts a run as
+- [x] Every row of the spec's closed-issue table (integration)
+- [x] The frozen run is unchanged by everything but the own-lane removal; reopened, a lane label starts a run as
   usual (integration)
-- [ ] No `not built yet` log line remains (`grep`)
+- [x] No `not built yet` log line remains (`grep`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T18
 **Files:** `src/workflow/router.service.ts`, `test/closed-issue.integration.spec.ts`
@@ -652,14 +652,14 @@ switch becomes exhaustive and P12's fallback goes.
 (current or ended) → `IGNORED` `stale`, no API call. Log `#12 ignored stale`.
 
 **Acceptance criteria:**
-- [ ] `opened` handled after its `labeled` twin started a run → `stale`; a comment re-queued after a swap started
+- [x] `opened` handled after its `labeled` twin started a run → `stale`; a comment re-queued after a swap started
   a new run → `stale`, nothing posted, no `getTaskDetails` (integration)
-- [ ] The run's own start event and the event `/retry` re-queues are never stale (integration)
-- [ ] Pending side effects are completed even for a stale event; a stale event that fails there 3 times ends
+- [x] The run's own start event and the event `/retry` re-queues are never stale (integration)
+- [x] Pending side effects are completed even for a stale event; a stale event that fails there 3 times ends
   `FAILED` and never stops the run (P2) (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T19
 **Files:** `src/workflow/router.service.ts`, `test/stale.integration.spec.ts`
@@ -671,22 +671,24 @@ switch becomes exhaustive and P12's fallback goes.
 stops, retries.
 
 **Acceptance criteria:**
-- [ ] On the dev database (the `db:*` scripts use the dev container), the columns show as the spec lists them;
+- [x] On the dev database (the `db:*` scripts use the dev container), the columns show as the spec lists them;
   checked at Checkpoint 5
 
 **Verification:**
-- [ ] `npm run lint` passes
+- [x] `npm run lint` passes
 
 **Dependencies:** T5
 **Files:** `package.json`
 **Scope:** XS
 
 ### Checkpoint 5 — Closed, stale, lease and refused inputs on real GitHub
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] Matrix "Closed issues", "Stale events" and "Lease": every row
-- [ ] Matrix "Restart and lane conflicts": the `#D` row (labels set in the creation form)
-- [ ] Matrix "Refused and other inputs": the two signed requests
-- [ ] `npm run db:runs` shows every run of the checkpoints so far
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] Matrix "Closed issues", "Stale events" and "Lease": every row (2026-11-17, on `#A` = #16)
+- [x] Matrix "Restart and lane conflicts": the `#D` row (labels set in the creation form) (`#D` = #20: `opened`
+  `DONE`, then one run)
+- [x] Matrix "Refused and other inputs": the two signed requests (sent by you: `octocat`'s `/retry` on #17
+  `unauthorized`, no reply; the bot's PR `no-task`)
+- [x] `npm run db:runs` shows every run of the checkpoints so far (14 runs)
 - [ ] You review and commit
 
 ---

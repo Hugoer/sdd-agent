@@ -1,9 +1,10 @@
 // Spec 5 "Per-event flow": one accepted event from intake to its end state. The task row and the session lease
-// (RLW4, RLW5), the pending side effects (RL5), one read of the issue, decide(), then its action. Plan P12: an
-// action not built yet ends `no-transition` with a log line.
+// (RLW4, RLW5), the pending side effects (RL5), one read of the issue, decide(), then its action and the
+// lane-conflict check (RL8).
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ISSUE_PROVIDER,
+  type CommentRef,
   type IssueProvider,
   type Lane,
   type TaskRef,
@@ -15,6 +16,7 @@ import type { ProcessResult } from '../events/event-processor.js';
 import type { Run, Task, WebhookEvent } from '../generated/prisma/client.js';
 import {
   decide,
+  isStale,
   type Action,
   type CurrentRun,
   type HandlerCall,
@@ -38,6 +40,8 @@ import { StepHandlerRegistry, type StepRun } from './step-handler.registry.js';
 import { stopCauseOf, waitingStep } from './stop-cause.js';
 import { issueTag, refOf, TaskService } from './task.service.js';
 import {
+  issueClosedComment,
+  issueClosedMarker,
   laneConflictComment,
   laneConflictMarker,
   retryRefusedComment,
@@ -45,6 +49,7 @@ import {
   RUN_START,
   runEndedComment,
   runEndedMarker,
+  type ClosedCommand,
   type LaneConflictReminder,
   type RetryRefusal,
   type RunEnd,
@@ -208,6 +213,13 @@ export class RouterService {
     const run = await this.runs.current(task);
     const status = task.status as TaskStatus;
     job.mark.step = waitingStep(status, run && runLane(run));
+    // RL10: received before the latest run's start event (current or ended). Known before the pending side
+    // effects, so a stale event failing there never stops the run (plan P2).
+    const latest = await this.runs.latest(task.id);
+    job.mark.stale = isStale(
+      job.input.receivedAt,
+      latest?.startEventReceivedAt ?? null,
+    );
     if (task.externalRef !== job.ref.externalRef)
       await this.tasks.refreshExternalRef(job.lease, job.ref.externalRef);
 
@@ -223,6 +235,12 @@ export class RouterService {
       await this.completeEndComment(job, ended);
     if (run?.stoppedAt && run.stopCommentId === null)
       await this.needsHuman.postStopComment(job, run);
+
+    // RL10: a stale event does nothing more, not even a read of the issue.
+    if (job.mark.stale) {
+      this.logger.log(`${job.tag} ignored stale`);
+      return ignored('stale');
+    }
 
     // One read per routed issue event: lanes, `grill: skip` and `open` together.
     const details = await this.issues.getTaskDetails(job.ref);
@@ -256,16 +274,9 @@ export class RouterService {
     conflicts: number,
     reminder: LaneConflictReminder,
   ): Promise<void> {
-    if (
-      !(await this.issues.findCommentByMarker(
-        job.ref,
-        laneConflictMarker(conflicts),
-      ))
-    )
-      await this.issues.postComment(
-        job.ref,
-        laneConflictComment(conflicts, reminder),
-      );
+    await this.postOnce(job, laneConflictMarker(conflicts), () =>
+      laneConflictComment(conflicts, reminder),
+    );
     await this.tasks.recordLaneConflict(job.lease, conflicts, reminder.lanes);
     this.logger.log(`${job.tag} lane conflict (reminder posted)`);
   }
@@ -340,8 +351,15 @@ export class RouterService {
           `${job.tag} ignored ${action.reason} (status ${routing.state.status})`,
         );
         return ignored(action.reason);
-      default:
-        return this.notBuiltYet(job.tag, action.kind);
+      case 'reply-closed':
+        return this.replyClosed(job, action.command);
+      case 'wait-workspace':
+        // Row 21: spec 8 adds it (the `WAITING_WORKSPACE` event status) with the workspace handler, the only
+        // source of `WS_BUSY`; until then no handler can return it.
+        throw new Error('row 21 (WS_BUSY) needs spec 8');
+      case 'stay-failed':
+        // The failure hook's answer to a FAILED input (failed()), never an event's action.
+        throw new Error('stay-failed is not an event action');
     }
   }
 
@@ -414,24 +432,18 @@ export class RouterService {
     end: RunEnd,
     sender: string,
   ): Promise<void> {
-    const comment =
-      (await this.issues.findCommentByMarker(
-        job.ref,
-        runEndedMarker(run.id),
-      )) ??
-      (await this.issues.postComment(
-        job.ref,
-        runEndedComment(
-          { id: run.id, ...laneRefOf(run) },
-          end,
-          sender,
-          await this.registry.cancelBlocks({
-            task: { id: job.lease.taskId, ref: job.ref },
-            run: stepRunOf(run),
-            lease: job.lease,
-          }),
-        ),
-      ));
+    const comment = await this.postOnce(job, runEndedMarker(run.id), async () =>
+      runEndedComment(
+        { id: run.id, ...laneRefOf(run) },
+        end,
+        sender,
+        await this.registry.cancelBlocks({
+          task: { id: job.lease.taskId, ref: job.ref },
+          run: stepRunOf(run),
+          lease: job.lease,
+        }),
+      ),
+    );
     await this.runs.recordEndComment(job.lease, run.id, comment.id);
   }
 
@@ -459,14 +471,39 @@ export class RouterService {
     refusal: RetryRefusal,
   ): Promise<ProcessResult> {
     const commentId = commentOf(job.input).id;
-    const marker = retryRefusedMarker(commentId);
-    if (!(await this.issues.findCommentByMarker(job.ref, marker)))
-      await this.issues.postComment(
-        job.ref,
-        retryRefusedComment(commentId, refusal),
-      );
+    await this.postOnce(job, retryRefusedMarker(commentId), () =>
+      retryRefusedComment(commentId, refusal),
+    );
     this.logger.log(`${job.tag} /retry refused: ${refusal.kind}`);
     return ignored('retry-refused');
+  }
+
+  /** RL19: one reply to a command on a closed issue (marker per delivery); nothing starts or continues. */
+  private async replyClosed(
+    job: Job,
+    command: ClosedCommand,
+  ): Promise<ProcessResult> {
+    const { deliveryId } = job.event;
+    await this.postOnce(job, issueClosedMarker(deliveryId), () =>
+      issueClosedComment(deliveryId, command),
+    );
+    this.logger.log(`${job.tag} ignored issue-closed (replied)`);
+    return ignored('issue-closed');
+  }
+
+  /**
+   * A bot comment posted at most once: its marker is searched first, so a retried job finds the comment it
+   * posted before (RL5). `body` is built only when the comment is posted.
+   */
+  private async postOnce(
+    job: Job,
+    marker: string,
+    body: () => string | Promise<string>,
+  ): Promise<CommentRef> {
+    return (
+      (await this.issues.findCommentByMarker(job.ref, marker)) ??
+      (await this.issues.postComment(job.ref, await body()))
+    );
   }
 
   /** RL3 steps 2–4: the check and the warning (safe to repeat), then the first step through decide(). */
@@ -527,12 +564,6 @@ export class RouterService {
   private async showStatus(job: Job, status: TaskStatus): Promise<void> {
     await this.issues.setStatusLabel(job.ref, status);
     await this.tasks.setShownStatus(job.lease, status);
-  }
-
-  /** Plan P12: until its action is built, an accepted event ends `no-transition`. */
-  private notBuiltYet(tag: string, what: string): ProcessResult {
-    this.logger.log(`${tag} not built yet: ${what}`);
-    return ignored('no-transition');
   }
 }
 
