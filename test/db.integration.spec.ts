@@ -69,7 +69,7 @@ describe('database wiring', () => {
         runCount: 0,
         leaseOwner: null,
         leaseExpiresAt: null,
-        laneConflictOpen: false,
+        laneConflictLanes: [],
         laneConflicts: 0,
       });
     });

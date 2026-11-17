@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import type { Lane, TaskStatus } from '../contracts/issue-provider.js';
 import { EventsService } from '../events/events.service.js';
 import type { Prisma, Run, Task } from '../generated/prisma/client.js';
+import { senderLoginOf } from '../intake/github-payload.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   SessionLeaseService,
@@ -58,17 +59,49 @@ export class RunService {
     return this.write(lease, (tx) => this.createIn(tx, lease, start));
   }
 
-  /** Rows 6, 7 (RL12): run N ends `restarted` and run N+1 starts, in one transaction. */
+  /** The issue's latest ended run: its run-ended comment may be pending (plan Q1). */
+  lastEnded(taskId: string): Promise<Run | null> {
+    return this.prisma.run.findFirst({
+      where: { taskId, endedAt: { not: null } },
+      orderBy: { number: 'desc' },
+    });
+  }
+
+  /** The run that replaced a restarted one: the restart created it as number N+1 (RL12). */
+  replacement(run: Run): Promise<Run> {
+    return this.prisma.run.findUniqueOrThrow({
+      where: { taskId_number: { taskId: run.taskId, number: run.number + 1 } },
+    });
+  }
+
+  /** Plan Q2: the login of the event that ended the run, also when another event posts its comment later. */
+  async endedBy(run: Run): Promise<string> {
+    if (!run.endEventId) throw new Error(`run ${run.id} has not ended`);
+    const event = await this.prisma.webhookEvent.findUniqueOrThrow({
+      where: { id: run.endEventId },
+      select: { payload: true },
+    });
+    const login = senderLoginOf(event);
+    if (!login) throw new Error(`event ${run.endEventId} has no sender login`);
+    return login;
+  }
+
+  /**
+   * Rows 6, 7 (RL12): run N ends `restarted` and run N+1 starts, in one transaction. The start event ended it
+   * (plan Q2).
+   */
   restart(lease: HeldLease, run: Run, start: RunStart): Promise<Run> {
     return this.write(lease, async (tx) => {
-      await this.endIn(tx, lease, run, 'restarted');
+      await this.endIn(tx, lease, run, 'restarted', start.startEventId);
       return this.createIn(tx, lease, start);
     });
   }
 
   /** Row 6, RL19: the run ends `cancelled`; the issue goes back to `draft` with no current run. */
-  cancel(lease: HeldLease, run: Run): Promise<void> {
-    return this.write(lease, (tx) => this.endIn(tx, lease, run, 'cancelled'));
+  cancel(lease: HeldLease, run: Run, endEventId: string): Promise<void> {
+    return this.write(lease, (tx) =>
+      this.endIn(tx, lease, run, 'cancelled', endEventId),
+    );
   }
 
   /**
@@ -183,20 +216,25 @@ export class RunService {
     return run;
   }
 
-  /** RLW1: an end keeps the latest stop (`stop_*`, `stopped_at`), so "wasted by cause" is one query. */
+  /**
+   * RLW1: an end keeps the latest stop (`stop_*`, `stopped_at`), so "wasted by cause" is one query. Its comment
+   * is pending until `recordEndComment` (plan Q1). RL15: the lane conflict is closed, so the check that follows
+   * posts a fresh reminder.
+   */
   private async endIn(
     tx: Prisma.TransactionClient,
     lease: HeldLease,
     run: Run,
     reason: 'cancelled' | 'restarted',
+    endEventId: string,
   ): Promise<void> {
     const updated = await tx.$executeRaw`
-      UPDATE runs SET ended_at = now(), end_reason = ${reason}
+      UPDATE runs SET ended_at = now(), end_reason = ${reason}, end_event_id = ${endEventId}::uuid
       WHERE id = ${run.id}::uuid AND ended_at IS NULL`;
     if (updated !== 1) throw new Error(`run ${run.id} has already ended`);
     await tx.task.update({
       where: { id: lease.taskId },
-      data: { currentRunId: null, status: 'draft' },
+      data: { currentRunId: null, status: 'draft', laneConflictLanes: [] },
     });
   }
 

@@ -1,28 +1,37 @@
-// Spec 5 RL8, RL15: one lane-conflict reminder per conflict. Pure: the router applies the effect.
+// Spec 5 RL8, RL15 and plan Q3 (decided at Checkpoint 2): one lane-conflict reminder per set of lane labels. Pure:
+// the router applies the effect.
+import type { Lane } from '../contracts/issue-provider.js';
+import type { LaneConflictReminder } from './workflow-comments.js';
 
 export type LaneConflictEffect =
-  /** Post a reminder, set `laneConflictOpen`, count it. `during`: which wording (a run keeps its lane). */
-  | { kind: 'post'; during: 'draft' | 'run' }
+  /** Post a reminder listing `lanes`, store them as the listed set, count it. */
+  | ({ kind: 'post' } & LaneConflictReminder)
   /** At most one lane left: the conflict is over (a new one gets a new reminder). */
   | { kind: 'close' }
   | null;
 
 /**
- * `laneCount`: lane labels on the issue now. `endsRun`: this event cancels or restarts the run, which closes the
- * open conflict first (RL15), so two or more lanes left get a fresh reminder. `runRemains`: a run is current
- * after this event (the reminder says the run keeps its lane).
+ * `lanes`: the lane labels on the issue now. `listed`: the lanes the open reminder lists (`Task.laneConflictLanes`),
+ * empty when none is open. `endsRun`: this event cancels or restarts the run, which closes the open conflict
+ * first (RL15). `run`: the run current after this event, if any (the reminder says it keeps its lane).
  */
 export function laneConflictEffect(
-  laneCount: number,
-  open: boolean,
+  lanes: Lane[],
+  listed: Lane[],
   endsRun: boolean,
-  runRemains: boolean,
+  run: { number: number; lane: Lane } | null,
 ): LaneConflictEffect {
-  if (laneCount >= 2) {
-    const stillOpen = open && !endsRun;
-    return stillOpen
+  const open = endsRun ? [] : listed;
+  if (lanes.length >= 2)
+    return sameLanes(lanes, open)
       ? null
-      : { kind: 'post', during: runRemains ? 'run' : 'draft' };
-  }
-  return open ? { kind: 'close' } : null;
+      : { kind: 'post', lanes, still: open.length > 0, run };
+  return open.length > 0 ? { kind: 'close' } : null;
+}
+
+/** The same set of lanes, in any order. */
+function sameLanes(a: Lane[], b: Lane[]): boolean {
+  if (a.length !== b.length) return false;
+  const sorted = [...b].sort();
+  return [...a].sort().every((lane, index) => lane === sorted[index]);
 }

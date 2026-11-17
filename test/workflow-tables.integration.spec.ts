@@ -102,7 +102,7 @@ describe('TaskService and RunService (PostgreSQL)', () => {
 
   it('run numbers go 1, 2, 3; a restart leaves exactly one run not ended', async () => {
     const run1 = await runs.create(lease, await start());
-    await runs.cancel(lease, run1);
+    await runs.cancel(lease, run1, lease.eventId);
     const run2 = await runs.create(lease, await start());
     const run3 = await runs.restart(lease, run2, await start('code-only'));
 
@@ -131,13 +131,24 @@ describe('TaskService and RunService (PostgreSQL)', () => {
     expect(await task()).toMatchObject({ currentRunId: run1.id, runCount: 1 });
   });
 
-  it('a cancel sends the issue back to draft with no current run', async () => {
+  it('a cancel sends the issue back to draft with no current run, saves the event that ended it and closes the lane conflict', async () => {
     const run1 = await runs.create(lease, await start());
     await tasks.setStatus(lease, 'grilling');
+    await prisma.task.update({
+      where: { id: lease.taskId },
+      data: { laneConflictLanes: ['full-sdd', 'code-only'] },
+    });
 
-    await runs.cancel(lease, run1);
+    await runs.cancel(lease, run1, lease.eventId);
 
-    expect(await task()).toMatchObject({ status: 'draft', currentRunId: null });
+    expect(await task()).toMatchObject({
+      status: 'draft',
+      currentRunId: null,
+      laneConflictLanes: [],
+    });
+    expect(
+      await prisma.run.findUniqueOrThrow({ where: { id: run1.id } }),
+    ).toMatchObject({ endReason: 'cancelled', endEventId: lease.eventId });
   });
 
   it('a stop records step, cause, message, the event, the status before; stops + 1; needs-human', async () => {
@@ -177,7 +188,7 @@ describe('TaskService and RunService (PostgreSQL)', () => {
       eventId: run1.startEventId,
     });
 
-    await runs.cancel(lease, stopped);
+    await runs.cancel(lease, stopped, lease.eventId);
 
     expect(
       await prisma.run.findUniqueOrThrow({ where: { id: run1.id } }),
@@ -292,13 +303,13 @@ describe('TaskService and RunService (PostgreSQL)', () => {
     );
   });
 
-  it('the comment ids are recorded; the lane-conflict fields open and close', async () => {
+  it('the comment ids are recorded; the lane-conflict fields list the lanes and close (plan Q3)', async () => {
     const run1 = await runs.create(lease, await start());
     await runs.recordStopComment(lease, run1.id, '91');
     await runs.recordEndComment(lease, run1.id, '92');
-    await tasks.recordLaneConflict(lease, 1);
+    await tasks.recordLaneConflict(lease, 1, ['full-sdd', 'code-only']);
     expect(await task()).toMatchObject({
-      laneConflictOpen: true,
+      laneConflictLanes: ['full-sdd', 'code-only'],
       laneConflicts: 1,
     });
     await tasks.closeLaneConflict(lease);
@@ -309,7 +320,7 @@ describe('TaskService and RunService (PostgreSQL)', () => {
       await prisma.run.findUniqueOrThrow({ where: { id: run1.id } }),
     ).toMatchObject({ stopCommentId: '91', endCommentId: '92' });
     expect(await task()).toMatchObject({
-      laneConflictOpen: false,
+      laneConflictLanes: [],
       laneConflicts: 1,
       shownStatus: 'draft',
       externalRef: 'o/r#13',
@@ -318,7 +329,7 @@ describe('TaskService and RunService (PostgreSQL)', () => {
 
   it('latest() finds the newest run, current or ended', async () => {
     const run1 = await runs.create(lease, await start());
-    await runs.cancel(lease, run1);
+    await runs.cancel(lease, run1, lease.eventId);
 
     expect((await runs.latest(lease.taskId))?.id).toBe(run1.id);
     expect(await runs.current(await task())).toBeNull();

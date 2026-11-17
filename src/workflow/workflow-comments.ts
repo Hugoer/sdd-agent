@@ -92,14 +92,24 @@ export function runEndedComment(
   ].join('\n');
 }
 
-/** RL8: one reminder per conflict; `run` is the current run, if any (it keeps its lane). */
+/** What a lane-conflict reminder says (plan Q3). */
+export interface LaneConflictReminder {
+  /** The lane labels on the issue now, as read. */
+  lanes: Lane[];
+  /** A reminder listing another set was open ("still has N"). */
+  still: boolean;
+  /** The run current after the event, if any: it keeps its lane. */
+  run: { number: number; lane: Lane } | null;
+}
+
+/** RL8, plan Q3: one reminder per set of two or more lane labels, with the count and the list. */
 export function laneConflictComment(
   conflicts: number,
-  lanes: Lane[],
-  run: { number: number; lane: Lane } | null,
+  reminder: LaneConflictReminder,
 ): string {
+  const { lanes, still, run } = reminder;
   const listed = lanes.map((lane) => `\`${laneLabel(lane)}\``).join(', ');
-  const first = `This issue has more than one \`workflow:\` label (${listed}).`;
+  const first = `This issue ${still ? 'still has' : 'has'} ${lanes.length} \`workflow:\` labels: ${listed}.`;
   const own = run && `\`${laneLabel(run.lane)}\``;
   const rest = run
     ? `Run ${run.number} keeps ${own}. To switch, remove ${own}; to stay, remove the others.`

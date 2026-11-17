@@ -9,6 +9,7 @@ import {
   type TaskRef,
   type TaskStatus,
 } from '../contracts/issue-provider.js';
+import { ProviderError } from '../contracts/provider-error.js';
 import type { WorkflowInput } from '../contracts/workflow-input.js';
 import type { ProcessResult } from '../events/event-processor.js';
 import type { Run, Task, WebhookEvent } from '../generated/prisma/client.js';
@@ -36,7 +37,18 @@ import {
 import { StepHandlerRegistry, type StepRun } from './step-handler.registry.js';
 import { stopCauseOf, waitingStep } from './stop-cause.js';
 import { issueTag, refOf, TaskService } from './task.service.js';
-import { RUN_START } from './workflow-comments.js';
+import {
+  laneConflictComment,
+  laneConflictMarker,
+  retryRefusedComment,
+  retryRefusedMarker,
+  RUN_START,
+  runEndedComment,
+  runEndedMarker,
+  type LaneConflictReminder,
+  type RetryRefusal,
+  type RunEnd,
+} from './workflow-comments.js';
 
 /** RLW11: a lease held by another event → the event waits this long, without counting an attempt. */
 export const LEASE_WAIT_MS = 5_000;
@@ -65,6 +77,8 @@ interface Job {
   tag: string;
   /** Plan P2: copied onto any error the job throws; `step` follows the job (plan P3). */
   mark: RouterMark;
+  /** Plan P9: the `/retry` was accepted and written; any later error ends the event `FAILED` at once. */
+  retryWritten: boolean;
 }
 
 @Injectable()
@@ -103,12 +117,16 @@ export class RouterService {
         retry: input.type === 'RETRY',
         stale: false,
       },
+      retryWritten: false,
     };
     const result = await this.leases.withLease(job.lease, async () => {
       try {
         return await this.handle(job);
       } catch (error) {
-        throw markError(error, job.mark);
+        throw markError(
+          job.retryWritten ? afterRetryWrite(error) : error,
+          job.mark,
+        );
       }
     });
     if (!result.claimed) {
@@ -199,6 +217,10 @@ export class RouterService {
       await this.showStatus(job, status);
       shownStatus = status;
     }
+    // Plan Q1: a run-ended comment first, so a restart's "replaced" comes before the new run's stop comment.
+    const ended = await this.runs.lastEnded(task.id);
+    if (ended && ended.endCommentId === null)
+      await this.completeEndComment(job, ended);
     if (run?.stoppedAt && run.stopCommentId === null)
       await this.needsHuman.postStopComment(job, run);
 
@@ -217,7 +239,35 @@ export class RouterService {
       run,
       description: details.description,
     };
-    return this.act(job, routing, decide(routing.state, job.input).action);
+    const { action, laneConflict } = decide(routing.state, job.input);
+    // RL8, plan Q3: a conflict that is over is recorded first (nothing to show), so a first step that fails
+    // can't leave it open; a reminder is posted after the action, in the wording of what it left.
+    if (laneConflict?.kind === 'close')
+      await this.tasks.closeLaneConflict(job.lease);
+    const result = await this.act(job, routing, action);
+    if (laneConflict?.kind === 'post')
+      await this.postLaneConflict(job, task.laneConflicts + 1, laneConflict);
+    return result;
+  }
+
+  /** RL8: post first (its marker searched, so a retried job never posts twice), then record the listed lanes. */
+  private async postLaneConflict(
+    job: Job,
+    conflicts: number,
+    reminder: LaneConflictReminder,
+  ): Promise<void> {
+    if (
+      !(await this.issues.findCommentByMarker(
+        job.ref,
+        laneConflictMarker(conflicts),
+      ))
+    )
+      await this.issues.postComment(
+        job.ref,
+        laneConflictComment(conflicts, reminder),
+      );
+    await this.tasks.recordLaneConflict(job.lease, conflicts, reminder.lanes);
+    this.logger.log(`${job.tag} lane conflict (reminder posted)`);
   }
 
   /** The dispatch loop: an action, its handler calls, their outcome back into decide() … until the job ends. */
@@ -279,6 +329,12 @@ export class RouterService {
         routing.state.status = 'needs-human';
         return { status: 'DONE' };
       }
+      case 'cancel':
+        return this.endRun(job, routing, action.start);
+      case 'accept-retry':
+        return this.acceptRetry(job, routing);
+      case 'reply-retry':
+        return this.replyRetry(job, action.refusal);
       case 'ignore':
         this.logger.log(
           `${job.tag} ignored ${action.reason} (status ${routing.state.status})`,
@@ -287,6 +343,130 @@ export class RouterService {
       default:
         return this.notBuiltYet(job.tag, action.kind);
     }
+  }
+
+  /**
+   * Rows 6, 7 (RL12, RL15, RL18): the run ends in the database first, its label and comment pending (plan Q1).
+   * A cancel shows `draft`; a restart starts run N+1 in the same transaction and its run start follows the
+   * "replaced" comment.
+   */
+  private async endRun(
+    job: Job,
+    routing: Routing,
+    start: { lane: Lane; grillSkip: boolean } | null,
+  ): Promise<ProcessResult> {
+    const run = requireRun(routing);
+    job.mark.step = RUN_START;
+    routing.state.status = 'draft';
+    if (!start) {
+      await this.runs.cancel(job.lease, run, job.event.id);
+      this.logger.log(`${job.tag} run ${run.number} cancelled`);
+      routing.run = null;
+      routing.state.run = null;
+      await this.showStatus(job, 'draft');
+      routing.state.shownStatus = 'draft';
+      await this.postEndComment(
+        job,
+        run,
+        { kind: 'cancelled' },
+        job.input.sender,
+      );
+      return { status: 'DONE' };
+    }
+    const next = await this.runs.restart(job.lease, run, {
+      ...start,
+      startEventId: job.event.id,
+    });
+    this.logger.log(
+      `${job.tag} run ${run.number} restarted → run ${next.number} (${next.lane})`,
+    );
+    await this.postEndComment(
+      job,
+      run,
+      {
+        kind: 'replaced',
+        by: { number: next.number, lane: next.lane as Lane },
+      },
+      job.input.sender,
+    );
+    return this.startRun(job, routing, next);
+  }
+
+  /** Plan Q1, Q2: a run-ended comment still pending, from the run's row and the event that ended it. */
+  private async completeEndComment(job: Job, ended: Run): Promise<void> {
+    const end: RunEnd =
+      ended.endReason === 'restarted'
+        ? {
+            kind: 'replaced',
+            by: laneRefOf(await this.runs.replacement(ended)),
+          }
+        : { kind: 'cancelled' };
+    await this.postEndComment(job, ended, end, await this.runs.endedBy(ended));
+  }
+
+  /**
+   * RL18: one comment per ended run, with the cancel hooks' blocks. Its marker is searched first, so a retried
+   * job never posts it twice; the hooks are asked only when it is posted (again, if a later event posts it).
+   */
+  private async postEndComment(
+    job: Job,
+    run: Run,
+    end: RunEnd,
+    sender: string,
+  ): Promise<void> {
+    const comment =
+      (await this.issues.findCommentByMarker(
+        job.ref,
+        runEndedMarker(run.id),
+      )) ??
+      (await this.issues.postComment(
+        job.ref,
+        runEndedComment(
+          { id: run.id, ...laneRefOf(run) },
+          end,
+          sender,
+          await this.registry.cancelBlocks({
+            task: { id: job.lease.taskId, ref: job.ref },
+            run: stepRunOf(run),
+            lease: job.lease,
+          }),
+        ),
+      ));
+    await this.runs.recordEndComment(job.lease, run.id, comment.id);
+  }
+
+  /**
+   * Row 30 (plan P8): the status before the stop, `retries + 1` and the stop's event re-queued in one
+   * transaction, then the label. The re-queued event is older, so the worker takes it next.
+   */
+  private async acceptRetry(
+    job: Job,
+    routing: Routing,
+  ): Promise<ProcessResult> {
+    const run = requireRun(routing);
+    const status = await this.runs.acceptRetry(job.lease, run);
+    job.retryWritten = true;
+    this.logger.log(
+      `${job.tag} /retry accepted: run ${run.number} back to ${status}`,
+    );
+    await this.showStatus(job, status);
+    return { status: 'DONE' };
+  }
+
+  /** Row 31, RL20: one reply per `/retry`; its marker is searched first, so a retried job never posts twice. */
+  private async replyRetry(
+    job: Job,
+    refusal: RetryRefusal,
+  ): Promise<ProcessResult> {
+    const commentId = commentOf(job.input).id;
+    const marker = retryRefusedMarker(commentId);
+    if (!(await this.issues.findCommentByMarker(job.ref, marker)))
+      await this.issues.postComment(
+        job.ref,
+        retryRefusedComment(commentId, refusal),
+      );
+    this.logger.log(`${job.tag} /retry refused: ${refusal.kind}`);
+    return ignored('retry-refused');
   }
 
   /** RL3 steps 2–4: the check and the warning (safe to repeat), then the first step through decide(). */
@@ -380,6 +560,10 @@ function stepRunOf(run: Run): StepRun {
   };
 }
 
+function laneRefOf(run: Run): { number: number; lane: Lane } {
+  return { number: run.number, lane: run.lane as Lane };
+}
+
 function runLane(run: Run): { lane: Lane; stopStep: string | null } {
   return { lane: run.lane as Lane, stopStep: run.stopStep };
 }
@@ -399,7 +583,7 @@ function stateOf(
     lanesOnIssue: issue.lanes,
     grillSkipOnIssue: issue.grillSkip,
     open: issue.open,
-    laneConflictOpen: task.laneConflictOpen,
+    laneConflictLanes: task.laneConflictLanes as Lane[],
     // Decided at Checkpoint 2: spec 7 provides the check; until then every /approve counts.
     approveValid: true,
   };
@@ -411,6 +595,21 @@ function failureWithoutStop(run: Run | null, mark: RouterMark): string {
   if (run.stoppedAt) return 'the run is already stopped';
   if (mark.retry) return 'a /retry event';
   return 'a stale event';
+}
+
+/**
+ * Plan P9 (RL13): after an accepted `/retry` was written, a worker retry would find the run running and answer
+ * "isn't stopped". The event ends `FAILED` at once, silent; the re-queued event completes the label first.
+ */
+function afterRetryWrite(error: unknown): ProviderError {
+  return new ProviderError(messageOf(error), 'permanent');
+}
+
+/** The `/retry` comment of a RETRY input (decide() replies only to one). */
+function commentOf(input: IssueInput): { id: string } {
+  if (input.type !== 'RETRY')
+    throw new Error(`a /retry reply needs a RETRY input, got ${input.type}`);
+  return input.comment;
 }
 
 function messageOf(error: unknown): string {

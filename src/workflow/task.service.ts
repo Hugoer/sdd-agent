@@ -1,7 +1,7 @@
 // Spec 5 "Owned tables": one of the two writers of `tasks` (RunService writes a run's link to it). Every write
 // inside a job is a transaction that first checks the lease owner (SessionLeaseService.assertHeld).
 import { Injectable } from '@nestjs/common';
-import type { TaskRef, TaskStatus } from '../contracts/issue-provider.js';
+import type { Lane, TaskRef, TaskStatus } from '../contracts/issue-provider.js';
 import type { Prisma, Task } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
@@ -84,12 +84,19 @@ export class TaskService {
     });
   }
 
-  /** RL8, after the reminder with marker `conflicts` was posted (post first, then record). */
-  recordLaneConflict(lease: HeldLease, conflicts: number): Promise<void> {
+  /**
+   * RL8, plan Q3: after the reminder with marker `conflicts` was posted (post first, then record): the lanes it
+   * lists.
+   */
+  recordLaneConflict(
+    lease: HeldLease,
+    conflicts: number,
+    lanes: Lane[],
+  ): Promise<void> {
     return this.write(lease, async (tx) => {
       await tx.task.update({
         where: { id: lease.taskId },
-        data: { laneConflictOpen: true, laneConflicts: conflicts },
+        data: { laneConflictLanes: lanes, laneConflicts: conflicts },
       });
     });
   }
@@ -99,7 +106,7 @@ export class TaskService {
     return this.write(lease, async (tx) => {
       await tx.task.update({
         where: { id: lease.taskId },
-        data: { laneConflictOpen: false },
+        data: { laneConflictLanes: [] },
       });
     });
   }

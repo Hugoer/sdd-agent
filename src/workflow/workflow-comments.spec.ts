@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Lane } from '../contracts/issue-provider.js';
 import { LlmError } from '../contracts/llm-error.js';
 import { stopCauseOf } from './stop-cause.js';
 import {
@@ -143,25 +144,51 @@ describe('runEndedComment (RL18)', () => {
   });
 });
 
-describe('laneConflictComment (RL8)', () => {
+describe('laneConflictComment (RL8, plan Q3)', () => {
+  const lanes: Lane[] = ['full-sdd', 'code-only'];
+
   it('in draft: the spec example', () => {
-    expect(laneConflictComment(1, ['full-sdd', 'code-only'], null)).toBe(
+    expect(laneConflictComment(1, { lanes, still: false, run: null })).toBe(
       '<!-- sdd-agent:lane-conflict:1 -->\n' +
-        'This issue has more than one `workflow:` label (`workflow: full-sdd`, `workflow: code-only`). ' +
+        'This issue has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. ' +
+        'Keep exactly one: the bot starts a run when one is left.',
+    );
+  });
+
+  it('after a change that still leaves two or more: the spec example', () => {
+    expect(laneConflictComment(3, { lanes, still: true, run: null })).toBe(
+      '<!-- sdd-agent:lane-conflict:3 -->\n' +
+        'This issue still has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. ' +
         'Keep exactly one: the bot starts a run when one is left.',
     );
   });
 
   it('during a run: the spec example', () => {
     expect(
-      laneConflictComment(2, ['full-sdd', 'code-only'], {
-        number: 2,
-        lane: 'full-sdd',
+      laneConflictComment(2, {
+        lanes,
+        still: false,
+        run: { number: 2, lane: 'full-sdd' },
       }),
     ).toBe(
       '<!-- sdd-agent:lane-conflict:2 -->\n' +
-        'This issue has more than one `workflow:` label (`workflow: full-sdd`, `workflow: code-only`). ' +
+        'This issue has 2 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`. ' +
         'Run 2 keeps `workflow: full-sdd`. To switch, remove `workflow: full-sdd`; to stay, remove the others.',
+    );
+  });
+
+  it('three lanes during a run, after another set: "still has 3", all three listed', () => {
+    expect(
+      laneConflictComment(4, {
+        lanes: ['full-sdd', 'code-only', 'spec-code'],
+        still: true,
+        run: { number: 1, lane: 'full-sdd' },
+      }),
+    ).toBe(
+      '<!-- sdd-agent:lane-conflict:4 -->\n' +
+        'This issue still has 3 `workflow:` labels: `workflow: full-sdd`, `workflow: code-only`, ' +
+        '`workflow: spec-code`. Run 1 keeps `workflow: full-sdd`. To switch, remove `workflow: full-sdd`; to ' +
+        'stay, remove the others.',
     );
   });
 });
@@ -251,8 +278,16 @@ describe('every text (RLW12)', () => {
       { kind: 'replaced', by: { number: 3, lane: 'code-only' } },
       'octocat',
     ),
-    laneConflictComment(1, ['full-sdd', 'spec-code'], null),
-    laneConflictComment(1, ['full-sdd', 'spec-code'], run2),
+    laneConflictComment(1, {
+      lanes: ['full-sdd', 'spec-code'],
+      still: false,
+      run: null,
+    }),
+    laneConflictComment(1, {
+      lanes: ['full-sdd', 'spec-code'],
+      still: true,
+      run: run2,
+    }),
     issueClosedComment('d', { kind: 'lane-added', lane: 'code-only' }),
     issueClosedComment('d', { kind: 'retry' }),
     issueClosedComment('d', { kind: 'approve' }),

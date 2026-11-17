@@ -96,6 +96,17 @@ export class InMemoryIssueProvider implements IssueProvider {
     return task;
   }
 
+  /** A human edits the labels (not a provider method; not recorded): every label but `status: *` is replaced. */
+  setHumanLabels(task: TaskRef, labels: string[]): void {
+    const issue = this.issue(task);
+    issue.labels = [
+      ...issue.labels.filter((label) =>
+        label.toLowerCase().startsWith('status: '),
+      ),
+      ...labels,
+    ];
+  }
+
   /** A human closes or reopens the issue (not a provider method; not recorded). */
   setOpen(task: TaskRef, open: boolean): void {
     this.issue(task).open = open;

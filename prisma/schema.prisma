@@ -97,31 +97,31 @@ model ExecutionLog {
 /// One row per issue (spec 5, "Owned tables"). `status` is the source of truth; `shownStatus` is the `status: *`
 /// label GitHub shows (null = none set). Only TaskService writes it; every write inside a job checks the lease.
 model Task {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// `TaskRef.platform`.
-  platform         String
+  platform          String
   /// `TaskRef.id`.
-  platformId       String    @map("platform_id")
+  platformId        String    @map("platform_id")
   /// `owner/repo#number`, refreshed from every event.
-  externalRef      String    @map("external_ref")
+  externalRef       String    @map("external_ref")
   /// A `TaskStatus`.
-  status           String    @default("draft")
-  shownStatus      String?   @map("shown_status")
+  status            String    @default("draft")
+  shownStatus       String?   @map("shown_status")
   /// Null when no run is current.
-  currentRunId     String?   @unique @map("current_run_id") @db.Uuid
-  currentRun       Run?      @relation("CurrentRun", fields: [currentRunId], references: [id])
+  currentRunId      String?   @unique @map("current_run_id") @db.Uuid
+  currentRun        Run?      @relation("CurrentRun", fields: [currentRunId], references: [id])
   /// The last run number.
-  runCount         Int       @default(0) @map("run_count")
+  runCount          Int       @default(0) @map("run_count")
   /// The `webhook_events.id` holding the session lease.
-  leaseOwner       String?   @map("lease_owner") @db.Uuid
-  leaseExpiresAt   DateTime? @map("lease_expires_at") @db.Timestamptz
-  /// RL8: a lane-conflict reminder was posted and the conflict is not over.
-  laneConflictOpen Boolean   @default(false) @map("lane_conflict_open")
+  leaseOwner        String?   @map("lease_owner") @db.Uuid
+  leaseExpiresAt    DateTime? @map("lease_expires_at") @db.Timestamptz
+  /// RL8, plan Q3: the lanes the open lane-conflict reminder lists; empty when none is open.
+  laneConflictLanes String[]  @default([]) @map("lane_conflict_lanes")
   /// Reminders posted so far (their marker's number).
-  laneConflicts    Int       @default(0) @map("lane_conflicts")
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  runs             Run[]     @relation("TaskRuns")
+  laneConflicts     Int       @default(0) @map("lane_conflicts")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  runs              Run[]     @relation("TaskRuns")
 
   @@unique([platform, platformId])
   @@map("tasks")
@@ -146,6 +146,8 @@ model Run {
   endedAt              DateTime? @map("ended_at") @db.Timestamptz
   /// `cancelled` or `restarted`.
   endReason            String?   @map("end_reason")
+  /// The `webhook_events` row that ended it; its sender is named in the run-ended comment (plan Q2).
+  endEventId           String?   @map("end_event_id") @db.Uuid
   /// Set while stopped (`needs-human`); cleared by `/retry`.
   stoppedAt            DateTime? @map("stopped_at") @db.Timestamptz
   /// The latest stop, kept after `/retry` and after the run ends.

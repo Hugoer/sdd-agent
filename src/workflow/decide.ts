@@ -97,7 +97,8 @@ export interface RouterState {
   grillSkipOnIssue: boolean;
   /** `UnifiedTask.open`, read now (plan P5). */
   open: boolean;
-  laneConflictOpen: boolean;
+  /** Plan Q3: the lanes the open lane-conflict reminder lists (`Task.laneConflictLanes`); empty = none open. */
+  laneConflictLanes: Lane[];
   /** R2, judged by the step that owns the document (spec 7); read only for `APPROVE` (rows 17–20). */
   approveValid: boolean;
 }
@@ -171,17 +172,15 @@ export function decide(state: RouterState, input: DecideInput): Decision {
 
   const action = issueEvent(state, input);
   const endsRun = action.kind === 'cancel';
-  const runRemains =
-    action.kind === 'start-run' ||
-    (action.kind === 'cancel' && action.start !== null) ||
-    (state.run !== null && !endsRun);
+  // A run started or restarted here has exactly one lane left, so no reminder names it.
+  const runAfter = endsRun ? null : state.run;
   return {
     action,
     laneConflict: laneConflictEffect(
-      state.lanesOnIssue.length,
-      state.laneConflictOpen,
+      state.lanesOnIssue,
+      state.laneConflictLanes,
       endsRun,
-      runRemains,
+      runAfter && { number: runAfter.number, lane: runAfter.lane },
     ),
   };
 }

@@ -535,16 +535,16 @@ stop. A failing `/retry` never stops the run (RL13, P2's flag). The re-queued ev
 stale, RL14 or the restored status). Log `#12 /retry accepted: run 2 back to spec-review`.
 
 **Acceptance criteria:**
-- [ ] Stopped run 1 → `/retry` → `DONE`; label back to the status before, then `needs-human` again; a second stop
+- [x] Stopped run 1 → `/retry` → `DONE`; label back to the status before, then `needs-human` again; a second stop
   comment (marker `…:2`); stops 2, retries 1, no run 2 (integration)
-- [ ] Each reply case posts exactly one reply, also when its job is retried (integration)
-- [ ] Two `/retry` while the lease is held → the first accepted, the second "written before run N stopped"
+- [x] Each reply case posts exactly one reply, also when its job is retried (integration)
+- [x] Two `/retry` while the lease is held → the first accepted, the second "written before run N stopped"
   (integration)
-- [ ] The label call failing after the write → the `/retry` event `FAILED` at once, no reply; the re-queued event
+- [x] The label call failing after the write → the `/retry` event `FAILED` at once, no reply; the re-queued event
   sets the label first; the stop's event ended `IGNORED` by a redelivery → still re-queued (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T15
 **Files:** `src/workflow/router.service.ts`, `src/workflow/run.service.ts`, `test/retry.integration.spec.ts`
@@ -562,20 +562,20 @@ Q2 (decided at Checkpoint 2): the end also saves `Run.endEventId` (a new nullabl
 task); the comment's login is that event's sender, also when a later event posts it.
 
 **Acceptance criteria:**
-- [ ] Cancel of a running and of a stopped run → one comment with the sender in backticks, no `@`; `status: draft`;
+- [x] Cancel of a running and of a stopped run → one comment with the sender in backticks, no `@`; `status: draft`;
   the stopped run keeps its `stop_*` fields (RLW1) (integration)
-- [ ] Restart → the "replaced" comment, then the new run's stop comment; a swap in either order, both changes made
+- [x] Restart → the "replaced" comment, then the new run's stop comment; a swap in either order, both changes made
   before the bot handles them → exactly one new run, one "replaced" comment, the other event `no-transition`
   (integration)
-- [ ] A scripted cancel hook's block is appended to the same comment (integration)
-- [ ] GitHub down at the run-ended comment → `endCommentId` stays null; the next event on the issue posts it
+- [x] A scripted cancel hook's block is appended to the same comment (integration)
+- [x] GitHub down at the run-ended comment → `endCommentId` stays null; the next event on the issue posts it
   once and records its id; a retry after the post but before the record finds the marker and posts nothing
   (integration)
-- [ ] That late comment, posted by another sender's event, names the sender of the event that ended the run
+- [x] That late comment, posted by another sender's event, names the sender of the event that ended the run
   (`endEventId`, Q2) (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T16
 **Files:** `src/workflow/router.service.ts`, `src/workflow/run.service.ts`, `src/workflow/step-handler.registry.ts`,
@@ -590,19 +590,22 @@ retried job never posts twice. Wording by whether a run is current after the act
 `lane-conflict`. Log `#12 lane conflict (reminder posted)`. Q3 (decided at Checkpoint 2): one reminder per set of
 labels: `Task.laneConflictLanes` (text[]) replaces `laneConflictOpen` (one migration in this task); T7's check
 compares the set read with it; the text gives the count and the list ("has N" / "still has N", T6's text changes).
+Built 2026-11-17: a conflict that is over (at most one lane) is recorded **before** the action, nothing shown;
+only the reminder waits for the action. Otherwise a run start whose first step fails (every step until specs 6–10)
+would leave the old set listed, and adding the same label again would post nothing.
 
 **Acceptance criteria:**
-- [ ] Two lane labels added in one go (two events) → one reminder, both `lane-conflict`, no run; remove one → run
+- [x] Two lane labels added in one go (two events) → one reminder, both `lane-conflict`, no run; remove one → run
   starts; add it again → a new reminder `…:2` (integration)
-- [ ] Q3: three lanes, one removed → a fresh "still has 2 …" reminder; a third added while two are listed → a
+- [x] Q3: three lanes, one removed → a fresh "still has 2 …" reminder; a third added while two are listed → a
   fresh reminder listing three; an event that reads the listed set → nothing (integration)
-- [ ] Three lanes with a run, the run's lane removed → cancel comment, no run, a fresh reminder in the `draft`
+- [x] Three lanes with a run, the run's lane removed → cancel comment, no run, a fresh reminder in the `draft`
   wording (RL15) (integration)
-- [ ] The reminder post failing → retried → posted once; failing in the job of an accepted `/retry` → that event
+- [x] The reminder post failing → retried → posted once; failing in the job of an accepted `/retry` → that event
   `FAILED` at once (P9) (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T17
 **Files:** `src/workflow/router.service.ts`, `src/workflow/lane-conflict.ts`, `src/workflow/task.service.ts`,
@@ -611,11 +614,13 @@ compares the set read with it; the text gives the count and the list ("has N" / 
 **Scope:** S
 
 ### Checkpoint 4 — `/retry`, restarts and conflicts on real GitHub
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] Matrix "Run start, stop and `/retry`": the remaining rows (`/retry`, `please /retry`, `  /RETRY `, cancel,
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] Matrix "Run start, stop and `/retry`": the remaining rows (`/retry`, `please /retry`, `  /RETRY `, cancel,
   `/retry` with no run, `full-sdd` run 2)
-- [ ] Matrix "Restart and lane conflicts": every row except `#D` (it needs the stale rule, T20: Checkpoint 5)
-- [ ] Matrix "Run-start check": `#C`'s swap row (my instance on the smoke branch again, restored afterwards)
+- [x] Matrix "Restart and lane conflicts": every row except `#D` (it needs the stale rule, T20: Checkpoint 5)
+- [x] Matrix "Run-start check": `#C`'s swap row (my instance on the smoke branch again, restored afterwards)
+  (2026-11-17, my instance, steps done with `gh` at your request: `#A` = #16, `#C` = #18, `#E` = #19; the
+  invariants hold on #16–#19)
 - [ ] You review and commit
 
 ---

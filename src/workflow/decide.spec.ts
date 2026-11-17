@@ -85,7 +85,7 @@ function state(over: Partial<RouterState> = {}): RouterState {
     lanesOnIssue: [],
     grillSkipOnIssue: false,
     open: true,
-    laneConflictOpen: false,
+    laneConflictLanes: [],
     approveValid: true,
     ...over,
   };
@@ -142,7 +142,12 @@ describe('decide(): overview §3 rows 1–31', () => {
 
     expect(decision).toEqual({
       action: ignored('lane-conflict'),
-      laneConflict: { kind: 'post', during: 'draft' },
+      laneConflict: {
+        kind: 'post',
+        lanes: ['full-sdd', 'code-only'],
+        still: false,
+        run: null,
+      },
     });
   });
 
@@ -194,7 +199,12 @@ describe('decide(): overview §3 rows 1–31', () => {
     );
     expect(twoLanes).toEqual({
       action: ignored('lane-conflict'),
-      laneConflict: { kind: 'post', during: 'run' },
+      laneConflict: {
+        kind: 'post',
+        lanes: ['full-sdd', 'code-only'],
+        still: false,
+        run: { number: 2, lane: 'full-sdd' },
+      },
     });
     expect(
       act(running({ lanesOnIssue: ['full-sdd'] }), ev.removed('code-only')),
@@ -606,14 +616,20 @@ describe('decide(): the checks before the rows', () => {
     const decision = decide(
       running({
         lanesOnIssue: ['spec-code', 'code-only'],
-        laneConflictOpen: true,
+        laneConflictLanes: ['full-sdd', 'spec-code', 'code-only'],
       }),
       ev.removed('full-sdd'),
     );
 
+    // The cancel closed the open reminder: "has 2", not "still has 2".
     expect(decision).toEqual({
       action: { kind: 'cancel', start: null },
-      laneConflict: { kind: 'post', during: 'draft' },
+      laneConflict: {
+        kind: 'post',
+        lanes: ['spec-code', 'code-only'],
+        still: false,
+        run: null,
+      },
     });
   });
 
@@ -766,24 +782,53 @@ describe('decide(): closed issues (RL19, plan P5)', () => {
   });
 });
 
-describe('decide(): the lane-conflict check after the rows (RL8)', () => {
-  it('any issue event with two or more lanes and no conflict open posts one; already open → nothing', () => {
+describe('decide(): the lane-conflict check after the rows (RL8, plan Q3)', () => {
+  it('any issue event with two or more lanes and no reminder open posts one; the listed set, in any order → nothing', () => {
     const twoLanes = ['full-sdd', 'code-only'] as Lane[];
     expect(
       decide(running({ lanesOnIssue: twoLanes }), ev.comment()).laneConflict,
-    ).toEqual({ kind: 'post', during: 'run' });
+    ).toEqual({
+      kind: 'post',
+      lanes: twoLanes,
+      still: false,
+      run: { number: 2, lane: 'full-sdd' },
+    });
     expect(
       decide(
-        running({ lanesOnIssue: twoLanes, laneConflictOpen: true }),
+        running({
+          lanesOnIssue: twoLanes,
+          laneConflictLanes: ['code-only', 'full-sdd'],
+        }),
         ev.comment(),
       ).laneConflict,
     ).toBeNull();
   });
 
+  it('another set of two or more while a reminder is open → a fresh "still has" reminder', () => {
+    const threeLanes = ['full-sdd', 'code-only', 'spec-code'] as Lane[];
+    expect(
+      decide(
+        running({
+          lanesOnIssue: threeLanes,
+          laneConflictLanes: ['full-sdd', 'code-only'],
+        }),
+        ev.added('spec-code'),
+      ).laneConflict,
+    ).toEqual({
+      kind: 'post',
+      lanes: threeLanes,
+      still: true,
+      run: { number: 2, lane: 'full-sdd' },
+    });
+  });
+
   it('at most one lane closes an open conflict', () => {
     expect(
       decide(
-        running({ lanesOnIssue: ['full-sdd'], laneConflictOpen: true }),
+        running({
+          lanesOnIssue: ['full-sdd'],
+          laneConflictLanes: ['full-sdd', 'code-only'],
+        }),
         ev.removed('code-only'),
       ).laneConflict,
     ).toEqual({ kind: 'close' });

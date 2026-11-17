@@ -62,6 +62,18 @@ export class StepHandlerRegistry {
     return handler;
   }
 
+  /** RL18: the cancel hooks' blocks for the run-ended comment, in the order registered; null adds nothing. */
+  async cancelBlocks(
+    context: Omit<StepContext, 'op' | 'input'>,
+  ): Promise<string[]> {
+    const blocks: string[] = [];
+    for (const handler of this.handlers.values()) {
+      const block = handler.onCancel ? await handler.onCancel(context) : null;
+      if (block !== null) blocks.push(block);
+    }
+    return blocks;
+  }
+
   /** The handlers with a cancel hook, in the order they were registered. */
   cancelHooks(): { name: HandlerName; handler: StepHandler }[] {
     return [...this.handlers]
