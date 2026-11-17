@@ -55,7 +55,7 @@ describe('intake (signed webhooks → rows)', () => {
   }
 
   beforeAll(async () => {
-    t = await startApp();
+    t = await startApp({ processor: 'intake-only' });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);
@@ -603,7 +603,7 @@ describe('intake failure paths (spec 2 IA9, IA13)', () => {
   }
 
   beforeAll(async () => {
-    t = await startApp();
+    t = await startApp({ processor: 'intake-only' });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);
@@ -687,7 +687,11 @@ describe('intake with the polling worker', () => {
       number: 61,
       labels: ['workflow: full-sdd'],
     });
-    const t = await startApp({ pollingWorker: true, issues });
+    const t = await startApp({
+      pollingWorker: true,
+      issues,
+      processor: 'intake-only',
+    });
     try {
       const deliveryId = newDeliveryId();
       const delivery = issuesLabeled({

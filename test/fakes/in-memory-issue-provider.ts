@@ -61,6 +61,7 @@ export class InMemoryIssueProvider implements IssueProvider {
   private readonly comments: FakeComment[] = [];
   private readonly accessLevels = new Map<string, AccessLevel>();
   private nextError: ProviderError | undefined;
+  private readonly nextErrorOn = new Map<string, ProviderError>();
   private nextCommentId = 1;
 
   constructor(
@@ -123,6 +124,11 @@ export class InMemoryIssueProvider implements IssueProvider {
   /** The next provider call rejects with this error (and changes nothing). */
   failNext(error: ProviderError): void {
     this.nextError = error;
+  }
+
+  /** Spec 5: the next call of `method` rejects with this error (and changes nothing); other calls pass. */
+  failNextOn(method: keyof IssueProvider, error: ProviderError): void {
+    this.nextErrorOn.set(method, error);
   }
 
   labelsOf(task: TaskRef): string[] {
@@ -262,8 +268,9 @@ export class InMemoryIssueProvider implements IssueProvider {
 
   private call<T>(method: string, args: unknown[], run: () => T): Promise<T> {
     this.calls.push({ method, args });
-    const error = this.nextError;
-    this.nextError = undefined;
+    const error = this.nextError ?? this.nextErrorOn.get(method);
+    if (this.nextError) this.nextError = undefined;
+    else this.nextErrorOn.delete(method);
     // The executor turns a thrown error into a rejection.
     return new Promise((resolve) => {
       if (error) throw error;

@@ -409,16 +409,16 @@ The lease is released in `finally`. Accepted issue events end `IGNORED` `no-tran
 harness changes of P11.
 
 **Acceptance criteria:**
-- [ ] The app's processor is `WorkflowEventProcessor`; nothing registers the placeholder (integration, `Logger`
+- [x] The app's processor is `WorkflowEventProcessor`; nothing registers the placeholder (integration, `Logger`
   spy on the startup line, since the harness boots with `logger: false`)
-- [ ] `PR_UPDATED` → `no-task`, no `Task` row; an accepted issue event creates its `Task` in `draft` (no label)
+- [x] `PR_UPDATED` → `no-task`, no `Task` row; an accepted issue event creates its `Task` in `draft` (no label)
   (integration)
-- [ ] Lease held by another event → `PENDING` again in 5 s, `attempts` unchanged; the same event retakes its own
+- [x] Lease held by another event → `PENDING` again in 5 s, `attempts` unchanged; the same event retakes its own
   lease (crash case) (integration)
-- [ ] Spec 2's intake suite passes unchanged on the intake-only processor (P11)
+- [x] Spec 2's intake suite passes unchanged on the intake-only processor (P11)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T3, T4, T9, T10
 **Files:** `src/workflow/workflow.module.ts`, `src/workflow/workflow-event.processor.ts`,
@@ -434,16 +434,16 @@ harness changes of P11.
 with a log line naming the status. Every error after the claim gets P2's mark. Actions built later use P12.
 
 **Acceptance criteria:**
-- [ ] `issues.opened` → `status: draft` label, `shownStatus = draft`, `DONE`; a comment on an issue with no
+- [x] `issues.opened` → `status: draft` label, `shownStatus = draft`, `DONE`; a comment on an issue with no
   `Task` → row in `draft`, no label, `IGNORED` `no-transition` (integration)
-- [ ] A pending label (status ≠ shown) is set before anything else, also on an event that then does nothing; a
+- [x] A pending label (status ≠ shown) is set before anything else, also on an event that then does nothing; a
   `setStatusLabel` failure on `opened` → retried → the label set once (integration)
-- [ ] Exactly one `getTaskDetails` per routed issue event (integration, `calls`)
-- [ ] An error after the claim carries the mark with the task, the step and the `/retry` flag; one from intake
+- [x] Exactly one `getTaskDetails` per routed issue event (integration, `calls`)
+- [x] An error after the claim carries the mark with the task, the step and the `/retry` flag; one from intake
   doesn't (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T2, T7, T12
 **Files:** `src/workflow/router.service.ts`, `src/workflow/task.service.ts`, `test/router.integration.spec.ts`
@@ -459,16 +459,16 @@ outcome → `decide()` → … until the job ends; status writes set their label
 `StepNotBuiltError`. Log `#12 run 2 started (full-sdd)`.
 
 **Acceptance criteria:**
-- [ ] Lane label added in `draft` → run 1 (lane, skip read from the API now, start event, `receivedAt`); the event
+- [x] Lane label added in `draft` → run 1 (lane, skip read from the API now, start event, `receivedAt`); the event
   ends `FAILED` with `step-not-built` (the stop comes in T15) (integration)
-- [ ] `checkRun` fails → `FAILED`, no injection warning; it passes → the warning (if due) is posted before the
+- [x] `checkRun` fails → `FAILED`, no injection warning; it passes → the warning (if due) is posted before the
   first step fails (integration)
-- [ ] Crash after the `Run` row (its start event re-queued, run running) → continues, no run 2 (integration)
-- [ ] With scripted handlers: `go-signal` returning nothing → `ready-for-dev` + label (P4); `grill` returning an
+- [x] Crash after the `Run` row (its start event re-queued, run running) → continues, no run 2 (integration)
+- [x] With scripted handlers: `go-signal` returning nothing → `ready-for-dev` + label (P4); `grill` returning an
   outcome → `decide()` is called with it (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T8, T11, T13
 **Files:** `src/workflow/run-start.service.ts`, `src/workflow/router.service.ts`, `src/workflow/run.service.ts`,
@@ -487,20 +487,20 @@ router on a work-result outcome (retryable false, the outcome's body; rows 14, 2
 pending first, then `no-transition`. Log `#12 run 2 stopped at spec: access-denied`.
 
 **Acceptance criteria:**
-- [ ] Lane label added → run 1 stopped at `go-signal`, `step-not-built`, stops 1, `status: needs-human`, exactly
+- [x] Lane label added → run 1 stopped at `go-signal`, `step-not-built`, stops 1, `status: needs-human`, exactly
   one stop comment with both lines (integration)
-- [ ] Temporary `ProviderError` on 3 attempts → one stop, "after 3 attempts"; an unexpected error →
+- [x] Temporary `ProviderError` on 3 attempts → one stop, "after 3 attempts"; an unexpected error →
   `internal-error`, the comment names the delivery ID and not the message (integration)
-- [ ] Silent cases (RLW2, RL13, RL16): no current run; run already stopped; a `/retry` event; an intake failure →
+- [x] Silent cases (RLW2, RL13, RL16): no current run; run already stopped; a `/retry` event; an intake failure →
   `FAILED`, no comment, the run unchanged (integration)
-- [ ] GitHub down at the stop comment → the event `FAILED`, run stopped, comment pending → the next event posts it
+- [x] GitHub down at the stop comment → the event `FAILED`, run stopped, comment pending → the next event posts it
   once; posted but not recorded → found by its marker, never twice; a redelivery of the stopped start event →
   pending completed, `no-transition`, no run 2 (integration)
-- [ ] A scripted handler returning `LIMIT` with a body → a non-retryable stop: its body + only the restart line
+- [x] A scripted handler returning `LIMIT` with a body → a non-retryable stop: its body + only the restart line
   (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T6, T14
 **Files:** `src/workflow/workflow-event.processor.ts`, `src/workflow/needs-human.service.ts`,
@@ -509,16 +509,18 @@ pending first, then `no-transition`. Log `#12 run 2 stopped at spec: access-deni
 
 ### Checkpoint 3 — The router on real GitHub
 My instance on port 3000, dev database; your clicks on the sandbox.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] Matrix "Startup": both rows
-- [ ] Matrix "Run start, stop and `/retry`": the first two rows (`#A` opened → `status: draft`; `code-only` →
-  run 1 stopped at `go-signal`, one comment, no injection warning)
-- [ ] Matrix "Run-start check": `#B` (warning, then the stop) and `#C`'s first row (`step-config`, one comment, no
-  warning; my instance on `TARGET_BASE_BRANCH=smoke/spec-4-missing-skill`, restored afterwards)
-- [ ] Matrix "Pending side effects": all three rows
-- [ ] Lease taken, with a `hello` comment instead of `/retry` (built in T16): `PENDING`, the log line, processed
-  after the expiry, `attempts` 1
-- [ ] Matrix "Refused and other inputs": the comment on an old issue with no `Task`
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] Matrix "Startup": both rows
+- [x] Matrix "Run start, stop and `/retry`": the first two rows (`#A` opened → `status: draft`; `code-only` →
+  run 1 stopped at `go-signal`, one comment, no injection warning) (2026-11-17, `#A` = #16)
+- [x] Matrix "Run-start check": `#B` (warning, then the stop) and `#C`'s first row (`step-config`, one comment, no
+  warning; my instance on `TARGET_BASE_BRANCH=smoke/spec-4-missing-skill`, restored afterwards) (2026-11-17: `#B`
+  = #17, `#C` = #18; the sandbox branch recreated, `plan` → `.github-agent/skills/plan-missing`)
+- [x] Matrix "Pending side effects": all three rows (2026-11-17, on #16)
+- [x] Lease taken, with a `hello` comment instead of `/retry` (built in T16): `PENDING`, the log line, processed
+  after the expiry, `attempts` 1 (2026-11-17, on #16)
+- [x] Matrix "Refused and other inputs": the comment on an old issue with no `Task` (2026-11-17: #9 reopened for
+  the comment, closed again; a closed issue would test the closed path instead)
 - [ ] You review and commit
 
 ---

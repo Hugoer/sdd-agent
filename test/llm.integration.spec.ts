@@ -20,7 +20,8 @@ describe('LlmModule in the app', () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    t = await startApp();
+    // Spec 5 plan P11: "an intake event" means intake alone, as when this suite was written.
+    t = await startApp({ processor: 'intake-only' });
   });
   afterAll(async () => {
     await t.app.close();

@@ -1,7 +1,9 @@
 // Spec 5 "Cause and message" (RL4): what a stop records and its comment says. Only spec 4's error messages and
 // the provider's own message are posted; a bug's message never is (it may hold anything).
+import type { Lane, TaskStatus } from '../contracts/issue-provider.js';
 import { LlmError, StepConfigError } from '../contracts/llm-error.js';
 import { ProviderError } from '../contracts/provider-error.js';
+import { RUN_START } from './workflow-comments.js';
 import { StepNotBuiltError } from './workflow-errors.js';
 
 export interface StopCause {
@@ -65,4 +67,31 @@ export function workResultReason(cause: string): string | null {
     (stop) => stop.cause === cause,
   );
   return found ? found.reason : null;
+}
+
+/**
+ * Plan P3: the step a stop names when no handler is running (the pending side effects, reading the issue, a
+ * reply): the step the status waits on. A running handler names itself; a run between its creation and its
+ * first handler is `run-start`.
+ */
+export function waitingStep(
+  status: TaskStatus,
+  run: { lane: Lane; stopStep: string | null } | null,
+): string {
+  switch (status) {
+    case 'grilling':
+      return 'grill';
+    case 'spec-review':
+      return 'spec';
+    case 'ready-for-dev':
+      return run?.lane === 'full-sdd' ? 'plan' : 'go-signal';
+    case 'executing':
+      return 'code';
+    case 'in-review':
+      return 'qualityGate';
+    case 'needs-human':
+      return run?.stopStep ?? RUN_START;
+    case 'draft':
+      return RUN_START;
+  }
 }

@@ -12,9 +12,10 @@ import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
 import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
 import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
-import { IntakeEventProcessor } from '../src/intake/intake-event.processor.js';
+import { IntakeService } from '../src/intake/intake.service.js';
 import { CHAT_MODEL_FACTORY } from '../src/llm/chat-model.factory.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import { WorkflowEventProcessor } from '../src/workflow/workflow-event.processor.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
 import { InMemoryRepoProvider } from './fakes/in-memory-repo-provider.js';
@@ -125,6 +126,25 @@ export class ScriptedProcessor implements EventProcessor {
   }
 }
 
+/**
+ * Spec 5, plan P11: what spec 2's placeholder did (accepted → DONE, ignored → IGNORED), so spec 2's suite keeps
+ * testing intake alone while the app's own processor is the router.
+ */
+export class IntakeOnlyProcessor implements EventProcessor {
+  constructor(private readonly intake: IntakeService) {}
+
+  async process(event: WebhookEvent): Promise<ProcessResult> {
+    const result = await this.intake.intake(event);
+    return result.outcome === 'accepted'
+      ? { status: 'DONE' }
+      : { status: 'IGNORED', reason: result.reason };
+  }
+
+  failed(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 export interface TestApp {
   app: NestExpressApplication;
   prisma: PrismaService;
@@ -146,8 +166,11 @@ export interface StartOptions {
   repo?: InMemoryRepoProvider;
   /** The fake behind CHAT_MODEL_FACTORY (default: a new one with no scripted answer). */
   models?: ScriptedChatModelFactory;
-  /** Registered with the worker in place of the app's own processor (plan P3). */
-  processor?: EventProcessor;
+  /**
+   * Registered with the worker in place of the app's own processor, the router (spec 1 plan P3);
+   * `'intake-only'`: spec 2's behavior (spec 5 plan P11).
+   */
+  processor?: EventProcessor | 'intake-only';
 }
 
 /** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
@@ -168,13 +191,16 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
       .useClass(ManualEventsWorker);
   }
   if (options.processor) {
-    const processor = options.processor;
-    // The app's processor is replaced by one that registers the scripted one through the same seam.
-    builder = builder.overrideProvider(IntakeEventProcessor).useFactory({
-      factory: (worker: EventsWorker) => ({
-        onModuleInit: () => worker.registerProcessor(processor),
+    const chosen = options.processor;
+    // The app's processor is replaced by one that registers the chosen one through the same seam.
+    builder = builder.overrideProvider(WorkflowEventProcessor).useFactory({
+      factory: (worker: EventsWorker, intake: IntakeService) => ({
+        onModuleInit: () =>
+          worker.registerProcessor(
+            chosen === 'intake-only' ? new IntakeOnlyProcessor(intake) : chosen,
+          ),
       }),
-      inject: [EventsWorker],
+      inject: [EventsWorker, IntakeService],
     });
   }
   const moduleRef = await builder.compile();

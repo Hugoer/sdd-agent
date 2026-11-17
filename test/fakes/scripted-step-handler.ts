@@ -22,6 +22,14 @@ export class ScriptedStepHandler implements StepHandler {
     return this;
   }
 
+  /** Forgets what earlier tests scripted and recorded. */
+  reset(): void {
+    this.calls.length = 0;
+    this.cancelCalls.length = 0;
+    this.cancelBlock = null;
+    this.answers.length = 0;
+  }
+
   /** The next call returns this outcome. */
   answerNext(outcome: StepOutcome): this {
     return this.then(() => Promise.resolve(outcome));

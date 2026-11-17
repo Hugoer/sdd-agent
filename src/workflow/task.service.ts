@@ -9,6 +9,21 @@ import {
   type HeldLease,
 } from './session-lease.service.js';
 
+/** The issue as the ports name it, from its row (refreshed from every event). */
+export function refOf(task: Task): TaskRef {
+  return {
+    platform: task.platform as TaskRef['platform'],
+    id: task.platformId,
+    externalRef: task.externalRef,
+  };
+}
+
+/** Spec "Logging": `#12` for `owner/repo#12` (a log line never holds issue text). */
+export function issueTag(externalRef: string): string {
+  const at = externalRef.lastIndexOf('#');
+  return at >= 0 ? externalRef.slice(at) : externalRef;
+}
+
 @Injectable()
 export class TaskService {
   constructor(

@@ -4,6 +4,7 @@ import { ProviderError } from '../contracts/provider-error.js';
 import {
   WORK_RESULT_STOPS,
   stopCauseOf,
+  waitingStep,
   workResultReason,
 } from './stop-cause.js';
 import { LeaseLostError, StepNotBuiltError } from './workflow-errors.js';
@@ -90,5 +91,26 @@ describe('work-result stops (plan P4)', () => {
       'the Grill round limit was reached',
     );
     expect(workResultReason('provider-error')).toBeNull();
+  });
+});
+
+describe('waitingStep (plan P3: the step a stop names outside a handler)', () => {
+  it.each([
+    ['draft', 'full-sdd', 'run-start'],
+    ['grilling', 'full-sdd', 'grill'],
+    ['spec-review', 'spec-code', 'spec'],
+    ['ready-for-dev', 'full-sdd', 'plan'],
+    ['ready-for-dev', 'code-only', 'go-signal'],
+    ['executing', 'code-only', 'code'],
+    ['in-review', 'spec-code', 'qualityGate'],
+  ] as const)('%s on %s → %s', (status, lane, step) => {
+    expect(waitingStep(status, { lane, stopStep: null })).toBe(step);
+  });
+
+  it("needs-human → the stop's own step; no run → run-start", () => {
+    expect(
+      waitingStep('needs-human', { lane: 'full-sdd', stopStep: 'spec' }),
+    ).toBe('spec');
+    expect(waitingStep('draft', null)).toBe('run-start');
   });
 });
