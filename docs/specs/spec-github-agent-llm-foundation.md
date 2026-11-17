@@ -1000,4 +1000,6 @@ None blocks this spec. For the build and later specs:
   candidate: `skill-loader.ts` calls `findInjectionKinds` on each file and logs one warning line (the step, the
   path and the kinds, never the text); the skill still loads. Small: no contract, table or other module changes.
   To decide: warn only or refuse the skill, and whether a warning also goes somewhere visible (a comment, an
-  `ExecutionLog` column). Decide before spec 6 writes the first real skill.
+  `ExecutionLog` column). Decide before spec 6 writes the first real skill. → decided 2026-11-17 in
+  `docs/specs/spec-github-agent-grill-me.md` (GM13): the log line only, the skill still loads, nothing visible
+  elsewhere; built with spec 6.

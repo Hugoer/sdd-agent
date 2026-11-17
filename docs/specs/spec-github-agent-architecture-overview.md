@@ -6,7 +6,9 @@
 > interview: D24–D26, D1 and D7 annotated, §3 R1/R4/R5 and rows 3, 8, 28, 30, 31, §4 and §6; then its
 > follow-up interview: D6 and D26 annotated, rows 6, 7, 28 and the note under row 31; approved with that spec on
 > 2026-11-16) · amended 2026-11-16 (spec 5's plan, approved that day: §1 row 5, §3 row 1 and the note under
-> row 31, §6 `Run`)
+> row 31, §6 `Run`) · amended 2026-11-17 with spec 6's draft (interview GM1–GM12: D8 annotated; §1 row 6; §3
+> lanes, step outcomes, rows 9, 12, 14–16 and the diagram; §4; §5; §6; edge case 6; the verification rows marked
+> 6), approved with that spec on 2026-11-17
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#10) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -71,13 +73,18 @@ comments, without acting under the developer's identity or touching their checko
   through the restart.
 - **D8 A Grill round asks 1..K questions,** chosen by the LLM; only questions whose answers don't affect each
   other go together. K = `GRILL_MAX_QUESTIONS_PER_ROUND` (default 3). Output `{ confidence, questions[], gaps }`;
-  `GrillRound` = one row per bot comment.
+  `GrillRound` = one row per bot comment. **2026-11-17 (spec 6, GM1, GM3, GM5, GM6):** a question goes in only if
+  the bot would ask it whatever the answers to the others are, most important first; a model that sends more than
+  K gets the first K posted; K may be 1–10. Each question carries the bot's guess; questions are numbered Q1, Q2, …
+  across a run's rounds. Output `{ confidence, questions: { question, guess }[], open, gaps }` (`open`: earlier
+  questions still unanswered and still needed). Rejected: one question per comment above a confidence level.
 - **D9 Step skills are read through the GitHub API** at the base branch (`RepoProvider.readFile`, spec 3);
   spec 4 loads, validates and assembles them. Replaces "read from git". `WORKSPACE_BASE_BRANCH` becomes
   `TARGET_BASE_BRANCH`. **2026-11-10 (spec 3, G7):** a skill is its whole directory (references, scripts), so
   `RepoProvider.listFiles` lists it; spec 4 decides how the files are used.
 - **D10 `/approve` counts once,** and only if posted after the document (or go-signal) it approves. Ignored
-  during `grilling`.
+  during `grilling`. **2026-11-17 (spec 6 GM8):** still nothing is approved during `grilling`, but the `/approve`
+  gets one reply (nothing to approve yet, the open questions, how to stop them).
 - **D11 Busy workspace:** the approval is recorded, the event waits (`WAITING_WORKSPACE`), one "queued" comment
   is posted, and the retry goes through the lease and the router again.
 - **D12 Interrupted Coder job** (crash): `in-review` if its PR was already opened, otherwise `needs-human` +
@@ -113,7 +120,9 @@ comments, without acting under the developer's identity or touching their checko
 - **D22 Gemini through `ChatGoogle` (2026-11-12, spec 4 interview).** The LLM client is `ChatGoogle` from
   `@langchain/google`, the package LangChain recommends for Gemini, with a Google AI Studio key
   (`GOOGLE_API_KEY`). Replaces `@langchain/anthropic` with `claude-sonnet-5-5`. LangGraph (D3) and the stored Grill
-  conversation (LangChain messages) don't depend on the provider. `ChatGoogleGenerativeAI`
+  conversation (LangChain messages) don't depend on the provider. (2026-11-17, spec 6 GMW2: no Grill conversation
+  is stored; each prompt is rebuilt from the Grill tables, which hold plain text, and `ExecutionLog.prompt` keeps
+  what was sent.) `ChatGoogleGenerativeAI`
   (`@langchain/google-genai`) is not used: LangChain says it will be deprecated (it runs on Google's old
   `@google/generative-ai` SDK). Reason: the developer's choice of provider. One bot instance uses one provider
   for every step: providers are never mixed per step. The provider's package is imported in one adapter file of
@@ -177,7 +186,7 @@ Numbers are IDs, not build order.
 | 3 | `github-providers` | `GitHubModule` · `src/github` | App auth (JWT → installation token), GitHub `IssueProvider` + `RepoProvider`, label bootstrap | 1 | high |
 | 4 | `llm-foundation` | `LlmModule`, `SecretScanModule` · `src/llm`, `src/secret-scan` | Gemini client (`ChatGoogle`, D22), model per step (D23), Zod output + re-ask, `ExecutionLog` (prompt, answer, usage), input guard, secret scanner at the ports, step-skill loader + prompt assembly | 1, 3 | xhigh |
 | 5 | `router-session-lease` | `WorkflowModule` · `src/workflow` | `Task` and `Run` state + label projection, lease service (claim, heartbeat, release), `decide()`, dispatcher + handler registry, run start, cancel/restart, stale events, closed issues, `needs-human` + `/retry` (2026-11-16) | 2, 3, 4 (2026-11-16, spec 5 plan: the run-start check and the injection warning) | xhigh |
-| 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment | 4, 5 | max |
+| 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment; 2026-11-17: `GrillEvaluation`/`GrillAnswer`, 👀 on comments with nothing to add, the answers block | 4, 5; 2026-11-17 (spec 6): also 2 (answer comments read with intake's rules) and 3 (the issue port) | max |
 | 7 | `spec-plan-approvals` | `DocumentsModule` · `src/documents` | Spec/Plan generation, `/approve` rules, approved snapshots | 6 | xhigh |
 | 8 | `workspace-git` | `WorkspaceModule` · `src/workspace` | git runner (`execFile`), bot worktree, workspace lease + queue, setup command, bot identity, per-command token | 3, 5 | max |
 | 9 | `coder` | `CoderModule` · `src/coder` | Coder agent loop (LangGraph), file tools, command allowlist, lint/test gate, commit/push/PR, red and interrupted runs | 4, 7, 8 | xhigh |
@@ -251,7 +260,11 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
   failure.
 - **Lanes** (✋ = `/approve`): `full-sdd` = Grill → Spec ✋ → Plan ✋ → Coder → Quality Gate ·
   `spec-code` = Grill → Spec ✋ → Coder → Quality Gate · `code-only` = go-signal ✋ → Coder → Quality Gate.
-  `grill: skip` drops Grill Me from the first two and is read only when a run starts.
+  `grill: skip` drops Grill Me from the first two and is read ~~only~~ when a run starts; **2026-11-17 (spec 6,
+  GM8):** added while the bot is asking questions, it stops them and the run moves on to the Spec (row 16); GM15:
+  the label is read whenever the bot would ask (a run start, also a retried one, and every comment while
+  grilling), so one added while the run was stopped or the issue closed still counts; its own event counts only
+  if the label is still on.
 
 ### Inputs
 
@@ -264,7 +277,7 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 | `APPROVE` | `issue_comment.created` whose whole text is `/approve` (D20, 2026-11-11; was "exact syntax: spec 7") |
 | `RETRY` | `issue_comment.created` whose whole text is `/retry` (D25, 2026-11-16) |
 | `PR_UPDATED` | `pull_request.opened` / `synchronize` on a bot PR |
-| Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` |
+| Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` (an evaluation that only waits returns nothing, 2026-11-17, spec 6) · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` |
 
 The first seven rows are the `WorkflowInput` type of §4, produced by intake (spec 2). `RETRY` needs a
 Participant (2026-11-16).
@@ -321,14 +334,14 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 6 | run state | `LANE_REMOVED` of the run's lane | Cancel the run: close the Grill session (kept), cancel comment if it had answered rounds (D6). Exactly one lane label left → start a run with it. 2026-11-16: wins over row 8 whatever is left; one run-ended comment always (RL18); with two or more lanes left, a fresh reminder | draft or per lane |
 | 7 | run state | `LANE_ADDED`, exactly one lane label now | Cancel as in row 6, then start a run with it (restart). 2026-11-16 (RL12): only for a lane other than the run's own; adding the run's own lane is ignored, so a swap handled late gives one new run | per lane |
 | 8 | run state | any other lane-label change (two or more lanes, or another lane removed) | Ignored; the run continues. 2026-11-16: with two or more lanes, one reminder per conflict (the run keeps its lane; how to switch), and a fresh one whenever the set of labels changes (spec 5 plan, Checkpoint 2) | unchanged |
-| 9 | ↳ run start | `full-sdd` / `spec-code`, no `grill: skip` | Open a Grill session, first evaluation | rows 12–14 |
+| 9 | ↳ run start | `full-sdd` / `spec-code`, no `grill: skip` | Open a Grill session, first evaluation (2026-11-17, spec 6 GM4: comments written meanwhile are read before it acts) | rows 12–14 |
 | 10 | ↳ run start | `full-sdd` / `spec-code` + `grill: skip` | `GrillSession` SKIPPED + skip comment → generate and post the Spec | spec-review |
 | 11 | ↳ run start | `code-only` | Go-signal comment | ready-for-dev |
-| 12 | ↳ Grill outcome | `ASKED` | Post 1..K questions (two transactions + marker) | grilling |
+| 12 | ↳ Grill outcome | `ASKED` | Post 1..K questions (two transactions + marker); 2026-11-17 (spec 6 GM1, GM5): numbered Q1, Q2, … across the run, each with the bot's guess | grilling |
 | 13 | ↳ Grill outcome | `CLEAR` (≥ threshold) | If no question was asked: comment with the score. Generate and post the Spec | spec-review |
-| 14 | ↳ Grill outcome | `LIMIT` (max rounds, below threshold) | One summary comment (confidence + gaps) | needs-human |
-| 15 | grilling | `COMMENT` | Grill round with the merged answer (every comment since the last question) | rows 12–14 |
-| 16 | grilling | `APPROVE`, `SKIP_ADDED` | Ignored (force continue is Future) | grilling |
+| 14 | ↳ Grill outcome | `LIMIT` (max rounds, below threshold) | One summary comment (confidence + gaps; 2026-11-17, spec 6 GM9: plus three numbered steps to continue, which replace the generic restart line) | needs-human |
+| 15 | grilling | `COMMENT` | Grill round with the merged answer (every comment since the last question). 2026-11-17 (spec 6 GM4, GM6, GM12): every answer comment not read yet, also those written while the run was stopped; a comment already read → nothing; nothing new to ask while questions are open → 👀 on the comments, keep waiting (no round) | rows 12–14, or grilling |
+| 16 | grilling | `APPROVE`, `SKIP_ADDED` | ~~Ignored (force continue is Future)~~ 2026-11-17 (spec 6 GM8): `APPROVE` → one reply (nothing to approve yet, the open questions, how to stop them); `SKIP_ADDED` → close the Grill session (`STOPPED`) + one comment → generate and post the Spec, only while the label is still on (GM15; otherwise ignored). A `COMMENT` with `grill: skip` on the issue takes this path too | grilling (`APPROVE`), spec-review (`SKIP_ADDED`) |
 | 17 | spec-review (`full-sdd`) | valid `APPROVE` | Snapshot the approved Spec → generate and post the Plan | ready-for-dev |
 | 18 | spec-review (`spec-code`) | valid `APPROVE` | Snapshot the approved Spec → claim the workspace | rows 21–23 |
 | 19 | ready-for-dev | valid `APPROVE` | `full-sdd`: snapshot the approved Plan. Then claim the workspace | rows 21–23 |
@@ -369,8 +382,8 @@ stateDiagram-v2
     draft --> specReview: lane label with grill skip, or issue already clear
     draft --> readyForDev: lane label, code-only
     draft --> needsHuman: lane label, a needed skill is missing
-    grilling --> grilling: answer, next round
-    grilling --> specReview: confidence reached, Spec posted
+    grilling --> grilling: answer, next round or wait
+    grilling --> specReview: confidence reached or grill skip added, Spec posted
     grilling --> needsHuman: round limit
     specReview --> readyForDev: /approve full-sdd, Plan posted
     specReview --> executing: /approve spec-code
@@ -439,6 +452,9 @@ export interface IssueProvider {
   getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel>;
   /** true when login is the bot's own account (added 2026-11-11, spec 2) */
   isSelf(login: string): boolean;
+  /** marks a human comment as read, with nothing to add (GitHub: the 👀 reaction); doing it twice changes
+   *  nothing, and a comment that no longer exists is not an error (added 2026-11-17, spec 6 GM6) */
+  acknowledgeComment(task: TaskRef, commentId: string): Promise<void>;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean; maxModelSteps: StepName[] };
   // maxModelSteps: the steps whose `model: max-*` label is on the task (D23, spec 4, 2026-11-12)
@@ -517,7 +533,7 @@ export class LlmError extends Error {
 export class StepConfigError extends Error {}
 
 /** Added 2026-11-11 (spec 2). What intake hands to the router: one authorized event, platform-neutral. */
-export interface TaskComment { id: string; body: string; createdAt: Date } // body is untrusted data
+export interface TaskComment { id: string; body: string; createdAt: Date; url?: string } // body is untrusted data; url: 2026-11-17, spec 6
 export type WorkflowInput = {
   deliveryId: string; // WebhookEvent.deliveryId
   receivedAt: Date;   // when the controller stored the event ("received" in §3 R1)
@@ -534,7 +550,7 @@ export type WorkflowInput = {
 
 | Step (`workflow.json` key) | Output, Zod-validated (bot-owned) | Tools (bot-owned) | Limits |
 |---|---|---|---|
-| Grill Me (`grill`) | `{ confidence: 0–100, questions: string[] (0..K), gaps: string[] }` | none | `GRILL_MAX_ROUNDS`, `GRILL_MAX_QUESTIONS_PER_ROUND`, `GRILL_CONFIDENCE_THRESHOLD` |
+| Grill Me (`grill`) | ~~`{ confidence: 0–100, questions: string[] (0..K), gaps: string[] }`~~ 2026-11-17 (spec 6): `{ confidence: 0–100, questions: { question, guess }[] (the bot posts at most K), open: number[], gaps: string[] }` | none | `GRILL_MAX_ROUNDS`, `GRILL_MAX_QUESTIONS_PER_ROUND`, `GRILL_CONFIDENCE_THRESHOLD` |
 | Spec (`spec`), Plan (`plan`) | Markdown document (shape: spec 7) | none | input guardrails (spec 4) |
 | Coder (`code`) | Final summary (shape: spec 9) | read, write, list, search files in the bot worktree; `runCommand` limited to `CODER_ALLOWED_COMMANDS`. No git. | `CODER_MAX_STEPS`, `CODER_MAX_FIX_ATTEMPTS` |
 | Quality Gate (`qualityGate`) | `{ verdict: APPROVED \| NEEDS_DECISIONS \| BLOCKED, summary, findings[] }` | read-only file tools at the PR head (spec 10) | `QUALITY_GATE_MAX_STEPS` |
@@ -596,7 +612,7 @@ needs a new variable adds it here first.
 | `TARGET_BASE_BRANCH` | `main` | valid branch name | 4 |
 | `SESSION_LEASE_SECONDS` | `120` | integer ≥ 30; heartbeat every third of it | 5 |
 | `GRILL_MAX_ROUNDS` | `5` | integer 1–10 | 6 |
-| `GRILL_MAX_QUESTIONS_PER_ROUND` | `3` | integer 1–5; `1` = one question per round | 6 |
+| `GRILL_MAX_QUESTIONS_PER_ROUND` | `3` | integer 1–10 (2026-11-17, spec 6 GM3; was 1–5); `1` = one question per round | 6 |
 | `GRILL_CONFIDENCE_THRESHOLD` | `95` | integer 1–100 | 6 |
 | `WORKSPACE_REPO_PATH` | required | absolute path to a git repo (startup check) | 8 |
 | `WORKSPACE_WORKTREE_PATH` | required | absolute path outside `WORKSPACE_REPO_PATH`; created at startup if missing | 8 |
@@ -626,8 +642,10 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 | `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
 | `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
 | `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) and the event that ended the run (2026-11-16, spec 5 plan Checkpoint 2: so a late run-ended comment still names who changed the label) | — |
-| `GrillSession` | 6 | One per run that grills or skips (only one active per task): conversation (`StoredMessage` JSON), status, round count | — |
-| `GrillRound` | 6 | One per bot question comment: its 1..K questions, the merged answer, confidence before/after, gaps, comment IDs, post state | — |
+| `GrillSession` | 6 | One per run that grills or skips (only one active per task): ~~conversation (`StoredMessage` JSON),~~ status, round count. 2026-11-17 (spec 6 GMW2): the run id, the last question number, first and last confidence, who stopped it; no conversation JSON, the prompt is rebuilt from the Grill tables every time | — |
+| `GrillRound` | 6 | One per bot question comment: its 1..K questions, ~~the merged answer, confidence before/after, gaps,~~ comment IDs, post state. 2026-11-17 (spec 6): numbered questions with guesses, the earlier ones still open, its full text, the `ExecutionLog` id; answers and confidence live in the two tables below | — |
+| `GrillEvaluation` | 6 | One per model evaluation (2026-11-17, spec 6): what the bot did with it (`ASKED`, `CLEAR`, `LIMIT`, `WAITING`, `SUPERSEDED`), confidence, open questions, gaps, model, `ExecutionLog` id | — |
+| `GrillAnswer` | 6 | One per comment read as an answer (2026-11-17, spec 6): author, text as written, link, when read, 👀 added | — |
 | `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time | — |
 | `Workspace` | 8 | The single coding-job lease (holder task, expiry) | — |
 | `AgentPullRequest` | 9 | The bot's PR per run: branch, number, base; written before the PR is opened | — |
@@ -708,12 +726,13 @@ can be joined to it; the many calls of an agent loop are found by run and step.
   calls spec 4's loader. **Added 2026-11-11 (spec 2):** an `ISSUE_OPENED` processed after its issue's run started
   is stale (R1); spec 5 replaces spec 2's placeholder processor and adds its own ignore reasons; a task's
   waiting events are found through `WebhookEvent.externalRef` (spec 2), and the spec that first needs them adds
-  the query method to `EventsService`. **Added 2026-11-12 (spec 4):** at run start spec 5 calls
+  the query method to `EventsService` (2026-11-17: spec 6, `commentEventsSince`). **Added 2026-11-12 (spec 4):** at run start spec 5 calls
   `StepConfigService.checkRun` and the injection check of the issue description; it turns `LlmError` and
   `StepConfigError` into `FAILED(cause)`; its interview decides `/retry` for causes outside the issue (D7).
-- **6:** a comment that arrives while the final evaluation runs (merge it in before moving to the Spec?); partial
+- **6:** ~~a comment that arrives while the final evaluation runs (merge it in before moving to the Spec?); partial
   answers to a batch; the cancel comment strips markers, escapes code fences and truncates long answers with a
-  link.
+  link.~~ → resolved in `docs/specs/spec-github-agent-grill-me.md` (2026-11-17): a comment written while the bot
+  thinks is read before it acts (GM4); a partial answer gets 👀 and the bot waits (GM6); the answers block (GM10).
 - **7:** `/approve` syntax; a Spec/Plan longer than GitHub's 65,536-character comment limit; the approved comment
   deleted before `/approve`; the snapshot is taken when the approval is first processed, so a queued approval
   keeps that text. **Agreed 2026-11-11 (spec 2 interview):** while an issue waits for an approval, a comment that
@@ -815,7 +834,12 @@ account with `triage` access").
   go-signal), no duplicate comments.
 - [ ] (5, 9) `workflow: code-only` → only the go-signal; worktree and branches unchanged until `/approve`.
 - [ ] (6) In `grilling` with two answered rounds, remove the lane label → `status: draft` + exactly one cancel
-  comment with the Q&A block; re-add it → the new first question ignores the old answers.
+  comment with the Q&A block; re-add it → the new first question ignores the old answers. (2026-11-17: the block is
+  in spec 5's run-ended comment, spec 6 GM10.)
+- [ ] (6) Answer only one of the questions in a comment → 👀 on it and no new bot comment, or one round naming the
+  questions still open; never silence (spec 6 GM6).
+- [ ] (6) While the bot is asking, add `grill: skip` → one "Grill Me stopped" comment and the run moves on to the
+  Spec; `/approve` → one "nothing to approve yet" reply (spec 6 GM8).
 - [ ] (6) Kill the app right after a question is posted (before it's recorded), restart → the question appears
   exactly once.
 - [ ] (7) Comment `/approve` twice quickly on a `full-sdd` Spec → one Plan, status `ready-for-dev`, the Coder does
@@ -842,7 +866,8 @@ account with `triage` access").
 - [ ] (10) `code-only`: go-signal → `/approve` → PR → Quality Gate; no Grill, Spec or Plan comment ever.
 - [ ] (7) An issue already clear (confidence ≥ threshold before any question) → one comment with the score + the
   Spec.
-- [ ] (6) Round limit reached → `needs-human` + one summary comment (confidence + gaps).
+- [ ] (6) Round limit reached → `needs-human` + one summary comment (confidence + gaps; 2026-11-17, spec 6 GM9:
+  plus three numbered steps to continue, without the generic restart line).
 - [ ] (9) Lint or tests still red → local commit only, `needs-human` comment with the trimmed output and the
   branch name; no push, no PR.
 

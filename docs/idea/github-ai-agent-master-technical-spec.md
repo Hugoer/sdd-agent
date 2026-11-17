@@ -233,6 +233,16 @@ Every Anthropic call returns usage data in the response metadata:
 
 ## 9. Grill Me: Pause and Resume (decisions made 2026-11-04)
 
+> → moved to `docs/specs/spec-github-agent-grill-me.md` on 2026-11-17 (this section, and the parts of "Who can
+> answer and what resumes the session" and "Event intake, idempotency and concurrency" marked below). Changed
+> there: several questions per comment only when their answers don't depend on each other (GM3); every question
+> with the bot's guess, numbered Q1, Q2, … (GM1, GM5); a comment written while the bot thinks is read before it
+> acts (GM4); a comment with nothing new gets 👀 and the bot waits (GM6); `grill: skip` added while asking stops
+> the questions and `/approve` gets a reply (GM8; was "ignored, no comment"); the round-limit comment lists three
+> steps to continue (GM9); the cancel comment is spec 5's run-ended comment with the answers word for word (GM10);
+> four tables and no `StoredMessage` conversation column, the prompt is rebuilt from them every time (GMW2, GMW6);
+> the skip comment names nobody (GMW5).
+
 * **One question per round.** The LLM asks 1 question, the human answers, the LLM recalculates its confidence and asks again **only if needed**, until it reaches ≥95% or the 5-round limit. **Changed 2026-11-09 (overview D8):** a round asks 1..`GRILL_MAX_QUESTIONS_PER_ROUND` questions (default 3) chosen by the LLM; only questions whose answers don't affect each other go together.
 * **No in-memory dependency.** All state lives in PostgreSQL; nothing in process memory or in the issue thread. Every webhook rebuilds the state from the tables.
 * **Two levels of persistence (own tables via Prisma, not the LangGraph checkpointer):**
@@ -250,6 +260,8 @@ Every Anthropic call returns usage data in the response metadata:
   * `workflow:*` label added by a `triage` user → the bot removes it and posts **one** comment saying it must be added by someone with `write` permission.
 * **Resume:** an authorized `issue_comment.created` on an issue in `status: grilling`. The bot's own comments never trigger anything.
 * **Exception for PR events (section 10):** the bot opens the PR and pushes its commits, so `pull_request.opened` / `synchronize` on a bot PR are sent by the App itself. The App is not a repo collaborator, so the permission check would reject them. For `pull_request` events on a PR opened by the bot, the sender is authorized if it is **the App itself or a `write` user**. Every other event sent by the App (e.g. its own comments) is ignored.
+* → "Comment bursts" and "Edits/deletes" moved to `docs/specs/spec-github-agent-grill-me.md` on 2026-11-17 (GM4,
+  GMW1).
 * **Comment bursts:** rounds are processed one at a time per issue (never two webhooks on the same session simultaneously). Every authorized comment posted **before** the bot posts its next question is part of the same answer (if it arrives while the bot is processing, the bot detects it before posting and re-evaluates). No fixed wait window.
 * **Edits/deletes:** ignored (`issue_comment.edited` / `.deleted`). PostgreSQL is the source of truth: it stores the answer as it was processed. Corrections arrive as new comments.
 * **Restart:** a human removes and re-adds the `workflow:*` label → the active session is closed (kept for audit) and a new one is created from scratch. → moved to overview §3 on 2026-11-09: removing the lane label cancels the run, adding one starts a new run from scratch, and a cancel comment lists the discarded answers (D5, D6).
@@ -277,6 +289,9 @@ Every Anthropic call returns usage data in the response metadata:
 
 * **Intake:** GitHub only waits 10 s for a webhook response, and an LLM call can take longer. The controller validates HMAC ~~and permissions~~ (2026-11-09: the worker checks permissions, overview D4), stores the event in a PostgreSQL events table with `X-GitHub-Delivery` as a unique key (duplicate deliveries are discarded) and replies `202` immediately.
 * **Processing:** a worker inside the same NestJS app processes the stored events. The controller only calls `enqueue(event)`; the round logic doesn't know where the event came from (see BullMQ in Future).
+* → "Two transactions per round", "Recovery", "The marker is permanent" and the last-but-one sentence of "One
+  round at a time per issue" (folding in newer comments) moved to `docs/specs/spec-github-agent-grill-me.md`
+  ("Exactly once and recovery", GM4) on 2026-11-17; the marker is now `<!-- sdd-agent:grill-round:<roundId> -->`.
 * **Two transactions per round** (GitHub can't take part in a DB transaction):
   1. **Tx 1:** store `GrillRound` (question, status `PENDING_POST`) + update `GrillSession`.
   2. Post the question on GitHub with a hidden marker `<!-- grill-round:<roundId> -->`.
@@ -415,7 +430,7 @@ Every Anthropic call returns usage data in the response metadata:
 * **Rewind:** go back to Grill Me round N and continue from there (e.g. a `/rewind 2` command). Requires: command syntax, permission check, a rule for the 5-round limit (are rounds given back?) and marking discarded rounds instead of deleting them (audit). The design already allows it: each `GrillRound` stores its question and answer, so the conversation up to any round can be rebuilt without changing the schema. **2026-11-16 (spec 5 interview):** a variant across runs: start a new run seeded with rounds 1..N of a cancelled run (e.g. keep 4 of 5 answered rounds after a restart). Its data is kept too: a cancelled run's `GrillSession` and rounds stay, tied to their run id (spec 5). Until then, overview D6's cancel comment lists the answered rounds for a manual carry-over.
 * **Checklist-based confidence (rubric):** replace the LLM's own score with a fixed list of criteria (e.g. who, why, success criteria, constraints, scope) that the LLM marks as covered/missing with evidence; the code calculates the confidence. Reason: the LLM's own score is poorly calibrated and inconsistent between runs; a checklist is explainable and auditable.
 * **Redis/BullMQ queue:** re-evaluate if traffic grows. In the MVP, events are stored in a PostgreSQL table and processed by a worker inside the NestJS app. Migration is cheap if the controller only calls `enqueue(event)` and the round logic doesn't know where the event came from; the table can be kept as the record of what was received.
-* **Force continue:** let a maintainer move to the next step even if confidence is <95 after 5 rounds, or stop Grill Me partway (e.g. `grill: skip` added while grilling).
+* **Force continue:** let a maintainer move to the next step even if confidence is <95 after 5 rounds, or stop Grill Me partway (e.g. `grill: skip` added while grilling). **2026-11-17 (spec 6 GM8):** stopping partway with `grill: skip` is now in the MVP; moving on after the round limit stays here.
 * **Scalable execution:** replace the local MVP (developer's machine + ngrok, one reused bot worktree) with sandboxed containers or a hosted runner, a clone per job and parallel jobs. Needed if the company adopts the workflow. Intermediate step: **one worktree per job** (always starts clean, allows parallel jobs; costs a dependency install per job, accepted).
 * **Quality Gate suggestions → sub-issues:** create sub-issues/sub-tasks with "blocked by" links (GitHub sub-issues + issue dependencies, Jira sub-tasks + "is blocked by", Azure DevOps child work items + predecessor links). Merge order is enforced by the code host, not the tracker: stacked PRs (sub-issue PR targets the parent PR's branch) or a custom required check. Needs `IssueProvider` methods like `createSubTask` / `linkBlockedBy`.
 * **Automatic fix round:** apply Quality Gate suggestions on the PR. The fixing session must not be the Quality Gate session that suggested them, and the result is re-evaluated by a new Quality Gate session.
