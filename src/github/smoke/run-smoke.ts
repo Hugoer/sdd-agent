@@ -149,6 +149,14 @@ function issueChecks(
       },
     ],
     [
+      // Spec 6 GM6: the bot's 👀 on the comment it just posted.
+      'acknowledgeComment',
+      async () => {
+        await issues.acknowledgeComment(task, comment.id);
+        return `👀 on comment ${comment.id}`;
+      },
+    ],
+    [
       'findCommentByMarker (unused marker)',
       async () => {
         const unused = `<!-- sdd-agent:smoke:unused-${runId} -->`;

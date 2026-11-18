@@ -79,6 +79,7 @@ const commentPayload = z.object({
     id,
     body: z.string(),
     created_at: z.iso.datetime({ offset: true }),
+    html_url: z.url().optional(), // spec 6: spec 2's signed test requests send none
   }),
 });
 
@@ -245,6 +246,7 @@ function classifyComment(
     id: String(raw.id),
     body: raw.body,
     createdAt: new Date(raw.created_at),
+    ...(raw.html_url && { url: raw.html_url }),
   };
   if (isApproveCommand(raw.body))
     return candidate(

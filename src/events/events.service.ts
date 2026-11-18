@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { Prisma } from '../generated/prisma/client.js';
+import type { Prisma, WebhookEvent } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { externalRefOf } from './external-ref.js';
 
@@ -75,6 +75,24 @@ export class EventsService {
     this.logger.log(
       `event=${eventId} ${count === 1 ? 'requeued for /retry' : 'not requeued (still pending or processing)'}`,
     );
+  }
+
+  /**
+   * Spec 6 (GMW1, GM12): an issue's `issue_comment` events received at or after `since`, in any state, oldest
+   * first. The comments are read from what GitHub sent when they were created, never from GitHub now.
+   */
+  commentEventsSince(
+    externalRef: string,
+    since: Date,
+  ): Promise<WebhookEvent[]> {
+    return this.prisma.webhookEvent.findMany({
+      where: {
+        externalRef,
+        eventName: 'issue_comment',
+        receivedAt: { gte: since },
+      },
+      orderBy: [{ receivedAt: 'asc' }, { id: 'asc' }],
+    });
   }
 
   /** One update that only matches a FAILED row, so two redeliveries at once queue it once. */

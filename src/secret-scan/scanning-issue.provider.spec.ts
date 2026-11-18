@@ -100,6 +100,7 @@ describe('ScanningIssueProvider', () => {
     removeLabel: [TASK, 'model: max-code'],
     getAccessLevel: [TASK, 'octocat'],
     isSelf: ['octocat'],
+    acknowledgeComment: [TASK, '91'],
     readControls: [task],
     ensureLabels: [],
   };

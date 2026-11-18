@@ -2,7 +2,9 @@
 
 > **Created:** 2026-11-17 · **Status:** approved 2026-11-17 (interview 2026-11-17: GM1–GM12 confirmed by
 > the developer; GMW1–GMW10 decided while writing, to review; GM13 from the draft's open question and GM14–GM17
-> from an independent review of the draft, both confirmed the same day)
+> from an independent review of the draft, both confirmed the same day) · plan:
+> `docs/plans/spec-github-agent-grill-me.md`, approved 2026-11-17; its decisions P1–P3 and P5–P7 are written into
+> this spec, each marked "plan Pn"
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -349,10 +351,12 @@ Every op first finishes what a crash left, then does its own work (GM14):
 1. **Finish.** A round `PENDING_POST` → find its marker, else post its stored text; Tx2. Answers read by a
    `WAITING` evaluation without their 👀 → add the reactions (adding one twice changes nothing).
 2. **Own work.**
-   - The session already `CLEAR` → post the "no questions needed" comment if no round was posted and it is missing
-     (marker); return `CLEAR` (also what `/retry` hits after the Spec step failed: Grill Me is not asked again).
-   - The session already `LIMIT` → return `LIMIT` with the same body, rebuilt from the stored evaluation.
-   - The session `STOPPED`, `SKIPPED` or `CANCELLED` → `start` and `round` return nothing.
+   - Grill Me already ended (2026-11-17, plan P1: for every op, so a `/retry` after the Spec step failed reaches the
+     Spec again and Grill Me is never asked again): the session `CLEAR`, `SKIPPED` or `STOPPED` → post its closing
+     comment if it is missing (marker): "no questions needed" when `CLEAR` with no round posted, the skipped
+     comment, or the stopped comment rebuilt with the stored `stoppedBy`; then return `CLEAR`, with no model call.
+     The session `LIMIT` → return `LIMIT` with the same body, rebuilt from the stored evaluation.
+   - The session `CANCELLED` → nothing (its run has ended, so no step is called for it).
    - `start` with no session → create it and evaluate; with a session and no round posted → evaluate, reusing it;
      with a round posted (a retried run-start event) → act as `round`.
    - `round` → read the unread answers; evaluate them if there are any.
@@ -360,7 +364,8 @@ Every op first finishes what a crash left, then does its own work (GM14):
 3. **Return.** `start` and `round`: the outcome of their evaluation when it is `CLEAR`, `LIMIT` or `ASKED`;
    otherwise (a wait, or nothing unread) `ASKED` when step 1 posted a round or the op is a `start` with a round
    posted, so the status shows `grilling` without a model call; else nothing. `skip` and `approve` return nothing
-   (after `skip` the router runs the Spec step).
+   (after `skip` the router runs the Spec step). An ended session returns `CLEAR` or `LIMIT` to every op (step 2,
+   plan P1).
 
 Every other comment the bot posts is "find the marker, else post" (spec 5's `postOnce` rule) with the markers in
 "Comments and reactions".
@@ -377,7 +382,8 @@ Every other comment the bot posts is "find the marker, else post" (spec 5's `pos
   whenever the bot would ask, takes the skip path instead: `grill` `skip` then `spec` `generate` (→
   `spec-review`). That is: a run start (also a retried one) when the run started with the label or it is on now;
   a comment while `grilling` when it is on; its own `SKIP_ADDED` event while `grilling` only when it is still on
-  (otherwise ignored, `no-transition`). The skip op reads the unread answers into the session without a model call
+  (otherwise, 2026-11-17, plan P1: read like a comment, `grill` `round`, which usually finds nothing new: no reply,
+  the event `DONE`). The skip op reads the unread answers into the session without a model call
   (so the Spec sees them) and closes the session: `STOPPED` with the stopped comment (and the sender's login when
   the label's own event did it), or `SKIPPED` with the skipped comment when no question was posted yet. In a later
   state the label changes nothing, as before (rows 20, 27).
@@ -399,12 +405,14 @@ restart …").
 Spec 5 calls the cancel hook when it posts the run-ended comment, and may call it twice for one cancel (plan Q1).
 The hook:
 
-1. reads the answers not read yet that were received before the event that ended the run (`Run.endEventId`), with
-   no model call (GM16); a second call finds them read and adds nothing;
+1. reads the answers not read yet that were received before the event that ended the run (`Run.endEventId`; the
+   router passes its `received_at` and how the run ended, plan P6), with no model call (GM16); a second call finds
+   them read and adds nothing;
 2. closes an `ASKING` session as `CANCELLED` (one update; a second call finds it closed and changes nothing; a
    session already `CLEAR`, `LIMIT`, `STOPPED` or `SKIPPED` keeps its status);
 3. returns the block built from the session's rounds and answers, with the header for a cancel or for a
-   replacement (`Run.endReason`, GM17), or `null` when there is no answer. The same rows give the same block, so a
+   replacement (GM17; the router's `cancelled`, or `replaced` with the new run, plan P6), or `null` when there is
+   no answer. The same rows give the same block, so a
    second call returns the same text.
 
 The block lists the rounds that have at least one answer, in order; answers read before the first question (a
@@ -516,6 +524,11 @@ read: to change an answer, write a new comment. Anyone with Triage access or mor
 Round 1 says "A few questions before the bot writes the Spec:" and has no "Still open" line; the line is left out
 whenever nothing earlier is open. The example numbers are the round's own.
 
+Singular forms only where the number is 1 (2026-11-17, plan P3; every other word as approved): a round with one
+question says "One question before the bot writes the Spec:" (round 1) or "One more question before the bot
+writes the Spec." (later rounds), and its footer starts "Answer with `Q4: …`. `Q4: yes` accepts the guess."; with
+`GRILL_MAX_ROUNDS=1` the round-limit comment starts "⚠️ **Grill Me used its only round and is 80% sure** …".
+
 **Already clear** (marker `grill-clear:<sessionId>`; only when no question was asked in the run):
 
 ```markdown
@@ -618,9 +631,12 @@ export interface TaskComment { id: string; body: string; createdAt: Date; url?: 
 
 `src/workflow` (spec 5's seam, not a platform contract): `StepRun` gains `startEventReceivedAt: Date`; `decide()`:
 grilling + `APPROVE` → `steps([grill approve])`; the skip path `steps([grill skip, spec generate], 'spec-review')`
-for grilling + `SKIP_ADDED` with `grillSkipOnIssue` (without it: ignored), for grilling + `COMMENT` with
-`grillSkipOnIssue`, and for `RUN_START` when `run.grillSkip` or `grillSkipOnIssue` (GM15); `StepOutcome` unchanged
-(`ASKED`, `CLEAR`, `LIMIT` with its body; a waiting evaluation returns nothing).
+for grilling + `SKIP_ADDED` with `grillSkipOnIssue` (without it: `steps([grill round])`, 2026-11-17, plan P1), for
+grilling + `COMMENT` with `grillSkipOnIssue`, and for `RUN_START` when `run.grillSkip` or `grillSkipOnIssue`
+(GM15); `StepOutcome` unchanged (`ASKED`, `CLEAR`, `LIMIT` with its body; a waiting evaluation returns nothing).
+The cancel hook's context gains how the run ended (`cancelled`, or `replaced` with the new run's number and lane)
+and the ending event's `receivedAt`, also when a later event posts the pending run-ended comment
+(`RunService.endedBy` returns the time with the login) (2026-11-17, plan P6).
 
 `src/grill` exports `GrillService.transcript(runId)` for spec 7: the run's rounds (questions with guesses) and
 answers (author, text as written, comment id, url), in order.
@@ -651,13 +667,14 @@ Mapped to snake_case. Migration: `prisma/migrations/<ts>_grill`. Statuses are te
 | `id` | uuid, PK | |
 | `sessionId` | uuid, FK `grill_sessions` | |
 | `logId` | uuid | `ExecutionLog` id of the call's last attempt (L16; no FK, like `execution_logs.run_id`) |
-| `model`, `modelLevel` | text | as in `LlmResult.model` (the stop body and the clear comment are rebuilt from them) |
+| `model`, `modelLevel` | text | as in `LlmResult.model` (usage data; the comments' model line is in `notes`) |
 | `afterRound` | int | question comments posted when it ran (0 = before the first) |
 | `result` | text | `ASKED`, `CLEAR`, `LIMIT`, `WAITING`, `SUPERSEDED` |
 | `confidence` | int | |
 | `questionsProposed` | int | how many the model returned, before the cap K |
 | `open` | int[] | the model's open numbers |
 | `gaps` | text[] | |
+| `notes` | text[] | the lines under the comment's rule (`LlmResult.notes`: the model line, one line per cut text), so the clear comment and the limit body are rebuilt from the row, the same on a retry (2026-11-17, plan P2) |
 | `createdAt` | timestamptz, default now | |
 
 **`GrillRound`** (`grill_rounds`): one per question comment.
@@ -740,7 +757,8 @@ on a real issue.
 
 ```text
 src/grill/
-  grill.module.ts               imports LlmModule, IntakeModule, WorkflowModule; registers the handler in onModuleInit
+  grill.module.ts               imports LlmModule, IntakeModule, WorkflowModule, GitHubModule (the issue port) and
+                                EventsModule (commentEventsSince) (plan P7); registers the handler in onModuleInit
   grill.handler.ts              StepHandler: start, round, skip, approve, onCancel; the recovery on entry
   grill-evaluation.service.ts   one evaluation: read, prepare, call, look again, act (the table above)
   grill-frame.ts                the frame text
@@ -796,8 +814,8 @@ src/github/…                    + acknowledgeComment (adapter, fake, scanning 
 ## Setup & configuration → `docs/guides/setup-github-agent-local.md`
 
 When built: the three variables in `.env.example` and in section 5 (GM2); section 3 replaces the `grill`
-placeholder with the real skill and adds `THIRD-PARTY-NOTICES.md` (committed by the developer to the sandbox's
-`main`); a new section "When the bot asks questions" (how to answer, Q-numbers, 👀, `grill: skip`, the round limit
+placeholder line with a link to the real skill and to `THIRD-PARTY-NOTICES.md` in the reference sandbox (committed
+by the developer to its `main`; no copy in this repo, 2026-11-17, plan P5); a new section "When the bot asks questions" (how to answer, Q-numbers, 👀, `grill: skip`, the round limit
 and how to continue); "Reference: labels" (`grill: skip` also stops the questions); "Usage data" (the Grill tables
 with one example query); "Reference: what the bot never posts" (no `@` mention in Grill Me comments).
 
@@ -854,7 +872,7 @@ with one example query); "Reference: what the bot never posts" (no `@` mention i
 - **`grill: skip` while stopped at the limit** (`needs-human`): ignored as before (row 27); the stop comment already
   says how to continue. While stopped on a failure: ignored then, and honoured by the re-run after `/retry` (GM15).
 - **`grill: skip` added and removed right away:** both events are processed later; the add finds the label gone and
-  is ignored; the questions go on (GM15).
+  is read like a comment (nothing new, no reply, the event `DONE`; plan P1); the questions go on (GM15).
 - **`grill: skip` and `workflow: full-sdd` in one edit:** run start reads both (spec 5): skipped comment, no model
   call.
 - **A crash at any point:** "Exactly once and recovery"; at most one extra model call (before Tx1), never a second
@@ -891,8 +909,8 @@ so every Grill Me that ends clear, skipped or stopped then stops at `spec` (`ste
 it decides.
 
 **Startup**
-- [ ] `GRILL_MAX_QUESTIONS_PER_ROUND=11` → the app refuses to start, naming it; `10` → it starts.
-- [ ] `GRILL_MAX_ROUNDS=0` → refuses to start, naming it.
+- [x] `GRILL_MAX_QUESTIONS_PER_ROUND=11` → the app refuses to start, naming it; `10` → it starts.
+- [x] `GRILL_MAX_ROUNDS=0` → refuses to start, naming it.
 
 **Questions and answers** (issue `#A`, vague: "Let people split bills")
 - [ ] Add `workflow: full-sdd` → `status: grilling`; exactly ONE bot comment "**Grill Me, round 1 of 5** ·
@@ -928,8 +946,8 @@ it decides.
   `max`; if it posts a question comment, its model line says `gemini-4-carbon` (max).
 - [ ] Add `grill: skip` → ONE comment "Grill Me stopped by `<you>` (`grill: skip` added): writing the Spec from the
   issue and the answers so far."; then the stop at `spec`; session `STOPPED`, rounds kept; no model call for it.
-- [ ] On another asking issue, add `grill: skip` and remove it within a second → no stopped comment; the event
-  `IGNORED` `no-transition`; your next answer gets a normal reply (GM15).
+- [ ] On another asking issue, add `grill: skip` and remove it within a second → no stopped comment; the add's
+  event `DONE` with no reply (read like a comment, plan P1); your next answer gets a normal reply (GM15).
 
 **Clear and skipped**
 - [ ] Issue `#B` with a complete description (who, what, done, out of scope) + `workflow: spec-code` → ONE comment
@@ -940,8 +958,9 @@ it decides.
 **Round limit** (`GRILL_MAX_ROUNDS=1`, issue `#D` vague; answer so that new topics open, e.g. "Q1: it depends,
 it must also sync with the bank and handle three currencies", and again if the bot only reacts with 👀: the limit
 needs the bot to want a new question)
-- [ ] → `status: needs-human`; ONE stop comment as in "Round limit" with the three numbered steps and NO "To start
-  again from scratch" line; the model line last; `db:runs`: stop `grill: grill-limit`, not retryable.
+- [ ] → `status: needs-human`; ONE stop comment as in "Round limit", starting "⚠️ **Grill Me used its only round
+  and is N% sure**" (plan P3), with the three numbered steps and NO "To start again from scratch" line; the model
+  line last; `db:runs`: stop `grill: grill-limit`, not retryable.
 - [ ] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …".
 - [ ] Remove `workflow: full-sdd` → ONE run-ended comment ending with the answers block (code block; Q1 … with
   *Guess* lines; `<you>: …` with your answers as written); nobody notified by it.
@@ -994,11 +1013,14 @@ twice; invalid answers three times; a Participant-only sender (a personal repo h
 ## Agreed for later specs
 
 - **Spec 7:** builds the Spec's prompt from `GrillService.transcript(runId)` (answers as untrusted blocks, keys
-  `comment-<id>`), never from GitHub; a `SKIPPED` session has no answers; a `STOPPED` one has the answers read at the
-  stop. `/approve` while asking is answered here; spec 7 decides the reply for an `/approve` that no document waits
+  `comment-<id>`), never from GitHub; a `SKIPPED` session holds the answers its skip read (usually none: a plain run
+  start has nothing unread yet; a retried run start reads the comments written meanwhile; 2026-11-17, plan review);
+  a `STOPPED` one has the answers read at the stop. `/approve` while asking is answered here; spec 7 decides the reply for an `/approve` that no document waits
   for in its own states and in `needs-human` (RL17). Spec 7's `/approve` validity check (R2, asked by the router
   before `decide()`, spec 5 plan Checkpoint 2) must not end an `/approve` during `grilling`: today the router reads
   it only for the rows that approve a document (17–20), and it stays that way, or GM8's reply is lost.
+- **Spec 11 (`skill-discovery`, 2026-11-18, overview D27):** switches Grill Me over to the target repo's skill and
+  `AGENTS.md` lists and their loading tool. Spec 6 is built as approved, without them.
 - **Dashboard (no spec yet):** reads the four Grill tables ("Usage data") and `execution_logs`.
 
 ## Open questions

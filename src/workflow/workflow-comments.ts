@@ -31,7 +31,10 @@ export type StopText =
   /** Row 28: a failure; `/retry` may continue the run. */
   | { kind: 'failure'; step: string; message: string; cause: string }
   /** Rows 14, 22, 25, 26: the step's own body (plan P4); only a restart continues. */
-  | { kind: 'work-result'; body: string };
+  | { kind: 'work-result'; cause: string; body: string };
+
+/** Spec 6 GM9: the round limit's body brings its own three steps, so its stop has no generic restart line. */
+const OWN_STEPS_CAUSES = new Set(['grill-limit']);
 
 /** Spec "Stop comment": the marker counts the run's stops, so a stop after `/retry` gets its own comment. */
 export function stopComment(
@@ -44,8 +47,9 @@ export function stopComment(
     return [
       needsHumanMarker(run.id, stops),
       stop.body,
-      '',
-      `- To start again from scratch: ${restart}`,
+      ...(OWN_STEPS_CAUSES.has(stop.cause)
+        ? []
+        : ['', `- To start again from scratch: ${restart}`]),
     ].join('\n');
   }
   const where =

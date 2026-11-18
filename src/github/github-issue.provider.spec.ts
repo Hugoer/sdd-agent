@@ -583,6 +583,55 @@ describe('GitHubIssueProvider.removeLabel', () => {
   });
 });
 
+describe('GitHubIssueProvider.acknowledgeComment', () => {
+  const REACTIONS_91 = `/repos/${TEST_REPO}/issues/comments/91/reactions`;
+
+  it.each([201, 200])(
+    'adds an eyes reaction to the comment (%i)',
+    async (status) => {
+      const fake = new FakeGitHubFetch();
+      const issues = await providerWith(fake);
+      fake.on('POST', REACTIONS_91, { status, body: { content: 'eyes' } });
+
+      await expect(
+        issues.acknowledgeComment(task5, '91'),
+      ).resolves.toBeUndefined();
+
+      expect(fake.to(REACTIONS_91, 'POST').map((r) => r.body)).toEqual([
+        { content: 'eyes' },
+      ]);
+    },
+  );
+
+  it('succeeds when the comment no longer exists (404)', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', REACTIONS_91, {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+
+    await expect(
+      issues.acknowledgeComment(task5, '91'),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [500, 'transient'],
+    [403, 'permanent'],
+  ])('throws on a %i (%s)', async (status, kind) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', REACTIONS_91, { status, body: { message: 'boom' } });
+
+    await expect(issues.acknowledgeComment(task5, '91')).rejects.toMatchObject({
+      kind,
+      detail: { status },
+    });
+    expect(fake.to(REACTIONS_91, 'POST')).toHaveLength(1);
+  });
+});
+
 describe('GitHubIssueProvider.getAccessLevel', () => {
   const PERMISSION = `/repos/${TEST_REPO}/collaborators/octocat/permission`;
   /** GitHub's answer shape: `permission` is the legacy level, `user.permissions` the role flags. */
@@ -754,6 +803,10 @@ describe('GitHubIssueProvider on another repo', () => {
     ['setStatusLabel', (issues) => issues.setStatusLabel(elsewhere, 'draft')],
     ['removeLabel', (issues) => issues.removeLabel(elsewhere, 'grill: skip')],
     ['getAccessLevel', (issues) => issues.getAccessLevel(elsewhere, 'octocat')],
+    [
+      'acknowledgeComment',
+      (issues) => issues.acknowledgeComment(elsewhere, '91'),
+    ],
   ])('%s throws a permanent error and sends nothing', async (_name, call) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);

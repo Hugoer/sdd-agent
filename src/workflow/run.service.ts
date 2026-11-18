@@ -21,6 +21,12 @@ export interface RunStart {
   startEventId: string;
 }
 
+/** Who ended a run, and when the event that did it was received (PostgreSQL's clock). */
+export interface RunEndedBy {
+  login: string;
+  receivedAt: Date;
+}
+
 /** A stop's record (RLW1): the latest stop stays on the run after `/retry` and after it ends. */
 export interface RunStop {
   /** Plan P3: the handler's name, or `run-start`. */
@@ -74,16 +80,19 @@ export class RunService {
     });
   }
 
-  /** Plan Q2: the login of the event that ended the run, also when another event posts its comment later. */
-  async endedBy(run: Run): Promise<string> {
+  /**
+   * Plan Q2: the login of the event that ended the run, also when another event posts its comment later; with
+   * that event's `received_at` (spec 6 plan P6: the cancel hook reads the answers received before it).
+   */
+  async endedBy(run: Run): Promise<RunEndedBy> {
     if (!run.endEventId) throw new Error(`run ${run.id} has not ended`);
     const event = await this.prisma.webhookEvent.findUniqueOrThrow({
       where: { id: run.endEventId },
-      select: { payload: true },
+      select: { payload: true, receivedAt: true },
     });
     const login = senderLoginOf(event);
     if (!login) throw new Error(`event ${run.endEventId} has no sender login`);
-    return login;
+    return { login, receivedAt: event.receivedAt };
   }
 
   /**

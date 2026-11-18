@@ -108,9 +108,9 @@ The lines in the column "Spec lines it changes" for every confirmed decision, ea
 number (as spec 5's plan did), plus the review's fixes that need no choice.
 
 **Acceptance criteria:**
-- [ ] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named
-- [ ] Every matrix row a decision changes can be checked as written
-- [ ] Review fix: the spec's "Agreed for later specs" says a `SKIPPED` session holds the answers its skip read
+- [x] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named
+- [x] Every matrix row a decision changes can be checked as written
+- [x] Review fix: the spec's "Agreed for later specs" says a `SKIPPED` session holds the answers its skip read
   (usually none), not "no answers"
 
 **Verification:**
@@ -127,12 +127,12 @@ number (as spec 5's plan did), plus the review's fixes that need no choice.
 with their defaults and one comment line each (GM2); `test/test-env.ts` sets the defaults.
 
 **Acceptance criteria:**
-- [ ] `GRILL_MAX_QUESTIONS_PER_ROUND=11`, `GRILL_MAX_ROUNDS=0`, `GRILL_CONFIDENCE_THRESHOLD=101`, `abc` and `2.5`
+- [x] `GRILL_MAX_QUESTIONS_PER_ROUND=11`, `GRILL_MAX_ROUNDS=0`, `GRILL_CONFIDENCE_THRESHOLD=101`, `abc` and `2.5`
   → the startup error names the variable; `10` → accepted; unset → 5, 3, 95 (unit)
-- [ ] `.env.example` lists the three with their defaults and one comment line each
+- [x] `.env.example` lists the three with their defaults and one comment line each
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/config/env.schema.ts` (+ `.spec.ts`), `.env.example`, `test/test-env.ts`
@@ -147,15 +147,15 @@ fake records the call in `calls` and answers `acknowledged(task)` (the comment i
 error. The scanning wrapper passes it through. `npm run github:smoke` calls it once on the comment it just posted.
 
 **Acceptance criteria:**
-- [ ] `src/contracts/issue-provider.ts` matches overview §4's `IssueProvider` line by line
-- [ ] Adapter: `201` and `200` resolve, `404` resolves, `500` → transient, `403` → permanent `ProviderError`; the
+- [x] `src/contracts/issue-provider.ts` matches overview §4's `IssueProvider` line by line
+- [x] Adapter: `201` and `200` resolve, `404` resolves, `500` → transient, `403` → permanent `ProviderError`; the
   request names the comment id and `eyes` (unit, fake fetch)
-- [ ] Fake and wrapper: recorded, passed through, twice is fine (unit)
-- [ ] Smoke: one `PASS acknowledgeComment` line, run against the fake (unit)
+- [x] Fake and wrapper: recorded, passed through, twice is fine (unit)
+- [x] Smoke: one `PASS acknowledgeComment` line, run against the fake (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
-- [ ] At Checkpoint 1: the real smoke run puts a 👀 by the bot on its comment
+- [x] `npm run typecheck && npm run lint && npm test` pass
+- [x] At Checkpoint 1: the real smoke run puts a 👀 by the bot on its comment
 
 **Dependencies:** None
 **Files:** `src/contracts/issue-provider.ts`, `src/github/github-issue.provider.ts` (+ `.spec.ts`),
@@ -174,16 +174,16 @@ with spec 2's rules (`classifyGitHubEvent`), keeps the plain comments (`COMMENT`
 event with text.
 
 **Acceptance criteria:**
-- [ ] A comment payload with `html_url` → `comment.url` set; without → undefined, still `COMMENT`. Spec 2's classify
+- [x] A comment payload with `html_url` → `comment.url` set; without → undefined, still `COMMENT`. Spec 2's classify
   test for a comment expects `url` now (its fixture sends `html_url`); the other classify tests pass untouched (unit)
-- [ ] `commentEventsSince`: other issues, other event names and events before `since` left out; no status filter
+- [x] `commentEventsSince`: other issues, other event names and events before `since` left out; no status filter
   (`PENDING`, `PROCESSING`, `IGNORED`, `FAILED` and `DONE` all returned); oldest first (integration, stored rows)
-- [ ] `answerComments` drops `/approve`, `/retry`, the bot's own, edits, deletions, PR comments, another issue's
+- [x] `answerComments` drops `/approve`, `/retry`, the bot's own, edits, deletions, PR comments, another issue's
   comment and an author with no access; one lookup per author; the fake's `calls` show no `postComment` and no
   `removeLabel` (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/workflow-input.ts`, `src/intake/github-payload.ts` (+ `.spec.ts`),
@@ -196,12 +196,12 @@ event with text.
 warning line: step, file path, kinds, never the text. The skill still loads (overview §4 "Trust").
 
 **Acceptance criteria:**
-- [ ] A file with "ignore all previous instructions" → one warning line naming the step, the path and
+- [x] A file with "ignore all previous instructions" → one warning line naming the step, the path and
   `override-instructions`, without the text; the skill is returned whole (unit, `Logger` spy)
-- [ ] No match → no warning line
+- [x] No match → no warning line
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/llm/skill-loader.ts` (+ `.spec.ts`)
@@ -217,14 +217,14 @@ round` as before. `RUN_START`: the skip path when `run.grillSkip` or `grillSkipO
 keep it.
 
 **Acceptance criteria:**
-- [ ] One named test per new case: `grilling` + `APPROVE`; + `SKIP_ADDED` with and without the label; + `COMMENT`
+- [x] One named test per new case: `grilling` + `APPROVE`; + `SKIP_ADDED` with and without the label; + `COMMENT`
   with the label; `RUN_START` with the stored skip, with the label only, with neither; `code-only` unchanged (unit)
-- [ ] Every other row's test passes unchanged (rows 17–20 and 27 still ignore `SKIP_ADDED`)
-- [ ] The `grill-limit` stop comment = marker + body; a `coder-red` stop still ends with the restart line (unit);
+- [x] Every other row's test passes unchanged (rows 17–20 and 27 still ignore `SKIP_ADDED`)
+- [x] The `grill-limit` stop comment = marker + body; a `coder-red` stop still ends with the restart line (unit);
   spec 5's scripted-`LIMIT` test expects the marker and the body only (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/workflow/decide.ts` (+ `.spec.ts`), `src/workflow/workflow-comments.ts` (+ `.spec.ts`),
@@ -239,14 +239,14 @@ the run's end (`cancelled`, or `replaced` with the new run's number and lane) an
 `completeEndComment` reads both through `RunService.endedBy`. The scripted step handler records them.
 
 **Acceptance criteria:**
-- [ ] A scripted handler sees `startEventReceivedAt` equal to the run's row (integration)
-- [ ] A cancel → the hook gets `cancelled` and the label event's `received_at`; a restart → `replaced` with run N+1;
+- [x] A scripted handler sees `startEventReceivedAt` equal to the run's row (integration)
+- [x] A cancel → the hook gets `cancelled` and the label event's `received_at`; a restart → `replaced` with run N+1;
   the same when a later event posts the pending run-ended comment (integration, `failNextOn('postComment')`)
-- [ ] A module outside `src/workflow` can inject `SessionLeaseService` (unit)
-- [ ] Spec 5's suites pass unchanged apart from the hook's new argument
+- [x] A module outside `src/workflow` can inject `SessionLeaseService` (unit: `WorkflowModule` exports it)
+- [x] Spec 5's suites pass unchanged apart from the hook's new argument
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/workflow/step-handler.registry.ts`, `src/workflow/router.service.ts`, `src/workflow/run.service.ts`,
@@ -259,10 +259,11 @@ the run's end (`cancelled`, or `replaced` with the new run's number and lane) an
 a 👀 reaction by the bot. Nothing else changes: Grill Me isn't registered yet, so a run still stops at `grill` with
 `step-not-built`.
 **Matrix rows:** "Startup", both.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] `GRILL_MAX_QUESTIONS_PER_ROUND=11 node dist/main.js` refuses to start, naming it; `10` starts;
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] `GRILL_MAX_QUESTIONS_PER_ROUND=11 node dist/main.js` refuses to start, naming it; `10` starts;
   `GRILL_MAX_ROUNDS=0` refuses (my instance, your `npm run dev` untouched)
-- [ ] `npm run github:smoke -- --issue <n>` → every line `PASS`, the 👀 on its comment (`gh api …/reactions`)
+- [x] `npm run github:smoke -- --issue <n>` → every line `PASS`, the 👀 on its comment (`gh api …/reactions`)
+  (2026-11-18: issue #11, comment 6964612534, `sdd-agent-app[bot] eyes`)
 - [ ] You review and commit
 
 ---
@@ -735,13 +736,13 @@ questions" (answering with Q-numbers, 👀, `grill: skip`, the round limit and h
 (`grill: skip` also stops the questions); "Usage data" (the four tables, one example query); "Reference: what the
 bot never posts" (no `@` in Grill Me comments); "When an issue is in `needs-human`" (its "until spec 6" line);
 section 8 "Smoke test" (a `full-sdd` label now calls the model and posts questions; a comment is an answer).
-`AGENTS.md`: State and the next spec (7, `spec-plan-approvals`). `README.md` where it names what changed. The spec's
-status line and any line the build had to change.
+`AGENTS.md`: State and the next spec (11, `skill-discovery`; 2026-11-18, overview D27). `README.md` where it names
+what changed. The spec's status line and any line the build had to change.
 
 **Acceptance criteria:**
 - [ ] Every command and variable in the guide exists (`package.json`, `envSchema`); the example query runs on the dev
   database
-- [ ] `AGENTS.md` says spec 6 is built and names spec 7 as next
+- [ ] `AGENTS.md` says spec 6 is built and names spec 11 (`skill-discovery`) as next
 
 **Verification:**
 - [ ] Manual: you read the changed guide sections once
@@ -777,7 +778,7 @@ fails
 
 - [ ] The spec's "Success criteria" are all checked
 - [ ] "Spec 6 check A" to "E" closed (P4)
-- [ ] You review and commit; spec 7 is next in the build order
+- [ ] You review and commit; spec 11 (`skill-discovery`) is next in the build order
 
 ---
 

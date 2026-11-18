@@ -203,6 +203,32 @@ describe('InMemoryIssueProvider', () => {
     ).rejects.toBe(down);
   });
 
+  it('acknowledgeComment: recorded, each comment once in order, an unknown id is fine, failNextOn applies', async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const task = issues.seedIssue({ number: 3 });
+    const other = issues.seedIssue({ number: 4 });
+
+    await issues.acknowledgeComment(task, '41');
+    await issues.acknowledgeComment(task, '40');
+    await issues.acknowledgeComment(task, '41');
+    await issues.acknowledgeComment(other, '99');
+    const down = new ProviderError('503', 'transient');
+    issues.failNextOn('acknowledgeComment', down);
+    await expect(issues.acknowledgeComment(task, '42')).rejects.toBe(down);
+
+    expect(issues.acknowledged(task)).toEqual(['41', '40']);
+    expect(issues.acknowledged(other)).toEqual(['99']);
+    expect(issues.calls.map((call) => call.method)).toEqual(
+      Array(5).fill('acknowledgeComment'),
+    );
+    await expect(
+      issues.acknowledgeComment(
+        { platform: 'GITHUB', id: '1', externalRef: 'someone/else#1' },
+        '1',
+      ),
+    ).rejects.toMatchObject({ kind: 'permanent' });
+  });
+
   it('isSelf: its bot login in any case, nobody else, and no call recorded', () => {
     const issues = new InMemoryIssueProvider(REPO, 'my-app[bot]');
     expect(issues.isSelf('my-app[bot]')).toBe(true);

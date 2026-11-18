@@ -188,6 +188,20 @@ export class GitHubIssueProvider implements IssueProvider {
     return bot !== '' && login.toLowerCase() === bot.toLowerCase();
   }
 
+  /** Spec 6 GM6: the 👀 reaction (`201` added, `200` already there); a deleted comment (`404`) is skipped. */
+  async acknowledgeComment(task: TaskRef, commentId: string): Promise<void> {
+    const { owner, repo } = this.github.target(task);
+    const reacted = await this.github.requestOrNull((octokit) =>
+      octokit.request(
+        'POST /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions',
+        { owner, repo, comment_id: Number(commentId), content: 'eyes' },
+      ),
+    );
+    this.logger.log(
+      `acknowledgeComment ${task.externalRef} → comment ${commentId}${reacted ? '' : ' (gone)'}`,
+    );
+  }
+
   readControls(task: UnifiedTask): {
     lanes: Lane[];
     grillSkip: boolean;

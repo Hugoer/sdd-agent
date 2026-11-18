@@ -31,7 +31,7 @@ import {
   type RouterMark,
 } from './router-error-mark.js';
 import { RunStartService } from './run-start.service.js';
-import { RunService } from './run.service.js';
+import { RunService, type RunEndedBy } from './run.service.js';
 import {
   SessionLeaseService,
   type HeldLease,
@@ -387,7 +387,7 @@ export class RouterService {
         job,
         run,
         { kind: 'cancelled' },
-        job.input.sender,
+        endedByJob(job),
       );
       return { status: 'DONE' };
     }
@@ -405,7 +405,7 @@ export class RouterService {
         kind: 'replaced',
         by: { number: next.number, lane: next.lane as Lane },
       },
-      job.input.sender,
+      endedByJob(job),
     );
     return this.startRun(job, routing, next);
   }
@@ -424,23 +424,26 @@ export class RouterService {
 
   /**
    * RL18: one comment per ended run, with the cancel hooks' blocks. Its marker is searched first, so a retried
-   * job never posts it twice; the hooks are asked only when it is posted (again, if a later event posts it).
+   * job never posts it twice; the hooks are asked only when it is posted (again, if a later event posts it), and
+   * told how and when the run ended (spec 6 plan P6).
    */
   private async postEndComment(
     job: Job,
     run: Run,
     end: RunEnd,
-    sender: string,
+    by: RunEndedBy,
   ): Promise<void> {
     const comment = await this.postOnce(job, runEndedMarker(run.id), async () =>
       runEndedComment(
         { id: run.id, ...laneRefOf(run) },
         end,
-        sender,
+        by.login,
         await this.registry.cancelBlocks({
           task: { id: job.lease.taskId, ref: job.ref },
           run: stepRunOf(run),
           lease: job.lease,
+          end,
+          endEventReceivedAt: by.receivedAt,
         }),
       ),
     );
@@ -588,7 +591,13 @@ function stepRunOf(run: Run): StepRun {
     number: run.number,
     lane: run.lane as Lane,
     grillSkip: run.grillSkip,
+    startEventReceivedAt: run.startEventReceivedAt,
   };
+}
+
+/** The event being processed ended the run (rows 6, 7): its sender and its `received_at`. */
+function endedByJob(job: Job): RunEndedBy {
+  return { login: job.input.sender, receivedAt: job.event.receivedAt };
 }
 
 function laneRefOf(run: Run): { number: number; lane: Lane } {

@@ -66,6 +66,10 @@ export class ScanningIssueProvider implements IssueProvider {
     return this.inner.isSelf(login);
   }
 
+  acknowledgeComment(task: TaskRef, commentId: string): Promise<void> {
+    return this.inner.acknowledgeComment(task, commentId);
+  }
+
   readControls(task: UnifiedTask): ReturnType<IssueProvider['readControls']> {
     return this.inner.readControls(task);
   }

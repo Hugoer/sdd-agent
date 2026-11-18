@@ -7,6 +7,7 @@ export interface TaskComment {
   id: string;
   body: string; // untrusted data
   createdAt: Date;
+  url?: string; // 2026-11-17, spec 6 (GMW9): spec 2's signed test requests have none
 }
 
 /** What intake hands to the router: one authorized event, platform-neutral. */

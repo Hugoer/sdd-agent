@@ -5,6 +5,7 @@ import type { Lane, TaskRef } from '../contracts/issue-provider.js';
 import type { WorkflowInput } from '../contracts/workflow-input.js';
 import type { HandlerName, HandlerOp, StepOutcome } from './decide.js';
 import type { HeldLease } from './session-lease.service.js';
+import type { RunEnd } from './workflow-comments.js';
 import { StepNotBuiltError } from './workflow-errors.js';
 
 /** The run a handler works for. Its `id` is the run id everywhere (`execution_logs.run_id`, specs 6–10). */
@@ -13,6 +14,8 @@ export interface StepRun {
   number: number;
   lane: Lane;
   grillSkip: boolean;
+  /** Spec 6: the start event's `received_at` (PostgreSQL's clock); comments from before it are never answers. */
+  startEventReceivedAt: Date;
 }
 
 export interface StepContext {
@@ -27,6 +30,14 @@ export interface StepContext {
   lease: HeldLease;
 }
 
+/** What a cancel hook is told (spec 6 plan P6), also when a later event posts the run-ended comment. */
+export interface CancelContext extends Omit<StepContext, 'op' | 'input'> {
+  /** `cancelled`, or `replaced` with the new run's number and lane (spec 6 GM17). */
+  end: RunEnd;
+  /** The `received_at` of the event that ended the run (spec 6 GM16: answers received before it count). */
+  endEventReceivedAt: Date;
+}
+
 export interface StepHandler {
   /**
    * Plan P4: an outcome of overview §3 goes back into decide(); a result of the work that stops the run carries
@@ -38,7 +49,7 @@ export interface StepHandler {
    * RL18: when its run is cancelled or replaced, a block of text for the run-ended comment, or null. Called again
    * when that comment is posted later (plan Q1), so it must return the same block and change nothing more.
    */
-  onCancel?(context: Omit<StepContext, 'op' | 'input'>): Promise<string | null>;
+  onCancel?(context: CancelContext): Promise<string | null>;
 }
 
 @Injectable()
@@ -63,9 +74,7 @@ export class StepHandlerRegistry {
   }
 
   /** RL18: the cancel hooks' blocks for the run-ended comment, in the order registered; null adds nothing. */
-  async cancelBlocks(
-    context: Omit<StepContext, 'op' | 'input'>,
-  ): Promise<string[]> {
+  async cancelBlocks(context: CancelContext): Promise<string[]> {
     const blocks: string[] = [];
     for (const handler of this.handlers.values()) {
       const block = handler.onCancel ? await handler.onCancel(context) : null;

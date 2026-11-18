@@ -9,6 +9,8 @@ import {
   TARGET_REPO,
   checkSuiteRequested,
   issueCommentCreated,
+  issueCommentDeleted,
+  issueCommentEdited,
   issuesClosed,
   issuesLabeled,
   issuesOpened,
@@ -727,5 +729,92 @@ describe('IntakeService: log line', () => {
     expect(lines(log)).toEqual([
       'delivery=d-4 event=issues action=opened sender=- ignored invalid-payload',
     ]);
+  });
+});
+
+describe('IntakeService.answerComments (spec 6, GMW1)', () => {
+  const issue7 = {
+    platform: 'GITHUB' as const,
+    id: String(6335695000 + 7),
+    externalRef: `${TARGET_REPO}#7`,
+  };
+  const comment = (
+    commentId: number,
+    options: Parameters<typeof issueCommentCreated>[0] = {},
+  ) =>
+    storedEvent(
+      issueCommentCreated({
+        commentId,
+        body: `answer ${commentId}`,
+        ...options,
+      }),
+    );
+
+  it('keeps the plain comments on this issue by a Participant or Approver, in order, and drops the rest', async () => {
+    const { issues, intake, log } = setup();
+    issues.setAccessLevel(HUMAN, 'participant');
+    issues.setAccessLevel('alice', 'approver');
+    const events = [
+      comment(1),
+      comment(2, { body: '/approve' }),
+      comment(3, { body: '/retry' }),
+      comment(4, { sender: BOT_LOGIN }),
+      storedEvent(issueCommentEdited({ commentId: 1, body: 'edited answer' })),
+      storedEvent(issueCommentDeleted({ commentId: 1 })),
+      comment(5, { onPullRequest: true }),
+      comment(6, { number: 8 }),
+      comment(7, { sender: 'octocat' }),
+      storedEvent(issuesLabeled({ label: 'grill: skip' })),
+      comment(8, { sender: 'alice' }),
+      comment(9),
+    ];
+
+    const kept = await intake.answerComments(issue7, events);
+
+    expect(kept.map((input) => [input.sender, input.comment.id])).toEqual([
+      [HUMAN, '1'],
+      ['alice', '8'],
+      [HUMAN, '9'],
+    ]);
+    expect(kept[0]).toMatchObject({
+      type: 'COMMENT',
+      task: issue7,
+      comment: {
+        body: 'answer 1',
+        url: `https://github.com/${TARGET_REPO}/issues/7#issuecomment-1`,
+      },
+    });
+    // No reply, no revert, no log line: one lookup per distinct author, nothing else.
+    expect(issues.calls).toEqual([
+      { method: 'getAccessLevel', args: [issue7, HUMAN] },
+      { method: 'getAccessLevel', args: [issue7, 'octocat'] },
+      { method: 'getAccessLevel', args: [issue7, 'alice'] },
+    ]);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('asks once per author whatever the case of the login, and nothing for no comment', async () => {
+    const { issues, intake } = setup();
+    issues.setAccessLevel(HUMAN, 'approver');
+
+    await expect(intake.answerComments(issue7, [])).resolves.toEqual([]);
+    const kept = await intake.answerComments(issue7, [
+      comment(1),
+      comment(2, { sender: HUMAN.toUpperCase() }),
+      comment(3),
+    ]);
+
+    expect(kept).toHaveLength(3);
+    expect(issues.calls.map((call) => call.method)).toEqual(['getAccessLevel']);
+  });
+
+  it('a failed lookup throws: an answer is never dropped as "no access" (IA9)', async () => {
+    const { issues, intake } = setup();
+    const down = new ProviderError('GitHub GET … → 503', 'transient');
+    issues.failNext(down);
+
+    await expect(intake.answerComments(issue7, [comment(1)])).rejects.toBe(
+      down,
+    );
   });
 });

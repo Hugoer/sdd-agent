@@ -483,7 +483,7 @@ describe('classifyGitHubEvent: issue_comment', () => {
     externalRef: `${TARGET_REPO}#${number}`,
   });
 
-  it('created on an issue, any text → COMMENT with comment {id, body, createdAt}; Participant', () => {
+  it('created on an issue, any text → COMMENT with comment {id, body, createdAt, url}; Participant', () => {
     const event = storedEvent(
       issueCommentCreated({
         body: 'looks fine',
@@ -500,6 +500,8 @@ describe('classifyGitHubEvent: issue_comment', () => {
           id: '6775442980',
           body: 'looks fine',
           createdAt: new Date('2026-11-11T10:00:00Z'),
+          // Spec 6 (GMW9): `comment.html_url`.
+          url: `https://github.com/${TARGET_REPO}/issues/7#issuecomment-6775442980`,
         },
         deliveryId: event.deliveryId,
         receivedAt: event.receivedAt,
@@ -608,6 +610,15 @@ describe('classifyGitHubEvent: issue_comment', () => {
     expect(
       classify(withField(issueCommentCreated(), 'action', 'pinned')),
     ).toEqual({ outcome: 'ignored', reason: 'unsupported-event' });
+  });
+
+  it('created without comment.html_url (a signed test request) → COMMENT with no url', () => {
+    const result = classify(
+      withField(issueCommentCreated(), 'comment.html_url', undefined),
+    );
+    expect(result).toMatchObject({ input: { type: 'COMMENT' } });
+    const input = (result as { input: { comment: object } }).input;
+    expect(input.comment).not.toHaveProperty('url');
   });
 
   it.each<[string, Delivery]>([

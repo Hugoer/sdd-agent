@@ -109,8 +109,41 @@ describe('cancel with a step handler (spec 5, T17)', () => {
     ]);
     expect(comments[0].body).not.toContain('@');
     expect(ended.endCommentId).toBe(comments[0].id);
-    // The cancel hook was asked for its block, for run 1.
+    // The cancel hook was asked for its block, for run 1, told how and when it ended (spec 6 plan P6).
     expect(grill.cancelCalls.map(({ run: r }) => r.number)).toEqual([1]);
+    expect(grill.cancelCalls[0]).toMatchObject({
+      end: { kind: 'cancelled' },
+      endEventReceivedAt: row.receivedAt,
+    });
+  });
+
+  it('spec 6: a handler gets the run with its start event received_at (the comments before it are never answers)', async () => {
+    await grilling(84);
+
+    const started = await run();
+    expect(grill.calls).toHaveLength(1);
+    expect(grill.calls[0].run).toEqual({
+      id: started.id,
+      number: 1,
+      lane: 'full-sdd',
+      grillSkip: false,
+      startEventReceivedAt: started.startEventReceivedAt,
+    });
+  });
+
+  it('spec 6 plan P6: a swap → the hook hears `replaced` by run 2 and the added label event received_at', async () => {
+    const issue = await grilling(85);
+    t.issues.setHumanLabels(issue, ['workflow: spec-code']);
+
+    const swap = await deliver(t, added(85, 'spec-code'));
+
+    expect(swap).toMatchObject({ status: 'DONE' });
+    expect(grill.cancelCalls).toHaveLength(1);
+    expect(grill.cancelCalls[0]).toMatchObject({
+      run: { number: 1, lane: 'full-sdd' },
+      end: { kind: 'replaced', by: { number: 2, lane: 'spec-code' } },
+      endEventReceivedAt: swap.receivedAt,
+    });
   });
 
   it("a cancel hook's block is appended to the same comment (RL18, spec 6's answered rounds)", async () => {
@@ -163,8 +196,13 @@ describe('cancel with a step handler (spec 5, T17)', () => {
       cancelledText(ended.id, 'full-sdd', HUMAN),
     ]);
     expect(ended.endCommentId).toBe(comments[0].id);
-    // The hook was asked again for the comment posted later.
+    // The hook was asked again for the comment posted later, with the same end and time (spec 6 plan P6).
     expect(grill.cancelCalls).toHaveLength(2);
+    for (const call of grill.cancelCalls)
+      expect(call).toMatchObject({
+        end: { kind: 'cancelled' },
+        endEventReceivedAt: cancel.receivedAt,
+      });
 
     // Posted but not recorded (a crash in between): the marker is found, nothing is posted, the hook isn't asked.
     await t.prisma.run.updateMany({ data: { endCommentId: null } });

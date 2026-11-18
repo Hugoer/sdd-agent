@@ -12,4 +12,8 @@ export const testEnv = {
   // Made up and not key-shaped: no test may reach Google.
   GOOGLE_API_KEY: 'test-google-api-key',
   TARGET_BASE_BRANCH: 'main',
+  // Spec 6: the defaults, so a developer's .env can't change what the suites expect.
+  GRILL_MAX_ROUNDS: '5',
+  GRILL_MAX_QUESTIONS_PER_ROUND: '3',
+  GRILL_CONFIDENCE_THRESHOLD: '95',
 };

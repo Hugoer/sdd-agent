@@ -5,6 +5,7 @@ import { StepConfigError } from '../contracts/llm-error.js';
 import { ProviderError } from '../contracts/provider-error.js';
 import type { RepoFile, RepoProvider } from '../contracts/repo-provider.js';
 import type { LoadedSkill, StepName } from '../contracts/step.js';
+import { findInjectionKinds } from './injection-patterns.js';
 import type { WorkflowConfig } from './workflow-config.js';
 
 /** Step 6: the total size of a skill's files (after the binary skip), from the listing. */
@@ -59,13 +60,17 @@ export async function listSkill(
   return { step, dir, files, skipped };
 }
 
-/** Steps 3–8: the skill as the prompt gets it, every file read at `commit`. One log line, never content. */
+/**
+ * Steps 3–8: the skill as the prompt gets it, every file read at `commit`. One log line, never content; and
+ * (spec 6 GM13) one warning line per file that matches an injection pattern: the skill still loads, since a
+ * skill on the base branch is trusted (overview §4 "Trust"), and nothing is posted.
+ */
 export async function loadSkill(
   repo: RepoProvider,
   skills: WorkflowConfig['skills'],
   step: StepName,
   commit: string,
-  logger: Pick<Logger, 'log'>,
+  logger: Pick<Logger, 'log' | 'warn'>,
 ): Promise<LoadedSkill> {
   const listing = await listSkill(repo, skills, step, commit);
   if (!listing) throw missingSkills([step]);
@@ -87,6 +92,14 @@ export async function loadSkill(
       `${chars.toLocaleString('en-US')} chars, skipped ${skipped.length}` +
       (skipped.length > 0 ? ` (${skipped.join(', ')})` : ''),
   );
+  for (const file of files) {
+    const kinds = findInjectionKinds(file.text);
+    if (kinds.length > 0)
+      logger.warn(
+        `skill ${step} @${commit.slice(0, 7)}: ${prefix}${file.path} matches an injection pattern ` +
+          `(${kinds.join(', ')}); loaded anyway, a skill on the base branch is trusted`,
+      );
+  }
   return { step, path: listing.dir, commit, files };
 }
 

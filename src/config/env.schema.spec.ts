@@ -48,6 +48,22 @@ describe('validateEnv', () => {
       NGROK_DOMAIN: '',
       TARGET_BASE_BRANCH: 'main',
       SESSION_LEASE_SECONDS: 120,
+      GRILL_MAX_ROUNDS: 5,
+      GRILL_MAX_QUESTIONS_PER_ROUND: 3,
+      GRILL_CONFIDENCE_THRESHOLD: 95,
+    });
+  });
+
+  it.each([
+    ['GRILL_MAX_ROUNDS', '1', 1],
+    ['GRILL_MAX_ROUNDS', '10', 10],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', '1', 1],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', '10', 10],
+    ['GRILL_CONFIDENCE_THRESHOLD', '1', 1],
+    ['GRILL_CONFIDENCE_THRESHOLD', '100', 100],
+  ])('accepts %s=%s', (name, value, expected) => {
+    expect(validateEnv({ ...valid, [name]: value })).toMatchObject({
+      [name]: expected,
     });
   });
 
@@ -101,6 +117,18 @@ describe('validateEnv', () => {
     ['SESSION_LEASE_SECONDS', '10'],
     ['SESSION_LEASE_SECONDS', 'abc'],
     ['SESSION_LEASE_SECONDS', '30.5'],
+    ['GRILL_MAX_ROUNDS', '0'],
+    ['GRILL_MAX_ROUNDS', '11'],
+    ['GRILL_MAX_ROUNDS', 'abc'],
+    ['GRILL_MAX_ROUNDS', '2.5'],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', '0'],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', '11'],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', 'abc'],
+    ['GRILL_MAX_QUESTIONS_PER_ROUND', '2.5'],
+    ['GRILL_CONFIDENCE_THRESHOLD', '0'],
+    ['GRILL_CONFIDENCE_THRESHOLD', '101'],
+    ['GRILL_CONFIDENCE_THRESHOLD', 'abc'],
+    ['GRILL_CONFIDENCE_THRESHOLD', '2.5'],
   ])('rejects %s=%s naming the variable', (name, value) => {
     expect(errorOf({ ...valid, [name]: value })).toMatch(
       new RegExp(`- ${name}: `),

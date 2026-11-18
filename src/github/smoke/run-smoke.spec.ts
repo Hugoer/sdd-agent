@@ -97,6 +97,11 @@ describe('runSmoke (issue checks)', () => {
         'PASS isSelf (issue author): dev → false',
       ]),
     );
+    const posted = issues.commentsOf(task)[0].id;
+    expect(lines.filter((line) => line.includes('acknowledgeComment'))).toEqual(
+      [`PASS acknowledgeComment: 👀 on comment ${posted}`],
+    );
+    expect(issues.acknowledged(task)).toEqual([posted]);
   });
 
   it('passes again on a second run: still one status label, one more comment', async () => {

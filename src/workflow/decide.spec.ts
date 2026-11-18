@@ -225,6 +225,36 @@ describe('decide(): overview §3 rows 1–31', () => {
       });
   });
 
+  it('row 10 (spec 6 GM15): run start with the label on the issue now, not stored on the run → the skip path', () => {
+    for (const lane of ['full-sdd', 'spec-code'] as const)
+      expect(
+        act(
+          running({ status: 'draft', grillSkipOnIssue: true }, runOf({ lane })),
+          { type: 'RUN_START' },
+        ),
+      ).toEqual({
+        kind: 'steps',
+        calls: [
+          { handler: 'grill', op: 'skip' },
+          { handler: 'spec', op: 'generate' },
+        ],
+        statusFirst: null,
+        statusAfter: 'spec-review',
+      });
+  });
+
+  it('row 11 (spec 6): code-only ignores grill: skip on the issue too', () => {
+    expect(
+      act(
+        running(
+          { status: 'draft', grillSkipOnIssue: true },
+          runOf({ lane: 'code-only' }),
+        ),
+        { type: 'RUN_START' },
+      ),
+    ).toMatchObject({ calls: [{ handler: 'go-signal', op: 'post' }] });
+  });
+
   it('row 10: run start with grill: skip → grill skip, then the Spec → spec-review', () => {
     expect(
       act(
@@ -300,9 +330,50 @@ describe('decide(): overview §3 rows 1–31', () => {
     });
   });
 
-  it('row 16: grilling, APPROVE or SKIP_ADDED → ignored', () => {
-    expect(act(running(), ev.approve())).toEqual(ignored('no-transition'));
-    expect(act(running(), ev.skip())).toEqual(ignored('no-transition'));
+  it('row 15 (spec 6 GM15): grilling, COMMENT with grill: skip on the issue → grill skip, then the Spec', () => {
+    expect(act(running({ grillSkipOnIssue: true }), ev.comment())).toEqual({
+      kind: 'steps',
+      calls: [
+        { handler: 'grill', op: 'skip' },
+        { handler: 'spec', op: 'generate' },
+      ],
+      statusFirst: null,
+      statusAfter: 'spec-review',
+    });
+  });
+
+  it('row 16 (spec 6 GM8): grilling, APPROVE → the grill approve reply', () => {
+    expect(act(running(), ev.approve())).toEqual({
+      kind: 'steps',
+      calls: [{ handler: 'grill', op: 'approve' }],
+      statusFirst: null,
+      statusAfter: null,
+    });
+    // An Approver's /approve while asking is answered whatever approveValid says (spec "Agreed for later specs").
+    expect(act(running({ approveValid: false }), ev.approve())).toMatchObject({
+      calls: [{ handler: 'grill', op: 'approve' }],
+    });
+  });
+
+  it('row 16 (spec 6 GM8, GM15): grilling, SKIP_ADDED with the label still on → grill skip, then the Spec', () => {
+    expect(act(running({ grillSkipOnIssue: true }), ev.skip())).toEqual({
+      kind: 'steps',
+      calls: [
+        { handler: 'grill', op: 'skip' },
+        { handler: 'spec', op: 'generate' },
+      ],
+      statusFirst: null,
+      statusAfter: 'spec-review',
+    });
+  });
+
+  it('row 16 (spec 6 plan P1): grilling, SKIP_ADDED with the label gone → read like a comment (grill round)', () => {
+    expect(act(running(), ev.skip())).toEqual({
+      kind: 'steps',
+      calls: [{ handler: 'grill', op: 'round' }],
+      statusFirst: null,
+      statusAfter: null,
+    });
   });
 
   it('row 17: spec-review (full-sdd), valid APPROVE → snapshot the Spec, generate the Plan → ready-for-dev', () => {

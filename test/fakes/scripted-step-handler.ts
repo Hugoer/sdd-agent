@@ -1,6 +1,7 @@
 // A step handler for spec 5's tests (spec "Fakes"): answers from a script, records every call.
 import type { StepOutcome } from '../../src/workflow/decide.js';
 import type {
+  CancelContext,
   StepContext,
   StepHandler,
 } from '../../src/workflow/step-handler.registry.js';
@@ -10,8 +11,8 @@ type Answer = (context: StepContext) => Promise<StepOutcome | void>;
 export class ScriptedStepHandler implements StepHandler {
   /** Every `run` call, in order. */
   readonly calls: StepContext[] = [];
-  /** Every `onCancel` call, in order. */
-  readonly cancelCalls: Omit<StepContext, 'op' | 'input'>[] = [];
+  /** Every `onCancel` call, in order (spec 6 plan P6: with how and when the run ended). */
+  readonly cancelCalls: CancelContext[] = [];
   /** What `onCancel` returns (default: no block). */
   cancelBlock: string | null = null;
   private readonly answers: Answer[] = [];
@@ -46,7 +47,7 @@ export class ScriptedStepHandler implements StepHandler {
     return answer ? answer(context) : Promise.resolve();
   }
 
-  onCancel(context: Omit<StepContext, 'op' | 'input'>): Promise<string | null> {
+  onCancel(context: CancelContext): Promise<string | null> {
     this.cancelCalls.push(context);
     return Promise.resolve(this.cancelBlock);
   }

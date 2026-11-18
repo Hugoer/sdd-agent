@@ -315,10 +315,7 @@ function byStatus(
 ): Action {
   switch (state.status) {
     case 'grilling':
-      // Row 15; row 16 for APPROVE and SKIP_ADDED.
-      return event.type === 'COMMENT'
-        ? steps([{ handler: 'grill', op: 'round' }], null)
-        : ignore('no-transition');
+      return whileGrilling(state, event);
     case 'spec-review':
       if (event.type !== 'APPROVE' || !state.approveValid)
         return ignore('no-transition'); // row 20
@@ -390,7 +387,7 @@ function otherInput(
   const run = state.run;
   switch (input.type) {
     case 'RUN_START':
-      return firstStep(run);
+      return firstStep(run, state.grillSkipOnIssue);
     case 'FAILED':
       // Row 28: only a running run, never for a /retry (RL13) or a stale event (plan P2).
       return run && !run.stop && !input.retry && !input.stale
@@ -440,20 +437,45 @@ function otherInput(
   }
 }
 
-/** Rows 9–11: the first step per lane and skip (RL3 step 4). */
-function firstStep(run: CurrentRun | null): Action {
+/**
+ * Rows 9–11: the first step per lane and skip (RL3 step 4). Spec 6 GM15: `grill: skip` counts when the run
+ * started with it or it is on the issue now (a retried run start after the label was added), amending RLW9.
+ */
+function firstStep(run: CurrentRun | null, grillSkipOnIssue: boolean): Action {
   if (!run) throw new Error('decide: RUN_START without a current run');
   if (run.lane === 'code-only')
     return steps([{ handler: 'go-signal', op: 'post' }], 'ready-for-dev'); // row 11
-  if (run.grillSkip)
-    return steps(
-      [
-        { handler: 'grill', op: 'skip' },
-        { handler: 'spec', op: 'generate' },
-      ],
-      'spec-review',
-    ); // row 10
+  if (run.grillSkip || grillSkipOnIssue) return grillSkipPath(); // row 10
   return steps([{ handler: 'grill', op: 'start' }], null); // row 9
+}
+
+/**
+ * Rows 15 and 16 (spec 6 GM8, GM15): whenever the bot would ask while `grill: skip` is on, the skip path instead.
+ * `APPROVE` → one reply. A `grill: skip` event that finds the label gone is read like a comment (plan P1).
+ */
+function whileGrilling(state: RouterState, event: IssueEvent): Action {
+  switch (event.type) {
+    case 'COMMENT':
+    case 'SKIP_ADDED':
+      return state.grillSkipOnIssue
+        ? grillSkipPath()
+        : steps([{ handler: 'grill', op: 'round' }], null);
+    case 'APPROVE':
+      return steps([{ handler: 'grill', op: 'approve' }], null);
+    default:
+      return ignore('no-transition');
+  }
+}
+
+/** Row 10, and row 16 for `grill: skip`: Grill Me skipped or stopped, then the Spec. */
+function grillSkipPath(): Action {
+  return steps(
+    [
+      { handler: 'grill', op: 'skip' },
+      { handler: 'spec', op: 'generate' },
+    ],
+    'spec-review',
+  );
 }
 
 /**

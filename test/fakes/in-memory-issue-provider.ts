@@ -60,6 +60,8 @@ export class InMemoryIssueProvider implements IssueProvider {
   private readonly issues = new Map<string, FakeIssue>();
   private readonly comments: FakeComment[] = [];
   private readonly accessLevels = new Map<string, AccessLevel>();
+  /** Spec 6: the comments with the bot's 👀, per issue, in the order first acknowledged. */
+  private readonly acknowledgements = new Map<string, string[]>();
   private nextError: ProviderError | undefined;
   private readonly nextErrorOn = new Map<string, ProviderError>();
   private nextCommentId = 1;
@@ -150,6 +152,11 @@ export class InMemoryIssueProvider implements IssueProvider {
     return this.comments
       .filter((comment) => comment.externalRef === task.externalRef)
       .map(({ id, body, byBot }) => ({ id, body, byBot }));
+  }
+
+  /** Spec 6: the comment ids `acknowledgeComment` marked on this issue (each once, in order). */
+  acknowledged(task: TaskRef): string[] {
+    return [...(this.acknowledgements.get(task.externalRef) ?? [])];
   }
 
   // ── IssueProvider ──
@@ -249,6 +256,16 @@ export class InMemoryIssueProvider implements IssueProvider {
   /** Pure, like the adapter: not recorded in `calls`. */
   isSelf(login: string): boolean {
     return same(login, this.botLogin);
+  }
+
+  /** Spec 6: like the adapter, an unknown or deleted comment is not an error; twice changes nothing. */
+  acknowledgeComment(task: TaskRef, commentId: string): Promise<void> {
+    return this.call('acknowledgeComment', [task, commentId], () => {
+      this.inRepo(task);
+      const ids = this.acknowledgements.get(task.externalRef) ?? [];
+      if (!ids.includes(commentId)) ids.push(commentId);
+      this.acknowledgements.set(task.externalRef, ids);
+    });
   }
 
   readControls(task: UnifiedTask): {

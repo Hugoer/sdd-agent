@@ -308,7 +308,7 @@ describe('failure → needs-human with a running run (spec 5, T15)', () => {
     expect(bodies(issue)).toEqual([]);
   });
 
-  it('a step returning `LIMIT` with its body → a stop only a restart continues: the body and the restart line (plan P4)', async () => {
+  it('a step returning `LIMIT` with its body → a stop only a restart continues: the marker and the body alone (plan P4; spec 6 GM9)', async () => {
     const issue = seedIssue(t, 65, { labels: ['workflow: full-sdd'] });
     const body =
       '**The Grill stopped after 5 rounds.** Two points are still open.';
@@ -324,13 +324,9 @@ describe('failure → needs-human with a running run (spec 5, T15)', () => {
       stopRetryable: false,
       stops: 1,
     });
+    // Spec 6 GM9: the round limit's body brings its own steps, so no generic restart line.
     expect(bodies(issue)).toEqual([
-      [
-        needsHumanMarker(stopped.id, 1),
-        body,
-        '',
-        '- To start again from scratch: remove the `workflow: full-sdd` label and add it again.',
-      ].join('\n'),
+      [needsHumanMarker(stopped.id, 1), body].join('\n'),
     ]);
     expect(t.issues.labelsOf(issue)).toContain('status: needs-human');
   });

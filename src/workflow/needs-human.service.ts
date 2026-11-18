@@ -98,7 +98,7 @@ export function stopCommentOf(run: Run): string {
     { id: run.id, number: run.number, lane: run.lane as Lane },
     run.stops,
     workResultReason(cause) !== null
-      ? { kind: 'work-result', body: message }
+      ? { kind: 'work-result', cause, body: message }
       : { kind: 'failure', step: run.stopStep ?? RUN_START, message, cause },
   );
 }

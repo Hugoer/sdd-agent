@@ -22,6 +22,9 @@ export type IntakeResult =
   | { outcome: 'accepted'; input: WorkflowInput }
   | { outcome: 'ignored'; reason: IgnoreReason };
 
+/** A plain comment intake accepts (spec 6 reads these as Grill Me's answers). */
+export type CommentInput = WorkflowInput & { type: 'COMMENT' };
+
 /**
  * Spec 2: classify (payload only) → authorize (at most one lookup) → result. Catches nothing: a
  * ProviderError goes to the worker's rule, so a failed lookup is never read as an answer (IA9).
@@ -45,6 +48,34 @@ export class IntakeService {
         `sender=${senderLoginOf(event) ?? '-'} ${describe(result)}`,
     );
     return result;
+  }
+
+  /**
+   * Spec 6 (GMW1): the stored events that are plain comments on this issue by someone who is a Participant or
+   * Approver now, by spec 2's rules and in the given order. No side effect (no reply, no revert, no log line);
+   * one access lookup per distinct author, and a failed lookup throws (IA9).
+   */
+  async answerComments(
+    task: TaskRef,
+    events: WebhookEvent[],
+  ): Promise<CommentInput[]> {
+    const comments = events.flatMap((event) => {
+      const classified = classifyGitHubEvent(event, this.targetRepo, (login) =>
+        this.issues.isSelf(login),
+      );
+      if (classified.outcome !== 'candidate') return [];
+      const { input } = classified;
+      return isComment(input) && input.task.id === task.id ? [input] : [];
+    });
+    const levels = new Map<string, AccessLevel>();
+    for (const { sender } of comments) {
+      const author = sender.toLowerCase();
+      if (!levels.has(author))
+        levels.set(author, await this.issues.getAccessLevel(task, sender));
+    }
+    return comments.filter(({ sender }) =>
+      allows(levels.get(sender.toLowerCase()) ?? 'none', 'participant'),
+    );
   }
 
   private async decide(event: WebhookEvent): Promise<IntakeResult> {
@@ -162,6 +193,10 @@ export function approveDeniedComment(commentId: string, login: string): string {
 
 function allows(level: AccessLevel, needs: Exclude<Needs, 'self'>): boolean {
   return needs === 'participant' ? level !== 'none' : level === 'approver';
+}
+
+function isComment(input: WorkflowInput): input is CommentInput {
+  return input.type === 'COMMENT';
 }
 
 function accepted(input: WorkflowInput): IntakeResult {

@@ -28,6 +28,12 @@ import { WorkflowEventProcessor } from './workflow-event.processor.js';
     RouterService,
     WorkflowEventProcessor,
   ],
-  exports: [StepHandlerRegistry, RunService, NeedsHumanService],
+  // Spec 6: SessionLeaseService for `assertHeld` in the step modules' own writes.
+  exports: [
+    StepHandlerRegistry,
+    RunService,
+    NeedsHumanService,
+    SessionLeaseService,
+  ],
 })
 export class WorkflowModule {}

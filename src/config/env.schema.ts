@@ -20,6 +20,16 @@ const tracingOff = z
   )
   .optional();
 
+/** An integer setting with its range in every message (a non-number, a fraction or out of range). */
+function integerFromTo(min: number, max: number) {
+  const message = `must be an integer from ${min} to ${max}`;
+  return z.coerce
+    .number({ error: message })
+    .int(message)
+    .min(min, message)
+    .max(max, message);
+}
+
 function containsPrivateKey(path: string): boolean {
   try {
     return PRIVATE_KEY_BLOCK.test(readFileSync(path, 'utf8'));
@@ -74,6 +84,10 @@ export const envSchema = z.object({
     .int('must be an integer of at least 30')
     .min(30, 'must be an integer of at least 30')
     .default(120),
+  // Spec 6 (GM2, GM3): question comments per run, questions per comment, and the confidence that ends Grill Me.
+  GRILL_MAX_ROUNDS: integerFromTo(1, 10).default(5),
+  GRILL_MAX_QUESTIONS_PER_ROUND: integerFromTo(1, 10).default(3),
+  GRILL_CONFIDENCE_THRESHOLD: integerFromTo(1, 100).default(95),
   LANGSMITH_TRACING: tracingOff,
   LANGSMITH_TRACING_V2: tracingOff,
   LANGCHAIN_TRACING: tracingOff,

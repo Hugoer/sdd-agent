@@ -60,6 +60,9 @@ export interface IssueProvider {
   getAccessLevel(task: TaskRef, login: string): Promise<AccessLevel>;
   /** true when login is the bot's own account (added 2026-11-11, spec 2) */
   isSelf(login: string): boolean;
+  /** marks a human comment as read, with nothing to add (GitHub: the 👀 reaction); doing it twice changes
+   *  nothing, and a comment that no longer exists is not an error (added 2026-11-17, spec 6 GM6) */
+  acknowledgeComment(task: TaskRef, commentId: string): Promise<void>;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): {
     lanes: Lane[];

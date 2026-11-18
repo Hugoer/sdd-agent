@@ -88,18 +88,32 @@ describe('stopComment (spec "Stop comment")', () => {
   it('a result of the work: the step body, then only the restart line (plan P4)', () => {
     const text = stopComment(run2, 1, {
       kind: 'work-result',
-      body: 'The Grill reached its round limit.',
+      cause: 'coder-red',
+      body: 'The lint stayed red.',
     });
 
     expect(text).toBe(
       [
         `<!-- sdd-agent:needs-human:${RUN_ID}:1 -->`,
-        'The Grill reached its round limit.',
+        'The lint stayed red.',
         '',
         '- To start again from scratch: remove the `workflow: full-sdd` label and add it again.',
       ].join('\n'),
     );
     expect(text).not.toContain('/retry');
+  });
+
+  it('the Grill round limit: the marker and the body alone, no restart line (spec 6 GM9)', () => {
+    const text = stopComment(run2, 1, {
+      kind: 'work-result',
+      cause: 'grill-limit',
+      body: '⚠️ **Grill Me used all 5 rounds …**\n\n**To continue:**\n1. Remove …',
+    });
+
+    expect(text).toBe(
+      `<!-- sdd-agent:needs-human:${RUN_ID}:1 -->\n` +
+        '⚠️ **Grill Me used all 5 rounds …**\n\n**To continue:**\n1. Remove …',
+    );
   });
 });
 
@@ -271,7 +285,16 @@ describe('every text (RLW12)', () => {
         'd',
       ),
     }),
-    stopComment(run2, 1, { kind: 'work-result', body: 'body' }),
+    stopComment(run2, 1, {
+      kind: 'work-result',
+      cause: 'coder-red',
+      body: 'body',
+    }),
+    stopComment(run2, 1, {
+      kind: 'work-result',
+      cause: 'grill-limit',
+      body: 'body',
+    }),
     runEndedComment(run2, { kind: 'cancelled' }, 'octocat'),
     runEndedComment(
       run2,
