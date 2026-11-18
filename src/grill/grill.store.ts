@@ -220,6 +220,31 @@ export class GrillStore {
     );
   }
 
+  /**
+   * `grill: skip` before the first question: the answers read without a model call (no evaluation), and the
+   * session ends `SKIPPED` with no confidence.
+   */
+  async recordSkipped(
+    lease: HeldLease,
+    sessionId: string,
+    answers: AnswerRecord[],
+  ): Promise<void> {
+    await this.write(lease, async (tx) => {
+      await tx.grillAnswer.createMany({
+        data: answers.map((answer) => ({
+          ...answer,
+          sessionId,
+          evaluationId: null,
+          afterRound: 0,
+        })),
+      });
+      await tx.grillSession.update({
+        where: { id: sessionId },
+        data: { status: 'SKIPPED', endedAt: await dbNow(tx) },
+      });
+    });
+  }
+
   private write<T>(
     lease: HeldLease,
     work: (tx: Prisma.TransactionClient) => Promise<T>,

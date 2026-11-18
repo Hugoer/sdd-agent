@@ -23,9 +23,17 @@ import type { Runnable } from '@langchain/core/runnables';
 import type { ChatModelFactory } from '../../src/llm/chat-model.factory.js';
 import { LlmError } from '../../src/contracts/llm-error.js';
 
+/** The model's text as sent (JSON for a schema call, or malformed on purpose). */
+export interface ScriptedAnswer {
+  answer: string;
+  finishReason?: string;
+  usage?: UsageMetadata | null;
+  /** Spec 6 (plan T12): runs while the model "thinks", before the answer comes back (e.g. a comment arrives). */
+  during?: () => Promise<unknown>;
+}
+
 export type ScriptedReply =
-  /** The model's text as sent (JSON for a schema call, or malformed on purpose). */
-  | { answer: string; finishReason?: string; usage?: UsageMetadata | null }
+  | ScriptedAnswer
   /** Thrown by the model call, as the provider's package would throw it. */
   | { error: unknown };
 
@@ -64,7 +72,7 @@ export class ScriptedChatModelFactory implements ChatModelFactory {
   }
 
   /** A valid JSON answer. */
-  replyJson(value: unknown, extra: Omit<ScriptedReply, 'answer'> = {}): this {
+  replyJson(value: unknown, extra: Omit<ScriptedAnswer, 'answer'> = {}): this {
     return this.reply({ answer: JSON.stringify(value), ...extra });
   }
 
@@ -136,23 +144,22 @@ class ScriptedChatModel extends BaseChatModel<ScriptedCallOptions> {
     return 'scripted';
   }
 
-  _generate(
+  async _generate(
     messages: BaseMessage[],
     options: this['ParsedCallOptions'],
   ): Promise<ChatResult> {
-    return Promise.resolve().then(() => this.answer(messages, options));
-  }
-
-  private answer(
-    messages: BaseMessage[],
-    options: this['ParsedCallOptions'],
-  ): ChatResult {
+    await Promise.resolve();
     const reply = this.factory.next({
       model: this.model,
       messages,
       structured: options.scriptedStructured,
     });
     if ('error' in reply) throw reply.error;
+    await reply.during?.();
+    return this.answer(reply);
+  }
+
+  private answer(reply: ScriptedAnswer): ChatResult {
     const message = new AIMessage({
       content: reply.answer,
       response_metadata: {

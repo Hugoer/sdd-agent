@@ -378,13 +378,13 @@ cancel hook, T19). The event's own processing state never matters (`PROCESSING` 
 own event).
 
 **Acceptance criteria:**
-- [ ] With stored events: commands, the bot's own, edits, another issue, before the run, no access and already read
+- [x] With stored events: commands, the bot's own, edits, another issue, before the run, no access and already read
   are left out; a `PENDING`, a `PROCESSING`, an `IGNORED` and a `FAILED` comment event are read; the order holds for
   equal times (integration)
-- [ ] One `getAccessLevel` per distinct author per call (integration, the fake's `calls`)
+- [x] One `getAccessLevel` per distinct author per call (integration, the fake's `calls`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T3, T7
 **Files:** `src/grill/answer-reader.service.ts`, `test/answer-reader.integration.spec.ts`
@@ -403,21 +403,23 @@ session with no round → evaluate; a round posted → act as `round`, which unt
 `ASKED`). `grill.module.ts` registers `GrillHandler` in `onModuleInit`; `AppModule` imports it; P7, P8.
 
 **Acceptance criteria:**
-- [ ] `workflow: full-sdd` on a vague issue, a scripted answer (confidence 60, two questions) → session `ASKING`,
+- [x] `workflow: full-sdd` on a vague issue, a scripted answer (confidence 60, two questions) → session `ASKING`,
   evaluation `ASKED` whose `log_id` is the call's `execution_logs` row (`grill`, this run), round 1 `POSTED` with Q1
   and Q2, one comment with the marker, `status: grilling`, the event `DONE` (integration)
-- [ ] Five questions with K = 3 → three posted, `questions_proposed` 5 (integration)
-- [ ] `postComment` failing once after Tx1 → retried → one comment, one model call; Tx2 failing once → found by its
+- [x] Five questions with K = 3 → three posted, `questions_proposed` 5 (integration)
+- [x] `postComment` failing once after Tx1 → retried → one comment, one model call; Tx2 failing once → found by its
   marker, one comment; Tx1 failing once → one more model call, one comment (integration)
-- [ ] The run's start event processed again with round 1 posted → no model call, `ASKED`, no second comment
+- [x] The run's start event processed again with round 1 posted → no model call, `ASKED`, no second comment
   (integration)
-- [ ] P8: every older suite passes unchanged, except the five that registered a scripted `grill` and now pass it
-  to `startApp` (one line each) and T5's scripted-`LIMIT` test
-- [ ] Log `#12 run 1 grill: evaluation → ASKED (round 1, 2 of 3 questions, confidence 60)`; a recovery logs
+- [x] P8: every older suite passes unchanged, except the five that registered a scripted `grill` and now pass it
+  to `startApp` (one line each) and T5's scripted-`LIMIT` test (2026-11-18: four of them also drop the registry
+  import they no longer use; `startApp` hands Nest a plain object around the handler, since Nest awaits a provider
+  value that has a `then` method, and the scripted handler's `then` is its script)
+- [x] Log `#12 run 1 grill: evaluation → ASKED (round 1, 2 of 3 questions, confidence 60)`; a recovery logs
   `round 1 posted (recovered)`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T1, T5, T8, T9, T10
 **Files:** `src/grill/grill-evaluation.service.ts`, `src/grill/grill.handler.ts`, `src/grill/grill.module.ts`,
@@ -436,17 +438,17 @@ session already `CLEAR` posts its missing clear comment and returns `CLEAR` with
 model gets a hook that runs during a call (to store a comment "while the model thinks").
 
 **Acceptance criteria:**
-- [ ] A complete issue (confidence 97, with two questions) → session `CLEAR`, rounds 0, first and last confidence
+- [x] A complete issue (confidence 97, with two questions) → session `CLEAR`, rounds 0, first and last confidence
   97, one "no questions needed" comment, the questions dropped, then the `spec` stop `step-not-built` (integration)
-- [ ] The clear comment failing once → retried → posted once, no second model call; `/retry` after the `spec` stop
+- [x] The clear comment failing once → retried → posted once, no second model call; `/retry` after the `spec` stop
   → no model call, a second `spec` stop (integration)
-- [ ] A comment stored during the first call → `SUPERSEDED`, a second call whose prompt has it under "New comments",
+- [x] A comment stored during the first call → `SUPERSEDED`, a second call whose prompt has it under "New comments",
   one question comment; that comment's own event then `DONE` with no call; two comments during two calls → two
   `SUPERSEDED`, three calls (integration)
-- [ ] Logs `… → CLEAR (confidence 97)` and `… → SUPERSEDED (1 newer comment)`
+- [x] Logs `… → CLEAR (confidence 97)` and `… → SUPERSEDED (1 newer comment)`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T11
 **Files:** `src/grill/grill-evaluation.service.ts`, `src/grill/grill.handler.ts`, `src/grill/grill.store.ts`,
@@ -461,14 +463,14 @@ call, the session `SKIPPED` (0 rounds, confidences null), the comment "Grill Me 
 (GM15: the label added while the run was stopped before its first question).
 
 **Acceptance criteria:**
-- [ ] `grill: skip` and `workflow: full-sdd` in one go → session `SKIPPED`, one skipped comment, the `spec` stop; no
+- [x] `grill: skip` and `workflow: full-sdd` in one go → session `SKIPPED`, one skipped comment, the `spec` stop; no
   `execution_logs` row for `grill` (integration)
-- [ ] The first evaluation fails (permanent) → stop at `grill` → `grill: skip` added → `/retry` → the skipped
+- [x] The first evaluation fails (permanent) → stop at `grill` → `grill: skip` added → `/retry` → the skipped
   comment, no model call, the `spec` stop (integration)
-- [ ] Posting the skipped comment failing once → posted once (integration)
+- [x] Posting the skipped comment failing once → posted once (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T12
 **Files:** `src/grill/grill.handler.ts`, `src/grill/grill.store.ts`, `test/grill-start.integration.spec.ts`
@@ -484,17 +486,19 @@ text, outside the skill's folder so the model never gets it; the README's two st
 commit and push to `main` before Checkpoint 3.
 
 **Acceptance criteria:**
-- [ ] The skill's first line is the spec's attribution line, word for word; the notice has the full MIT text with
+- [x] The skill's first line is the spec's attribution line, word for word; the notice has the full MIT text with
   "Copyright (c) 2025 Addy Osmani", names the source and version, and says what was changed
-- [ ] Nothing in it contradicts the frame: several independent questions per comment (GM3's test), each with a
+- [x] Nothing in it contradicts the frame: several independent questions per comment (GM3's test), each with a
   guess and its reasoning; no numbering, no `@`, no "one question at a time", no explicit "yes" to wait for, no
   terminal-turn rule, no file to save; questions in the issue's language; the stop is the threshold the frame gives
-- [ ] Spec 4's injection patterns find nothing in it (GM13); one text file, far below 204,800 bytes
+- [x] Spec 4's injection patterns find nothing in it (GM13); one text file, far below 204,800 bytes (2026-11-18:
+  4,785 bytes)
 
 **Verification:**
-- [ ] Manual: you read the three changes, then commit and push (e.g. `chore: grill skill adapted from interview-me
-  (sdd-agent spec 6)`)
-- [ ] At Checkpoint 3 the app log shows `skill grill @<commit>: 1 file, …` and no warning line for it
+- [x] Manual: you read the three changes, then commit and push (e.g. `chore: grill skill adapted from interview-me
+  (sdd-agent spec 6)`) (2026-11-18: `9b6752a` on the sandbox's `main`)
+- [x] At Checkpoint 3 the app log shows `skill grill @<commit>: 1 file, …` and no warning line for it (2026-11-18:
+  `skill grill @9b6752a: 1 file, 4,779 chars, skipped 0` on every call)
 
 **Dependencies:** T8 (the frame it fits)
 **Files:** in the sandbox only: `.github-agent/skills/grill/SKILL.md`, `.github-agent/skills/THIRD-PARTY-NOTICES.md`,
@@ -512,9 +516,11 @@ one edit → "Grill Me skipped" and the `spec` stop. `#E` in Spanish → questio
 lines in English. If the model asks questions on `#B` anyway, I run `#B` again on my instance with a lower
 `GRILL_CONFIDENCE_THRESHOLD`: the row checks the clear path, not the model's judgment.
 **Matrix rows:** "Questions and answers": the first row and the Spanish row (`#E`); "Clear and skipped": both.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] The sandbox's `main` has T14's files (you pushed them)
-- [ ] The rows above, ticked in the spec; `grill_evaluations` and `execution_logs` checked with the matrix's queries
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] The sandbox's `main` has T14's files (you pushed them)
+- [x] The rows above, ticked in the spec; `grill_evaluations` and `execution_logs` checked with the matrix's queries
+  (2026-11-18: `#A` = #22, `#B` = #23, `#C` = #24, `#E` = #25; Google answered HTTP 503 on all three attempts on
+  #22 and #25, so both stopped at `grill` first and continued after `/retry`)
 - [ ] You review and commit
 
 ---

@@ -13,7 +13,6 @@ import {
 import type { TaskRef } from '../src/contracts/issue-provider.js';
 import { ProviderError } from '../src/contracts/provider-error.js';
 import type { WebhookEvent } from '../src/generated/prisma/client.js';
-import { StepHandlerRegistry } from '../src/workflow/step-handler.registry.js';
 import {
   needsHumanMarker,
   retryRefusedMarker,
@@ -260,8 +259,7 @@ describe('/retry with a step handler (spec 5, T16)', () => {
   const { run, event, bodies } = reads(() => t);
 
   beforeAll(async () => {
-    t = await startApp();
-    t.app.get(StepHandlerRegistry).register('grill', grill);
+    t = await startApp({ grill });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

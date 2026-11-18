@@ -12,10 +12,13 @@ import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
 import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
 import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
+import { GrillHandler } from '../src/grill/grill.handler.js';
 import { IntakeService } from '../src/intake/intake.service.js';
 import { CHAT_MODEL_FACTORY } from '../src/llm/chat-model.factory.js';
 import { PrismaService } from '../src/prisma/prisma.service.js';
+import type { StepHandler } from '../src/workflow/step-handler.registry.js';
 import { WorkflowEventProcessor } from '../src/workflow/workflow-event.processor.js';
+import { StepNotBuiltError } from '../src/workflow/workflow-errors.js';
 import { resetDatabase } from './db.js';
 import { InMemoryIssueProvider } from './fakes/in-memory-issue-provider.js';
 import { InMemoryRepoProvider } from './fakes/in-memory-repo-provider.js';
@@ -171,6 +174,29 @@ export interface StartOptions {
    * `'intake-only'`: spec 2's behavior (spec 5 plan P11).
    */
   processor?: EventProcessor | 'intake-only';
+  /**
+   * Spec 6 plan P8: the `grill` handler GrillModule registers. Default: one that stops the run as an unbuilt step,
+   * as before spec 6, so spec 5's suites keep testing the router alone; a scripted handler; or `'real'`.
+   */
+  grill?: StepHandler | 'real';
+}
+
+/** Spec 6 plan P8: what the router did before Grill Me existed (`step-not-built` at `grill`). */
+const GRILL_NOT_BUILT: StepHandler = {
+  run: () => Promise.reject(new StepNotBuiltError('grill')),
+};
+
+/**
+ * The handler as a plain object: Nest awaits a provider value that has a `then` method, and the scripted
+ * handler's `then` (its script) would never resolve. Keeps `onCancel` only when the handler has one.
+ */
+function asProvider(handler: StepHandler): StepHandler {
+  return {
+    run: (context) => handler.run(context),
+    ...(handler.onCancel && {
+      onCancel: (context) => handler.onCancel!(context),
+    }),
+  };
 }
 
 /** Boots the real app on a random local port; GitHub is always faked (no request leaves the test). */
@@ -189,6 +215,11 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     builder = builder
       .overrideProvider(EventsWorker)
       .useClass(ManualEventsWorker);
+  }
+  if (options.grill !== 'real') {
+    builder = builder
+      .overrideProvider(GrillHandler)
+      .useValue(asProvider(options.grill ?? GRILL_NOT_BUILT));
   }
   if (options.processor) {
     const chosen = options.processor;

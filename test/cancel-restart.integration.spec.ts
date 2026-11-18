@@ -11,7 +11,6 @@ import {
 } from 'vitest';
 import type { TaskRef } from '../src/contracts/issue-provider.js';
 import { ProviderError } from '../src/contracts/provider-error.js';
-import { StepHandlerRegistry } from '../src/workflow/step-handler.registry.js';
 import { runEndedMarker } from '../src/workflow/workflow-comments.js';
 import { resetDatabase } from './db.js';
 import { startApp, type TestApp } from './app.js';
@@ -63,8 +62,7 @@ describe('cancel with a step handler (spec 5, T17)', () => {
   }
 
   beforeAll(async () => {
-    t = await startApp();
-    t.app.get(StepHandlerRegistry).register('grill', grill);
+    t = await startApp({ grill });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

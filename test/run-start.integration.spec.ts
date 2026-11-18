@@ -160,10 +160,8 @@ describe('the dispatch loop with scripted handlers (spec 5, T14, plan P4)', () =
   const goSignal = new ScriptedStepHandler();
 
   beforeAll(async () => {
-    t = await startApp();
-    const registry = t.app.get(StepHandlerRegistry);
-    registry.register('grill', grill);
-    registry.register('go-signal', goSignal);
+    t = await startApp({ grill });
+    t.app.get(StepHandlerRegistry).register('go-signal', goSignal);
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

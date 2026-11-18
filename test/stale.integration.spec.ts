@@ -12,7 +12,6 @@ import {
 import type { TaskRef } from '../src/contracts/issue-provider.js';
 import { ProviderError } from '../src/contracts/provider-error.js';
 import type { WebhookEvent } from '../src/generated/prisma/client.js';
-import { StepHandlerRegistry } from '../src/workflow/step-handler.registry.js';
 import { resetDatabase } from './db.js';
 import { startApp, type TestApp } from './app.js';
 import { ScriptedStepHandler } from './fakes/scripted-step-handler.js';
@@ -193,8 +192,7 @@ describe('stale events with a running run (spec 5, T20, plan P2)', () => {
   }
 
   beforeAll(async () => {
-    t = await startApp();
-    t.app.get(StepHandlerRegistry).register('grill', grill);
+    t = await startApp({ grill });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

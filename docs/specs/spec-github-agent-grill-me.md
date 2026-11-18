@@ -913,10 +913,11 @@ it decides.
 - [x] `GRILL_MAX_ROUNDS=0` → refuses to start, naming it.
 
 **Questions and answers** (issue `#A`, vague: "Let people split bills")
-- [ ] Add `workflow: full-sdd` → `status: grilling`; exactly ONE bot comment "**Grill Me, round 1 of 5** ·
+- [x] Add `workflow: full-sdd` → `status: grilling`; exactly ONE bot comment "**Grill Me, round 1 of 5** ·
   confidence N% (the bot writes the Spec at 95%)" with 1–3 questions numbered from Q1, each with a *Guess*; the
   footer; the model line; NO `@` anywhere; one evaluation `ASKED`; its `log_id` is an `execution_logs` row for
-  `grill` and this run.
+  `grill` and this run. (2026-11-18, #22: Google's HTTP 503 first stopped run 1 at `grill` with spec 5's stop
+  comment; after `/retry`, the one round comment.)
 - [ ] Answer every question in one comment ("Q1: …, Q2: …") → exactly ONE reply: round 2 numbered on from the last
   question, or the `spec` stop (clear); NO 👀 on your comment.
 - [ ] In a round with two or more questions, answer only Q1 → 👀 by the bot on your comment and NO new bot
@@ -933,7 +934,7 @@ it decides.
   original text.
 - [ ] While asking, add a missing detail to the issue description, then answer → nothing happens on the edit; the
   next evaluation's prompt (`execution_logs.prompt`) has the new description (GMW2).
-- [ ] Issue `#E` written in Spanish + `workflow: spec-code` → the questions and guesses are in Spanish; the header,
+- [x] Issue `#E` written in Spanish + `workflow: spec-code` → the questions and guesses are in Spanish; the header,
   the footer and the model line are in English (GMW7).
 - [ ] Signed comment from `octocat` while questions are open (developer sends it), then your real answer → the
   `octocat` event `IGNORED` `unauthorized`; the next prompt does NOT contain its text; no reaction on it.
@@ -950,9 +951,9 @@ it decides.
   event `DONE` with no reply (read like a comment, plan P1); your next answer gets a normal reply (GM15).
 
 **Clear and skipped**
-- [ ] Issue `#B` with a complete description (who, what, done, out of scope) + `workflow: spec-code` → ONE comment
+- [x] Issue `#B` with a complete description (who, what, done, out of scope) + `workflow: spec-code` → ONE comment
   "**Grill Me: no questions needed.** …"; then the stop at `spec`; session `CLEAR`, rounds 0.
-- [ ] Issue `#C`: `grill: skip` and `workflow: full-sdd` in one edit → ONE "Grill Me skipped (`grill: skip` is on):
+- [x] Issue `#C`: `grill: skip` and `workflow: full-sdd` in one edit → ONE "Grill Me skipped (`grill: skip` is on):
   …" comment, then the stop at `spec`; NO `execution_logs` row for `grill`.
 
 **Round limit** (`GRILL_MAX_ROUNDS=1`, issue `#D` vague; answer so that new topics open, e.g. "Q1: it depends,
