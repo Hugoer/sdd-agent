@@ -946,16 +946,21 @@ it decides.
   `octocat` event `IGNORED` `unauthorized`; the next prompt does NOT contain its text; no reaction on it.
 
 **Commands while asking** (`#A`)
-- [ ] `/approve` → exactly ONE reply "There's nothing to approve yet: … (still open: …) … add `grill: skip`."; a
-  second `/approve` comment → its own ONE reply; nothing else changes.
+- [x] `/approve` → exactly ONE reply "There's nothing to approve yet: … (still open: …) … add `grill: skip`."; a
+  second `/approve` comment → its own ONE reply; nothing else changes. (2026-11-18, on `#G` = #28: `#A` had ended
+  clear, and restarting it before plan T18 would post a run-ended comment without the answers block.)
 - [x] `/retry` → spec 5's "Run 1 isn't stopped" reply; NOT read as an answer.
 - [x] Add `model: max-grill`, then answer → the next evaluation's `execution_logs` row has `gemini-4-carbon`, level
   `max`; if it posts a question comment, its model line says `gemini-4-carbon` (max). (2026-11-18, #22: `WAITING`,
   so no question comment.)
-- [ ] Add `grill: skip` → ONE comment "Grill Me stopped by `<you>` (`grill: skip` added): writing the Spec from the
+- [x] Add `grill: skip` → ONE comment "Grill Me stopped by `<you>` (`grill: skip` added): writing the Spec from the
   issue and the answers so far."; then the stop at `spec`; session `STOPPED`, rounds kept; no model call for it.
-- [ ] On another asking issue, add `grill: skip` and remove it within a second → no stopped comment; the add's
+  (2026-11-18, #28.)
+- [x] On another asking issue, add `grill: skip` and remove it within a second → no stopped comment; the add's
   event `DONE` with no reply (read like a comment, plan P1); your next answer gets a normal reply (GM15).
+  (2026-11-18, #28 before the row above, with the issue's lease held for 30 s so both label events were stored
+  first: the add's event logged "nothing new"; the removal's event `IGNORED` `skip-removed`; the next answer got
+  round 2.)
 
 **Clear and skipped**
 - [x] Issue `#B` with a complete description (who, what, done, out of scope) + `workflow: spec-code` → ONE comment
@@ -990,8 +995,9 @@ needs the bot to want a new question)
   while stopped → no reply; fix the key, restart, `/retry` → ONE reply; its prompt holds both comments.
   (2026-11-18, #22: Q8 with the wrong key, Q9 while stopped; with the key fixed, Google's 503 stopped the run once
   more, and the next `/retry` gave the one reply: `CLEAR` at 96%, the `spec` stop.)
-- [ ] The same stop again; add `grill: skip` while stopped → no reply; fix the key, `/retry` → ONE "Grill Me stopped
-  (`grill: skip` is on): …" comment and the stop at `spec`; NO question comment (GM15).
+- [x] The same stop again; add `grill: skip` while stopped → no reply; fix the key, `/retry` → ONE "Grill Me stopped
+  (`grill: skip` is on): …" comment and the stop at `spec`; NO question comment (GM15). (2026-11-18, `#H` = #29:
+  the unread answer read without a model call.)
 - [ ] The same stop with your answer "Q4: …" unread; remove the label instead of `/retry` → the run-ended block
   includes "Q4: …" (GM16).
 

@@ -112,6 +112,11 @@ export class GrillStore {
     });
   }
 
+  /** The question comment an `ASKED` evaluation stored, or null. */
+  roundOf(evaluationId: string): Promise<GrillRound | null> {
+    return this.prisma.grillRound.findUnique({ where: { evaluationId } });
+  }
+
   /** A question comment stored by Tx1 but not posted yet (a crash before Tx2), or null. */
   pendingRound(sessionId: string): Promise<GrillRound | null> {
     return this.prisma.grillRound.findFirst({
@@ -250,10 +255,44 @@ export class GrillStore {
    * `grill: skip` before the first question: the answers read without a model call (no evaluation), and the
    * session ends `SKIPPED` with no confidence.
    */
-  async recordSkipped(
+  recordSkipped(
     lease: HeldLease,
     sessionId: string,
     answers: AnswerRecord[],
+  ): Promise<void> {
+    return this.endUnevaluated(lease, sessionId, answers, {
+      afterRound: 0,
+      status: 'SKIPPED',
+      stoppedBy: null,
+    });
+  }
+
+  /**
+   * `grill: skip` while asking (GM8): the answers read without a model call, after the rounds posted, and the
+   * session ends `STOPPED`; `stoppedBy` is the label event's sender, or null when a comment or a retried event took
+   * the skip path (GM15).
+   */
+  recordStopped(
+    lease: HeldLease,
+    sessionId: string,
+    answers: AnswerRecord[],
+    end: { afterRound: number; stoppedBy: string | null },
+  ): Promise<void> {
+    return this.endUnevaluated(lease, sessionId, answers, {
+      ...end,
+      status: 'STOPPED',
+    });
+  }
+
+  private async endUnevaluated(
+    lease: HeldLease,
+    sessionId: string,
+    answers: AnswerRecord[],
+    end: {
+      afterRound: number;
+      status: 'SKIPPED' | 'STOPPED';
+      stoppedBy: string | null;
+    },
   ): Promise<void> {
     await this.write(lease, async (tx) => {
       await tx.grillAnswer.createMany({
@@ -261,12 +300,16 @@ export class GrillStore {
           ...answer,
           sessionId,
           evaluationId: null,
-          afterRound: 0,
+          afterRound: end.afterRound,
         })),
       });
       await tx.grillSession.update({
         where: { id: sessionId },
-        data: { status: 'SKIPPED', endedAt: await dbNow(tx) },
+        data: {
+          status: end.status,
+          stoppedBy: end.stoppedBy,
+          endedAt: await dbNow(tx),
+        },
       });
     });
   }

@@ -632,24 +632,27 @@ that has ended first posts its missing closing comment (by marker), then returns
 with no model call.
 
 **Acceptance criteria:**
-- [ ] `/approve` by an Approver → one reply naming the open questions; a second `/approve` comment → its own reply;
+- [x] `/approve` by an Approver → one reply naming the open questions; a second `/approve` comment → its own reply;
   the job retried → no second reply; status, rounds and evaluations unchanged; a Participant's `/approve` → spec 2's
   reply (integration)
-- [ ] `grill: skip` added while asking → answers read without a call, session `STOPPED` with the login, one stopped
+- [x] `grill: skip` added while asking → answers read without a call, session `STOPPED` with the login, one stopped
   comment, the `spec` stop; the label added and removed before its event runs → no stopped comment, the questions
   go on (P1: the event `DONE`) (integration)
-- [ ] A comment while asking with the label on (added while the issue was closed) → "Grill Me stopped (`grill: skip`
+- [x] A comment while asking with the label on (added while the issue was closed) → "Grill Me stopped (`grill: skip`
   is on)" (integration)
-- [ ] A round `PENDING_POST` when `/approve` or `grill: skip` arrives → the round posted once first, then the reply
+- [x] A round `PENDING_POST` when `/approve` or `grill: skip` arrives → the round posted once first, then the reply
   or the stop (integration)
-- [ ] P1: session `STOPPED`, the `spec` step fails, the label removed, `/retry` → the `spec` step again, no model
+- [x] P1: session `STOPPED`, the `spec` step fails, the label removed, `/retry` → the `spec` step again, no model
   call, no comment from Grill Me (integration)
-- [ ] P1: the stopped comment's post fails once and the label is removed before the retry → the retried event posts
+- [x] P1: the stopped comment's post fails once and the label is removed before the retry → the retried event posts
   "Grill Me stopped by `<login>`" once (marker, stored login), then the `spec` step (integration)
-- [ ] Log `#12 run 2 grill: stopped by grill: skip`
+- [x] Log `#12 run 2 grill: stopped by grill: skip`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (2026-11-18: unit 44
+  files / 1,038 tests; integration 25 files / 245 tests, 12 of them in `test/grill-commands.integration.spec.ts`,
+  also `/approve` after a 👀 wait and after a "Still open" round, and the matrix's `grill: skip` while stopped by
+  a failure, then `/retry`)
 
 **Dependencies:** T16
 **Files:** `src/grill/grill.handler.ts`, `src/grill/grill.store.ts`, `test/grill-commands.integration.spec.ts`
@@ -666,8 +669,11 @@ second → nothing; your next answer gets a normal reply. On a run stopped by a 
 stopped, then `/retry` (key fixed) → "Grill Me stopped (`grill: skip` is on): …" and the `spec` stop, no question.
 **Matrix rows:** "Commands while asking": `/approve`, `grill: skip`, the add-and-remove row; "Failure and
 `/retry`": the second.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] The rows above, ticked in the spec
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] The rows above, ticked in the spec (2026-11-18: on two new issues, `#G` = #28 and `#H` = #29, instead of a
+  new run on `#A` or `#E`: a restart before T18 would post a run-ended comment without the answers block, and
+  `#A`'s answered rounds are Checkpoint 6's; the first rows with `gemini-4-carbon` as the sandbox's standard model:
+  its 3 answers took 36 s on average, and its 2 failures were absorbed by the worker's own retry)
 - [ ] You review and commit
 
 ---

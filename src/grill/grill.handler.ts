@@ -19,15 +19,20 @@ import type {
 import { issueTag } from '../workflow/task.service.js';
 import { AnswerReader } from './answer-reader.service.js';
 import {
+  approveMarker,
+  approveReply,
   clearComment,
   clearMarker,
   limitBody,
   roundMarker,
   skippedComment,
   skippedMarker,
+  stoppedComment,
+  stoppedMarker,
 } from './grill-comments.js';
 import {
   GrillEvaluationService,
+  questionsOf,
   type Evaluated,
 } from './grill-evaluation.service.js';
 import { GrillStore } from './grill.store.js';
@@ -67,10 +72,10 @@ export class GrillHandler implements StepHandler {
         return this.round(context, session, recovered);
       case 'skip':
         return this.skip(context, session);
+      case 'approve':
+        return this.approve(context, session);
       default:
-        throw new Error(
-          `grill ${context.op} is built in a later task of spec 6`,
-        );
+        throw new Error(`grill: no ${context.op} op`);
     }
   }
 
@@ -159,16 +164,15 @@ export class GrillHandler implements StepHandler {
   }
 
   /**
-   * `grill: skip` before the first question (GM8, GM15): the unread answers go into the session without a model
-   * call, so the Spec sees them; then the skipped comment, which names nobody (GMW5). The router runs the Spec next.
+   * `grill: skip` (GM8, GM15): the unread answers go into the session without a model call, so the Spec sees them.
+   * Before the first question: `SKIPPED` and the skipped comment, which names nobody (GMW5). While asking:
+   * `STOPPED` and the stopped comment, naming who added the label when its own event took the skip path. The router
+   * runs the Spec next.
    */
   private async skip(
     context: StepContext,
     found: GrillSession | null,
   ): Promise<void> {
-    if (found && found.rounds > 0) {
-      throw new Error('grill skip while asking is built in spec 6 plan T17');
-    }
     const session =
       found ?? (await this.store.createSession(context.lease, context.run.id));
     const unread = await this.reader.unread(
@@ -176,14 +180,65 @@ export class GrillHandler implements StepHandler {
       context.run,
       session.id,
     );
-    await this.store.recordSkipped(context.lease, session.id, unread);
-    this.log(
-      context,
-      `skipped by grill: skip (${unread.length} comments read)`,
+    if (session.rounds === 0) {
+      await this.store.recordSkipped(context.lease, session.id, unread);
+      this.log(
+        context,
+        `skipped by grill: skip (${unread.length} comments read)`,
+      );
+      await this.postOnce(context, skippedMarker(session.id), () =>
+        Promise.resolve(skippedComment(session.id)),
+      );
+      return;
+    }
+    const stoppedBy =
+      context.input.type === 'SKIP_ADDED' ? context.input.sender : null;
+    await this.store.recordStopped(context.lease, session.id, unread, {
+      afterRound: session.rounds,
+      stoppedBy,
+    });
+    this.log(context, 'stopped by grill: skip');
+    await this.postOnce(context, stoppedMarker(session.id), () =>
+      Promise.resolve(stoppedComment(session.id, stoppedBy)),
     );
-    await this.postOnce(context, skippedMarker(session.id), () =>
-      Promise.resolve(skippedComment(session.id)),
+  }
+
+  /**
+   * `/approve` while asking (GM8): one reply per `/approve` comment with the questions open now; nothing else
+   * changes.
+   */
+  private async approve(
+    context: StepContext,
+    session: GrillSession | null,
+  ): Promise<void> {
+    if (!session) throw new Error('grill approve: the run has no session');
+    const { input } = context;
+    if (input.type !== 'APPROVE') {
+      throw new Error(`grill approve: a ${input.type} event`);
+    }
+    const { id } = input.comment;
+    await this.postOnce(context, approveMarker(id), async () =>
+      approveReply(id, await this.openNow(session)),
     );
+  }
+
+  /**
+   * From the latest evaluation that acted: after a question comment, its questions and the earlier ones it lists
+   * as still open; after a 👀 wait, the ones that evaluation lists.
+   */
+  private async openNow(session: GrillSession): Promise<number[]> {
+    const evaluation = await this.actingEvaluation(session);
+    if (evaluation.result === 'WAITING') return ascending(evaluation.open);
+    const round = await this.store.roundOf(evaluation.id);
+    if (!round) {
+      throw new Error(
+        `grill evaluation ${evaluation.id} is ${evaluation.result} with no round`,
+      );
+    }
+    return ascending([
+      ...round.stillOpen,
+      ...questionsOf(round).map(({ number }) => number),
+    ]);
   }
 
   /** Plan P1: an ended session posts its closing comment if it is missing, then answers every op the same way. */
@@ -205,6 +260,12 @@ export class GrillHandler implements StepHandler {
           Promise.resolve(skippedComment(session.id)),
         );
         return CLEAR;
+      case 'STOPPED':
+        // Rebuilt with the stored login, so a retried post names the same person.
+        await this.postOnce(context, stoppedMarker(session.id), () =>
+          Promise.resolve(stoppedComment(session.id, session.stoppedBy)),
+        );
+        return CLEAR;
       case 'LIMIT':
         // GM9: spec 5 stops the run with this body (its marker, no restart line); the same text on every retry.
         return { type: 'LIMIT', body: await this.limitText(context, session) };
@@ -217,7 +278,7 @@ export class GrillHandler implements StepHandler {
 
   /** Built from the stored evaluation (plan P2), so a retried post is the same comment. */
   private async clearText(session: GrillSession): Promise<string> {
-    const evaluation = await this.endingEvaluation(session);
+    const evaluation = await this.actingEvaluation(session);
     return clearComment(session.id, {
       confidence: evaluation.confidence,
       threshold: this.threshold,
@@ -230,7 +291,7 @@ export class GrillHandler implements StepHandler {
     context: StepContext,
     session: GrillSession,
   ): Promise<string> {
-    const evaluation = await this.endingEvaluation(session);
+    const evaluation = await this.actingEvaluation(session);
     return limitBody({
       rounds: session.rounds,
       confidence: evaluation.confidence,
@@ -241,8 +302,8 @@ export class GrillHandler implements StepHandler {
     });
   }
 
-  /** The evaluation that ended the session: nothing is evaluated after it. */
-  private async endingEvaluation(
+  /** The latest evaluation that acted; for an ended session, the one that ended it (nothing is evaluated after). */
+  private async actingEvaluation(
     session: GrillSession,
   ): Promise<GrillEvaluation> {
     const evaluation = await this.store.latestActingEvaluation(session.id);
@@ -311,4 +372,9 @@ export class GrillHandler implements StepHandler {
       `${issueTag(context.task.ref.externalRef)} run ${context.run.number} grill: ${message}`,
     );
   }
+}
+
+/** Question numbers, each once, in order. */
+function ascending(numbers: number[]): number[] {
+  return [...new Set(numbers)].sort((a, b) => a - b);
 }
