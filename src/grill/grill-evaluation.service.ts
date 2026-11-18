@@ -30,8 +30,8 @@ import {
   type RoundQuestion,
 } from './grill.store.js';
 
-/** What an evaluation did (spec "One evaluation", step 5). Posting is the caller's. */
-export type Evaluated = 'ASKED' | 'CLEAR';
+/** What an evaluation did (spec "One evaluation", step 5). Posting, the 👀 and the stop body are the caller's. */
+export type Evaluated = 'ASKED' | 'CLEAR' | 'WAITING' | 'LIMIT';
 
 @Injectable()
 export class GrillEvaluationService {
@@ -168,11 +168,31 @@ export class GrillEvaluationService {
       this.log(context, `evaluation → CLEAR (confidence ${output.confidence})`);
       return 'CLEAR';
     }
+    const open = openOf(output);
     if (output.questions.length === 0) {
-      throw new Error('spec 6 plan T15 builds waiting for open questions');
+      // Below the threshold with nothing new to ask: the schema lets that through only with questions still open
+      // (GMW4). Waiting never counts against the limit.
+      await this.store.recordEvaluation(context.lease, session.id, {
+        result: 'WAITING',
+        evaluation: record,
+        answers: read,
+      });
+      this.log(
+        context,
+        `evaluation → WAITING (open ${open.map((number) => `Q${number}`).join(', ')}; 👀 on ${read.length} ` +
+          `comment${read.length === 1 ? '' : 's'})`,
+      );
+      return 'WAITING';
     }
     if (session.rounds >= this.maxRounds) {
-      throw new Error('spec 6 plan T16 builds the round limit');
+      // GM9: it wants to ask again, but the rounds are used up (a lowered setting counts too). The session ends.
+      await this.store.recordEvaluation(context.lease, session.id, {
+        result: 'LIMIT',
+        evaluation: record,
+        answers: read,
+      });
+      this.log(context, `evaluation → LIMIT (confidence ${output.confidence})`);
+      return 'LIMIT';
     }
     const questions = output.questions
       .slice(0, this.k)
@@ -181,7 +201,6 @@ export class GrillEvaluationService {
         question: cleanModelText(question),
         guess: cleanModelText(guess),
       }));
-    const stillOpen = [...new Set(output.open)].sort((a, b) => a - b);
     const roundId = randomUUID();
     const number = session.rounds + 1;
     await this.store.recordEvaluation(context.lease, session.id, {
@@ -192,7 +211,7 @@ export class GrillEvaluationService {
         id: roundId,
         number,
         questions,
-        stillOpen,
+        stillOpen: open,
         body: roundComment({
           roundId,
           round: number,
@@ -200,7 +219,7 @@ export class GrillEvaluationService {
           confidence: output.confidence,
           threshold: this.threshold,
           questions,
-          stillOpen,
+          stillOpen: open,
           notes: record.notes,
         }),
       },
@@ -236,6 +255,11 @@ function recordOf(
     gaps: output.gaps,
     notes: result.notes,
   };
+}
+
+/** The earlier questions the model lists as still open, each once, in order. */
+function openOf(output: GrillOutput): number[] {
+  return [...new Set(output.open)].sort((a, b) => a - b);
 }
 
 /** A round's questions as Tx1 stored them. */

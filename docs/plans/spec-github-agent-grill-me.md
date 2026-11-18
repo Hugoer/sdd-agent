@@ -538,24 +538,25 @@ evaluation without their 👀 get it. Step 3's return values (`ASKED` when step 
 of its own: the reader reads the comments written while the run was stopped.
 
 **Acceptance criteria:**
-- [ ] Round 1 posted; one comment answering both → one evaluation, round 2 from Q3 with "Still open from before"
+- [x] Round 1 posted; one comment answering both → one evaluation, round 2 from Q3 with "Still open from before"
   when the model lists an earlier number; or `CLEAR` → nothing posted, the `spec` stop; no 👀 (integration)
-- [ ] A partial answer → `WAITING`: 👀 on that comment, `acknowledged` true, no comment, `status: grilling`,
+- [x] A partial answer → `WAITING`: 👀 on that comment, `acknowledged` true, no comment, `status: grilling`,
   `rounds` unchanged; then the rest → one reply (integration)
-- [ ] `acknowledgeComment` failing once → retried → the 👀 added, no second model call (integration)
-- [ ] Two answer events stored before the worker runs → one evaluation reading both; the second event `DONE`, no
+- [x] `acknowledgeComment` failing once → retried → the 👀 added, no second model call (integration)
+- [x] Two answer events stored before the worker runs → one evaluation reading both; the second event `DONE`, no
   call, log `nothing new (comment N already read)` (integration)
-- [ ] GM12: the model fails with a permanent code → stop at `grill`; a comment while stopped → `IGNORED`
+- [x] GM12: the model fails with a permanent code → stop at `grill`; a comment while stopped → `IGNORED`
   `no-transition`, no reply; `/retry` → one evaluation whose prompt holds both comments, one reply (integration)
-- [ ] GM14's third case: round 2's post fails once (transient) and a new comment's event runs before the retry →
+- [x] GM14's third case: round 2's post fails once (transient) and a new comment's event runs before the retry →
   round 2 posted once, then that comment evaluated; the retried event posts nothing (integration)
-- [ ] `model: max-grill` on the issue → the evaluation and the round comment name the `max` model; a changed
+- [x] `model: max-grill` on the issue → the evaluation and the round comment name the `max` model; a changed
   description → the next prompt has the new text; an edited comment and an `octocat` comment → never in a prompt
   (integration)
-- [ ] Log `… → WAITING (open Q2, Q3; 👀 on 1 comment)`
+- [x] Log `… → WAITING (open Q2, Q3; 👀 on 1 comment)`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (2026-11-18: unit 44
+  files / 1,038 tests; integration 24 files / 233 tests, 8 of them in `test/grill-round.integration.spec.ts`)
 
 **Dependencies:** T2, T13
 **Files:** `src/grill/grill-evaluation.service.ts`, `src/grill/grill.handler.ts`, `src/grill/grill.store.ts`,
@@ -574,19 +575,23 @@ answers: spec 4's re-ask, then `invalid-answer` (retryable). The limit suite boo
 imports (e.g. `vi.hoisted`; each integration file runs in its own module scope).
 
 **Acceptance criteria:**
-- [ ] `GRILL_MAX_ROUNDS=1`: round 1 posted, an answer, the model wants a new question → `needs-human`, one stop
+- [x] `GRILL_MAX_ROUNDS=1`: round 1 posted, an answer, the model wants a new question → `needs-human`, one stop
   comment = the limit body (gaps, three numbered steps naming `workflow: full-sdd`, the model line) with no "To start
   again from scratch" line; the run's stop `grill-limit`, not retryable (integration)
-- [ ] At the limit, nothing new but Q1 open → 👀, no stop (integration)
-- [ ] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …"
+- [x] At the limit, nothing new but Q1 open → 👀, no stop (integration)
+- [x] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …"
   (integration)
-- [ ] The stop's write failing once (the lease taken) → retried → the same body, no second model call (integration)
-- [ ] Three answers with `open: [7]` after five questions → `invalid-answer` stop with the `/retry` line; three
-  `execution_logs` rows, attempt 2's prompt has the re-ask naming the rule (integration)
-- [ ] Log `… → LIMIT (confidence 80)`
+- [x] The stop's write failing once (the lease taken) → retried → the same body, no second model call (integration)
+- [x] Three answers with `open: [7]` after five questions → `invalid-answer` stop with the `/retry` line; three
+  `execution_logs` rows, attempt 2's prompt has the re-ask naming the rule (integration) (2026-11-18: after round
+  1's three questions, since this suite runs with one round: "open lists Q7, but only Q1–Q3 were asked")
+- [x] Log `… → LIMIT (confidence 80)`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (2026-11-18: the same run;
+  5 tests in `test/grill-limit.integration.spec.ts`. The limit body now counts the rounds posted, `rounds` in
+  `limitBody` (was `maxRounds`, the setting): a lowered setting still says how many were used, and a retry
+  rebuilds the same text from the row)
 
 **Dependencies:** T15
 **Files:** `src/grill/grill-evaluation.service.ts`, `src/grill/grill.handler.ts`, `test/grill-limit.integration.spec.ts`
@@ -604,8 +609,11 @@ steps and no restart line, and `/retry` → "needs a restart". With my instance 
 instance killed while the model thinks → still one reply.
 **Matrix rows:** "Questions and answers": every row but the first and `#E`; "Commands while asking": `/retry` and
 `model: max-grill`; "Round limit": the first two; "Failure and `/retry`": the first; "Recovery": the first.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] The rows above, ticked in the spec
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] The rows above, ticked in the spec (2026-11-18: `#A` = #22, `#E` = #25 for the two quick comments, `#D` = #26
+  with my instance at `GRILL_MAX_ROUNDS=1`, a new `#F` = #27 for the comment while thinking and the kill, run again
+  after Google cut their first tries short; `gemini-4-hydrogen` failed 18 of its 31 calls with the real key (HTTP
+  503, once no answer within 300 s), its 13 answers took 60 s on average; `gemini-4-carbon` answered both calls)
 - [ ] You review and commit
 
 ---

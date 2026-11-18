@@ -159,7 +159,7 @@ The bot works only on this repo, never on the bot repo itself.
        "qualityGate": ".github-agent/skills/quality-gate"
      },
      "models": {
-       "standard": { "default": "gemini-4-hydrogen" },
+       "standard": { "default": "gemini-4-carbon" },
        "max": { "default": "gemini-4-carbon" }
      }
    }
@@ -266,7 +266,7 @@ cp .env.example .env
 ```
 
 **Gemini API key.** In [Google AI Studio](https://aistudio.google.com) choose **Get API key → Create API key**,
-in a Google Cloud project. Check that your models are in the key's list (`gemini-4-hydrogen`, `gemini-4-carbon`).
+in a Google Cloud project. Check that your models are in the key's list (`gemini-4-carbon`).
 On a key without billing, Google may use your prompts to improve its products; on a project with billing it
 doesn't. The bot sends issue text to the model, so use a billed project for anything that isn't a test.
 
@@ -555,7 +555,7 @@ npm run llm:smoke -- --issue <n> --step spec --reask                      # forc
 | 8 | The rows of this run read back from the database | count, status, attempt, model, level |
 
 **After a passing run:** one more comment on issue `N` from `<your-app>[bot]` with the summary,
-`[REDACTED: github-token]` and the line `Model: gemini-4-hydrogen (standard)`; one new row per attempt in
+`[REDACTED: github-token]` and the line `Model: gemini-4-carbon (standard)`; one new row per attempt in
 `execution_logs` with `run_id` `smoke-<id>` ("Usage data"). If the issue's text matches a pattern, check 5 also
 posts one warning comment per text, once.
 

@@ -918,33 +918,40 @@ it decides.
   footer; the model line; NO `@` anywhere; one evaluation `ASKED`; its `log_id` is an `execution_logs` row for
   `grill` and this run. (2026-11-18, #22: Google's HTTP 503 first stopped run 1 at `grill` with spec 5's stop
   comment; after `/retry`, the one round comment.)
-- [ ] Answer every question in one comment ("Q1: …, Q2: …") → exactly ONE reply: round 2 numbered on from the last
-  question, or the `spec` stop (clear); NO 👀 on your comment.
-- [ ] In a round with two or more questions, answer only Q1 → 👀 by the bot on your comment and NO new bot
+- [x] Answer every question in one comment ("Q1: …, Q2: …") → exactly ONE reply: round 2 numbered on from the last
+  question, or the `spec` stop (clear); NO 👀 on your comment. (2026-11-18, #22: one comment answering Q2–Q6 →
+  round 3 from Q7, no 👀.)
+- [x] In a round with two or more questions, answer only Q1 → 👀 by the bot on your comment and NO new bot
   comment, or (if your answer raised a new question) one round comment with "Still open from before: …". Status
-  stays `grilling`; with 👀, the round counter does not move.
-- [ ] Then answer the rest → exactly ONE reply.
-- [ ] Two answer comments within a few seconds → ONE reply covering both; the second event `DONE`; no second
-  `ASKED` for it.
-- [ ] Comment, then a second comment while the model is still thinking (watch the log) → one evaluation
-  `SUPERSEDED`, then ONE reply; its prompt in `execution_logs` holds both comments.
-- [ ] A side remark ("@someone can you check this?") while questions are open → 👀 or a new round, never silence and
-  never two bot comments.
-- [ ] Edit an earlier answer → nothing (event `IGNORED` `comment-edited`); the next evaluation's prompt has the
+  stays `grilling`; with 👀, the round counter does not move. (2026-11-18, #22: round 2 with "Still open from
+  before: Q2, Q3"; the 👀 branch on the side remark below.)
+- [x] Then answer the rest → exactly ONE reply. (2026-11-18, #22: the comment two rows up.)
+- [x] Two answer comments within a few seconds → ONE reply covering both; the second event `DONE`; no second
+  `ASKED` for it. (2026-11-18, #25: the issue's lease held for 45 s, so both were stored first; one evaluation
+  read both; the second event logged "nothing new (comment … already read)".)
+- [x] Comment, then a second comment while the model is still thinking (watch the log) → one evaluation
+  `SUPERSEDED`, then ONE reply; its prompt in `execution_logs` holds both comments. (2026-11-18, `#F` = #27: the
+  same event asked again and posted round 2; the second event logged "nothing new (comment … already read)". A
+  first try on #25 got a 503 on the second call, so the second comment's event made the evaluation there.)
+- [x] A side remark ("@someone can you check this?") while questions are open → 👀 or a new round, never silence and
+  never two bot comments. (2026-11-18, #22, mentioning your own login: 👀, `WAITING`, the round counter unchanged.)
+- [x] Edit an earlier answer → nothing (event `IGNORED` `comment-edited`); the next evaluation's prompt has the
   original text.
-- [ ] While asking, add a missing detail to the issue description, then answer → nothing happens on the edit; the
-  next evaluation's prompt (`execution_logs.prompt`) has the new description (GMW2).
+- [x] While asking, add a missing detail to the issue description, then answer → nothing happens on the edit; the
+  next evaluation's prompt (`execution_logs.prompt`) has the new description (GMW2). (2026-11-18, #22: the edit's
+  event `IGNORED` `unsupported-event`.)
 - [x] Issue `#E` written in Spanish + `workflow: spec-code` → the questions and guesses are in Spanish; the header,
   the footer and the model line are in English (GMW7).
-- [ ] Signed comment from `octocat` while questions are open (developer sends it), then your real answer → the
+- [x] Signed comment from `octocat` while questions are open (developer sends it), then your real answer → the
   `octocat` event `IGNORED` `unauthorized`; the next prompt does NOT contain its text; no reaction on it.
 
 **Commands while asking** (`#A`)
 - [ ] `/approve` → exactly ONE reply "There's nothing to approve yet: … (still open: …) … add `grill: skip`."; a
   second `/approve` comment → its own ONE reply; nothing else changes.
-- [ ] `/retry` → spec 5's "Run 1 isn't stopped" reply; NOT read as an answer.
-- [ ] Add `model: max-grill`, then answer → the next evaluation's `execution_logs` row has `gemini-4-carbon`, level
-  `max`; if it posts a question comment, its model line says `gemini-4-carbon` (max).
+- [x] `/retry` → spec 5's "Run 1 isn't stopped" reply; NOT read as an answer.
+- [x] Add `model: max-grill`, then answer → the next evaluation's `execution_logs` row has `gemini-4-carbon`, level
+  `max`; if it posts a question comment, its model line says `gemini-4-carbon` (max). (2026-11-18, #22: `WAITING`,
+  so no question comment.)
 - [ ] Add `grill: skip` → ONE comment "Grill Me stopped by `<you>` (`grill: skip` added): writing the Spec from the
   issue and the answers so far."; then the stop at `spec`; session `STOPPED`, rounds kept; no model call for it.
 - [ ] On another asking issue, add `grill: skip` and remove it within a second → no stopped comment; the add's
@@ -959,10 +966,10 @@ it decides.
 **Round limit** (`GRILL_MAX_ROUNDS=1`, issue `#D` vague; answer so that new topics open, e.g. "Q1: it depends,
 it must also sync with the bank and handle three currencies", and again if the bot only reacts with 👀: the limit
 needs the bot to want a new question)
-- [ ] → `status: needs-human`; ONE stop comment as in "Round limit", starting "⚠️ **Grill Me used its only round
+- [x] → `status: needs-human`; ONE stop comment as in "Round limit", starting "⚠️ **Grill Me used its only round
   and is N% sure**" (plan P3), with the three numbered steps and NO "To start again from scratch" line; the model
-  line last; `db:runs`: stop `grill: grill-limit`, not retryable.
-- [ ] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …".
+  line last; `db:runs`: stop `grill: grill-limit`, not retryable. (2026-11-18, `#D` = #26: 20% sure, ten gaps.)
+- [x] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …".
 - [ ] Remove `workflow: full-sdd` → ONE run-ended comment ending with the answers block (code block; Q1 … with
   *Guess* lines; `<you>: …` with your answers as written); nobody notified by it.
 - [ ] Paste the answers into the description, add the label again → run 2's first comment starts at Q1 (or is
@@ -979,16 +986,21 @@ needs the bot to want a new question)
   code block, has no marker, and cuts the long answer with a link to it.
 
 **Failure and `/retry`** (GM12)
-- [ ] Set a wrong `GOOGLE_API_KEY`, restart, answer → the run stops (`bad-api-key`, with `/retry`); add "Q3: weekly"
+- [x] Set a wrong `GOOGLE_API_KEY`, restart, answer → the run stops (`bad-api-key`, with `/retry`); add "Q3: weekly"
   while stopped → no reply; fix the key, restart, `/retry` → ONE reply; its prompt holds both comments.
+  (2026-11-18, #22: Q8 with the wrong key, Q9 while stopped; with the key fixed, Google's 503 stopped the run once
+  more, and the next `/retry` gave the one reply: `CLEAR` at 96%, the `spec` stop.)
 - [ ] The same stop again; add `grill: skip` while stopped → no reply; fix the key, `/retry` → ONE "Grill Me stopped
   (`grill: skip` is on): …" comment and the stop at `spec`; NO question comment (GM15).
 - [ ] The same stop with your answer "Q4: …" unread; remove the label instead of `/retry` → the run-ended block
   includes "Q4: …" (GM16).
 
 **Recovery**
-- [ ] Kill the app while the model is thinking (between your answer and the reply), start it again → exactly ONE
-  reply; `execution_logs` may show one extra call.
+- [x] Kill the app while the model is thinking (between your answer and the reply), start it again → exactly ONE
+  reply; `execution_logs` may show one extra call. (2026-11-18, #27: killed 5 s into the call reading an answer;
+  on restart the worker took the event up again and posted the one reply, the `spec` stop after `CLEAR` at 96% on
+  `gemini-4-carbon` (`model: max-grill`); a killed call leaves no `execution_logs` row. Two earlier tries, on #23
+  and #27, ended in Google stops after the restart.)
 - [ ] The overview's row "kill right after a question is posted, before it's recorded" → covered by the
   integration test (the window is too short by hand).
 

@@ -21,7 +21,8 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   through `ChatGoogle` behind `CHAT_MODEL_FACTORY` (300 s, no hidden retry), judges the answer with Zod, re-asks
   up to twice and writes one `execution_logs` row per attempt. `SecretScanModule` wraps both ports; five model
   labels (16 in all); `npm run llm:smoke` and `npm run db:usage`. No workflow step calls a model yet. Sandbox
-  models: `gemini-4-hydrogen` (standard), `gemini-4-carbon` (max). Spec 5 (`router-session-lease`) built
+  model: `gemini-4-carbon` for both levels (standard was `gemini-4-hydrogen` until 2026-11-18: too
+  many HTTP 503s). Spec 5 (`router-session-lease`) built
   2026-11-17: `WorkflowModule` (`src/workflow`): `WorkflowEventProcessor` (intake, then the router) replaces
   spec 2's placeholder; `tasks` and `runs` tables (`TaskService`, `RunService`); a session lease per issue
   (`SESSION_LEASE_SECONDS`, heartbeat); pure `decide()` with overview §3's rows; the router runs the action, the

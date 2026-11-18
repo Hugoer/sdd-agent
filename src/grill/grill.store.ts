@@ -119,6 +119,18 @@ export class GrillStore {
     });
   }
 
+  /** Comments a `WAITING` evaluation read whose 👀 isn't recorded yet (a crash or a failed reaction after Tx1). */
+  unacknowledged(sessionId: string): Promise<GrillAnswer[]> {
+    return this.prisma.grillAnswer.findMany({
+      where: {
+        sessionId,
+        acknowledged: false,
+        evaluation: { result: 'WAITING' },
+      },
+      orderBy: [{ createdAt: 'asc' }, { commentId: 'asc' }],
+    });
+  }
+
   /** The ids of the comments it has read (a comment is read once, GMW1). */
   async readCommentIds(sessionId: string): Promise<Set<string>> {
     const rows = await this.prisma.grillAnswer.findMany({
@@ -216,6 +228,20 @@ export class GrillStore {
       tx.grillRound.update({
         where: { id: roundId },
         data: { ...posted, postState: 'POSTED' },
+      }),
+    );
+  }
+
+  /** The bot's 👀 is on these comments of the session. */
+  async markAcknowledged(
+    lease: HeldLease,
+    sessionId: string,
+    commentIds: string[],
+  ): Promise<void> {
+    await this.write(lease, (tx) =>
+      tx.grillAnswer.updateMany({
+        where: { sessionId, commentId: { in: commentIds } },
+        data: { acknowledged: true },
       }),
     );
   }

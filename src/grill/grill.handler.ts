@@ -7,7 +7,10 @@ import {
   ISSUE_PROVIDER,
   type IssueProvider,
 } from '../contracts/issue-provider.js';
-import type { GrillSession } from '../generated/prisma/client.js';
+import type {
+  GrillEvaluation,
+  GrillSession,
+} from '../generated/prisma/client.js';
 import type { StepOutcome } from '../workflow/decide.js';
 import type {
   StepContext,
@@ -18,11 +21,15 @@ import { AnswerReader } from './answer-reader.service.js';
 import {
   clearComment,
   clearMarker,
+  limitBody,
   roundMarker,
   skippedComment,
   skippedMarker,
 } from './grill-comments.js';
-import { GrillEvaluationService } from './grill-evaluation.service.js';
+import {
+  GrillEvaluationService,
+  type Evaluated,
+} from './grill-evaluation.service.js';
 import { GrillStore } from './grill.store.js';
 
 const ASKED: StepOutcome = { type: 'ASKED' };
@@ -45,9 +52,10 @@ export class GrillHandler implements StepHandler {
 
   async run(context: StepContext): Promise<StepOutcome | void> {
     const session = await this.store.session(context.run.id);
-    // 1. Finish: a question comment stored by Tx1 but not posted yet.
+    // 1. Finish: a question comment stored by Tx1 but not posted yet; a wait's 👀 not added yet.
     const recovered =
       session !== null && (await this.postPending(context, session, true));
+    if (session) await this.acknowledgePending(context, session);
     // 2. Own work; 3. return. Grill Me already ended (plan P1): the same answer to every op.
     if (session && session.status !== 'ASKING') {
       return this.ended(context, session);
@@ -56,8 +64,7 @@ export class GrillHandler implements StepHandler {
       case 'start':
         return this.start(context, session);
       case 'round':
-        // Spec 6 plan T15 reads the new answers here.
-        return recovered ? ASKED : undefined;
+        return this.round(context, session, recovered);
       case 'skip':
         return this.skip(context, session);
       default:
@@ -83,13 +90,72 @@ export class GrillHandler implements StepHandler {
       context.run,
       session.id,
     );
+    return this.acted(
+      context,
+      session,
+      await this.evaluation.evaluate(context, session, unread),
+      false,
+    );
+  }
+
+  /**
+   * A comment while asking: the answers not read yet, evaluated if there are any. When the comment that triggered
+   * it was already read (by the evaluation of an earlier event, GM4), there is nothing to do: no model call.
+   */
+  private async round(
+    context: StepContext,
+    session: GrillSession | null,
+    recovered: boolean,
+  ): Promise<StepOutcome | void> {
+    if (!session) throw new Error('grill round: the run has no session');
+    const nothing = recovered ? ASKED : undefined;
+    const trigger =
+      context.input.type === 'COMMENT' ? context.input.comment.id : null;
     if (
-      (await this.evaluation.evaluate(context, session, unread)) === 'CLEAR'
+      trigger !== null &&
+      (await this.store.readCommentIds(session.id)).has(trigger)
     ) {
-      return this.ended(context, { ...session, status: 'CLEAR' });
+      this.log(context, `nothing new (comment ${trigger} already read)`);
+      return nothing;
     }
-    await this.postPending(context, session, false);
-    return ASKED;
+    const unread = await this.reader.unread(
+      context.task.ref,
+      context.run,
+      session.id,
+    );
+    if (unread.length === 0) {
+      this.log(context, 'nothing new');
+      return nothing;
+    }
+    return this.acted(
+      context,
+      session,
+      await this.evaluation.evaluate(context, session, unread),
+      recovered,
+    );
+  }
+
+  /**
+   * After the evaluation's transaction: post the question comment, add the wait's 👀, or end the session; then
+   * step 3's outcome (a wait shows `grilling` only when step 1 posted a round).
+   */
+  private async acted(
+    context: StepContext,
+    session: GrillSession,
+    evaluated: Evaluated,
+    recovered: boolean,
+  ): Promise<StepOutcome | void> {
+    switch (evaluated) {
+      case 'ASKED':
+        await this.postPending(context, session, false);
+        return ASKED;
+      case 'WAITING':
+        await this.acknowledgePending(context, session);
+        return recovered ? ASKED : undefined;
+      case 'CLEAR':
+      case 'LIMIT':
+        return this.ended(context, { ...session, status: evaluated });
+    }
   }
 
   /**
@@ -139,6 +205,9 @@ export class GrillHandler implements StepHandler {
           Promise.resolve(skippedComment(session.id)),
         );
         return CLEAR;
+      case 'LIMIT':
+        // GM9: spec 5 stops the run with this body (its marker, no restart line); the same text on every retry.
+        return { type: 'LIMIT', body: await this.limitText(context, session) };
       default:
         throw new Error(
           `grill: a ${session.status} session is built in a later task of spec 6`,
@@ -148,17 +217,41 @@ export class GrillHandler implements StepHandler {
 
   /** Built from the stored evaluation (plan P2), so a retried post is the same comment. */
   private async clearText(session: GrillSession): Promise<string> {
-    const evaluation = await this.store.latestActingEvaluation(session.id);
-    if (!evaluation) {
-      throw new Error(
-        `grill session ${session.id} is CLEAR with no evaluation`,
-      );
-    }
+    const evaluation = await this.endingEvaluation(session);
     return clearComment(session.id, {
       confidence: evaluation.confidence,
       threshold: this.threshold,
       notes: evaluation.notes,
     });
+  }
+
+  /** The round-limit body from the stored evaluation and the rounds posted (plan P2, P3). */
+  private async limitText(
+    context: StepContext,
+    session: GrillSession,
+  ): Promise<string> {
+    const evaluation = await this.endingEvaluation(session);
+    return limitBody({
+      rounds: session.rounds,
+      confidence: evaluation.confidence,
+      threshold: this.threshold,
+      run: context.run,
+      gaps: evaluation.gaps,
+      notes: evaluation.notes,
+    });
+  }
+
+  /** The evaluation that ended the session: nothing is evaluated after it. */
+  private async endingEvaluation(
+    session: GrillSession,
+  ): Promise<GrillEvaluation> {
+    const evaluation = await this.store.latestActingEvaluation(session.id);
+    if (!evaluation) {
+      throw new Error(
+        `grill session ${session.id} is ${session.status} with no evaluation`,
+      );
+    }
+    return evaluation;
   }
 
   /** "Find the marker, else post" for the stored question comment, then Tx2. */
@@ -182,6 +275,23 @@ export class GrillHandler implements StepHandler {
       this.log(context, `round ${round.number} posted (recovered)`);
     }
     return true;
+  }
+
+  /** 👀 on each comment a `WAITING` evaluation read (adding one twice changes nothing), then recorded. */
+  private async acknowledgePending(
+    context: StepContext,
+    session: GrillSession,
+  ): Promise<void> {
+    const answers = await this.store.unacknowledged(session.id);
+    if (answers.length === 0) return;
+    for (const { commentId } of answers) {
+      await this.issues.acknowledgeComment(context.task.ref, commentId);
+    }
+    await this.store.markAcknowledged(
+      context.lease,
+      session.id,
+      answers.map(({ commentId }) => commentId),
+    );
   }
 
   /** Spec 5's rule for every other comment: find the marker, else post. */

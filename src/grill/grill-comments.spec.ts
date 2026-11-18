@@ -38,7 +38,7 @@ const ROUND_2: RoundCommentInput = {
 };
 
 const LIMIT: LimitBodyInput = {
-  maxRounds: 5,
+  rounds: 5,
   confidence: 80,
   threshold: 95,
   run: { number: 2, lane: 'full-sdd' },
@@ -233,7 +233,7 @@ describe('the other texts (spec 6)', () => {
   });
 
   it('plan P3: with one round allowed, "used its only round"', () => {
-    expect(limitBody({ ...LIMIT, maxRounds: 1 }).split('\n')[0]).toBe(
+    expect(limitBody({ ...LIMIT, rounds: 1 }).split('\n')[0]).toBe(
       '⚠️ **Grill Me used its only round and is 80% sure** (it writes the Spec at 95%), so run 2 stopped here.',
     );
   });

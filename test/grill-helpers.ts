@@ -1,6 +1,6 @@
 // Spec 6: shared steps of the Grill Me suites (the real handler, the scripted model, real PostgreSQL).
 import { Logger } from '@nestjs/common';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import type { TaskRef } from '../src/contracts/issue-provider.js';
 import type {
   GrillAnswer,
@@ -9,7 +9,11 @@ import type {
   GrillSession,
 } from '../src/generated/prisma/client.js';
 import type { TestApp } from './app.js';
-import { issuesLabeled } from './fixtures/github/payloads.js';
+import {
+  issueCommentCreated,
+  issuesLabeled,
+} from './fixtures/github/payloads.js';
+import { deliver, seedIssue } from './router-helpers.js';
 
 /** A model answer for Grill Me; `questions` as a number makes "Question n?" with "Guess n.". */
 export function grillAnswer({
@@ -40,6 +44,25 @@ export function grillAnswer({
 /** The lane label added to issue `number`. */
 export function laneAdded(number: number, lane = 'full-sdd') {
   return issuesLabeled({ number, label: `workflow: ${lane}` });
+}
+
+/** A comment on issue `number` by the test's human (an Approver unless the test says otherwise). */
+export function commented(number: number, commentId: number, body: string) {
+  return issueCommentCreated({ number, commentId, body });
+}
+
+/** Issue `number` in `workflow: full-sdd` with round 1 posted: Q1 … Q`questions` (one scripted model call). */
+export async function askedRound1(
+  t: TestApp,
+  number: number,
+  questions = 2,
+): Promise<TaskRef> {
+  const issue = seedIssue(t, number, { labels: ['workflow: full-sdd'] });
+  t.models.replyJson(grillAnswer({ confidence: 50, questions }));
+  expect(await deliver(t, laneAdded(number))).toMatchObject({
+    status: 'DONE',
+  });
+  return issue;
 }
 
 export interface GrillRows {

@@ -161,8 +161,8 @@ export function approveReply(commentId: string, open: number[]): string {
 }
 
 export interface LimitBodyInput {
-  /** `GRILL_MAX_ROUNDS`. */
-  maxRounds: number;
+  /** The question comments posted: `GRILL_MAX_ROUNDS`, or more when the setting was lowered. */
+  rounds: number;
   confidence: number;
   threshold: number;
   run: { number: number; lane: Lane };
@@ -175,9 +175,9 @@ export interface LimitBodyInput {
 export function limitBody(input: LimitBodyInput): string {
   const gaps = input.gaps.map(cleanModelText);
   const used =
-    input.maxRounds === 1
+    input.rounds === 1
       ? 'used its only round'
-      : `used all ${input.maxRounds} rounds`;
+      : `used all ${input.rounds} rounds`;
   const lines = [
     `⚠️ **Grill Me ${used} and is ${input.confidence}% sure** (it writes the Spec at ${input.threshold}%), ` +
       `so run ${input.run.number} stopped here.`,
