@@ -13,11 +13,13 @@ import type {
 } from '../generated/prisma/client.js';
 import type { StepOutcome } from '../workflow/decide.js';
 import type {
+  CancelContext,
   StepContext,
   StepHandler,
 } from '../workflow/step-handler.registry.js';
 import { issueTag } from '../workflow/task.service.js';
 import { AnswerReader } from './answer-reader.service.js';
+import { answersBlock } from './answers-block.js';
 import {
   approveMarker,
   approveReply,
@@ -77,6 +79,38 @@ export class GrillHandler implements StepHandler {
       default:
         throw new Error(`grill: no ${context.op} op`);
     }
+  }
+
+  /**
+   * Spec "Cancel and restart: the answers block" (GM10, GM16, GM17): when the run is cancelled or replaced, the
+   * answers it hadn't read that were received before the ending event are read (no model call), an `ASKING` session
+   * closes as `CANCELLED`, and the block of every answered round goes into spec 5's run-ended comment. A run with no
+   * session (`code-only`, or cancelled before its first evaluation) → null. Called again when the comment is posted
+   * later: the same rows give the same block.
+   */
+  async onCancel(context: CancelContext): Promise<string | null> {
+    const session = await this.store.session(context.run.id);
+    if (!session) return null;
+    const unread = await this.reader.unread(
+      context.task.ref,
+      context.run,
+      session.id,
+      context.endEventReceivedAt,
+    );
+    await this.store.recordCancelled(context.lease, session, unread);
+    const [rounds, answers] = await Promise.all([
+      this.store.rounds(session.id),
+      this.store.answers(session.id),
+    ]);
+    return answersBlock({
+      run: context.run.number,
+      end: context.end,
+      rounds: rounds.map((round) => ({
+        number: round.number,
+        questions: questionsOf(round),
+      })),
+      answers,
+    });
   }
 
   /**
@@ -270,8 +304,9 @@ export class GrillHandler implements StepHandler {
         // GM9: spec 5 stops the run with this body (its marker, no restart line); the same text on every retry.
         return { type: 'LIMIT', body: await this.limitText(context, session) };
       default:
+        // CANCELLED: its run has ended, so no step is called for it.
         throw new Error(
-          `grill: a ${session.status} session is built in a later task of spec 6`,
+          `grill: no op runs for a ${session.status} session (its run has ended)`,
         );
     }
   }

@@ -284,6 +284,32 @@ export class GrillStore {
     });
   }
 
+  /**
+   * The cancel hook (GM10, GM16): the answers not read yet, read without a model call, after the rounds posted;
+   * an `ASKING` session ends `CANCELLED`, one that already ended keeps its status. A second call reads nothing new
+   * and changes nothing.
+   */
+  async recordCancelled(
+    lease: HeldLease,
+    session: Pick<GrillSession, 'id' | 'rounds'>,
+    answers: AnswerRecord[],
+  ): Promise<void> {
+    await this.write(lease, async (tx) => {
+      await tx.grillAnswer.createMany({
+        data: answers.map((answer) => ({
+          ...answer,
+          sessionId: session.id,
+          evaluationId: null,
+          afterRound: session.rounds,
+        })),
+      });
+      await tx.grillSession.updateMany({
+        where: { id: session.id, status: 'ASKING' },
+        data: { status: 'CANCELLED', endedAt: await dbNow(tx) },
+      });
+    });
+  }
+
   private async endUnevaluated(
     lease: HeldLease,
     sessionId: string,

@@ -41,11 +41,7 @@ const SPAN_OR_MENTION = new RegExp(
  * those characters are dropped first.
  */
 export function cleanModelText(text: string): string {
-  let cleaned = text;
-  for (let before = ''; before !== cleaned;) {
-    before = cleaned;
-    cleaned = cleaned.replace(HIDDEN_MARKER, '');
-  }
+  let cleaned = withoutMarkers(text);
   const outsideCode = cleaned.replace(CODE_SPAN, '');
   if (
     mentions(outsideCode) &&
@@ -56,6 +52,16 @@ export function cleanModelText(text: string): string {
   return cleaned.replace(SPAN_OR_MENTION, (match) =>
     match.startsWith('`') ? match : `\`${match}\``,
   );
+}
+
+/** Hidden `sdd-agent` markers removed, again until none is left, so removing one can't join a new one. */
+export function withoutMarkers(text: string): string {
+  let cleaned = text;
+  for (let before = ''; before !== cleaned;) {
+    before = cleaned;
+    cleaned = cleaned.replace(HIDDEN_MARKER, '');
+  }
+  return cleaned;
 }
 
 function mentions(text: string): boolean {

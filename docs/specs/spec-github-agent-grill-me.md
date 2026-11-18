@@ -975,20 +975,24 @@ needs the bot to want a new question)
   and is N% sure**" (plan P3), with the three numbered steps and NO "To start again from scratch" line; the model
   line last; `db:runs`: stop `grill: grill-limit`, not retryable. (2026-11-18, `#D` = #26: 20% sure, ten gaps.)
 - [x] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …".
-- [ ] Remove `workflow: full-sdd` → ONE run-ended comment ending with the answers block (code block; Q1 … with
-  *Guess* lines; `<you>: …` with your answers as written); nobody notified by it.
-- [ ] Paste the answers into the description, add the label again → run 2's first comment starts at Q1 (or is
-  "no questions needed").
+- [x] Remove `workflow: full-sdd` → ONE run-ended comment ending with the answers block (code block; Q1 … with
+  *Guess* lines; `<you>: …` with your answers as written); nobody notified by it. (2026-11-18, #26; the session
+  stays `LIMIT`.)
+- [x] Paste the answers into the description, add the label again → run 2's first comment starts at Q1 (or is
+  "no questions needed"). (2026-11-18, #26: Q1 builds on the pasted answers.)
 
 **Cancel, restart and the block** (`#A`, two answered rounds)
-- [ ] Remove the label → `status: draft`; exactly ONE run-ended comment with a block listing both rounds; re-add →
-  the new first question ignores the old answers (overview row).
-- [ ] While asking, swap `workflow: full-sdd` for `workflow: spec-code` → ONE "replaced" comment with the block,
+- [x] Remove the label → `status: draft`; exactly ONE run-ended comment with a block listing both rounds; re-add →
+  the new first question ignores the old answers (overview row). (2026-11-18, #22: three answered rounds, the
+  edited answer as first written; run 2's prompt has none of them.)
+- [x] While asking, swap `workflow: full-sdd` for `workflow: spec-code` → ONE "replaced" comment with the block,
   whose header says "Run N started from the issue description and won't see them: paste them into your first
-  reply …" (GM17); the new run's first comment starts at Q1.
-- [ ] A run cancelled before anyone answered → the run-ended comment has NO block.
-- [ ] Answers with a ``` fence, a `<!-- sdd-agent:test -->` line and 2,500 characters → the block renders as one
-  code block, has no marker, and cuts the long answer with a link to it.
+  reply …" (GM17); the new run's first comment starts at Q1. (2026-11-18, #22, run 2 → run 3; run 2's round
+  with no answer left out.)
+- [x] A run cancelled before anyone answered → the run-ended comment has NO block. (2026-11-18, #22 run 3.)
+- [x] Answers with a ``` fence, a `<!-- sdd-agent:test -->` line and 2,500 characters → the block renders as one
+  code block, has no marker, and cuts the long answer with a link to it. (2026-11-18, #22 run 4: a four-backtick
+  fence.)
 
 **Failure and `/retry`** (GM12)
 - [x] Set a wrong `GOOGLE_API_KEY`, restart, answer → the run stops (`bad-api-key`, with `/retry`); add "Q3: weekly"
@@ -998,8 +1002,9 @@ needs the bot to want a new question)
 - [x] The same stop again; add `grill: skip` while stopped → no reply; fix the key, `/retry` → ONE "Grill Me stopped
   (`grill: skip` is on): …" comment and the stop at `spec`; NO question comment (GM15). (2026-11-18, `#H` = #29:
   the unread answer read without a model call.)
-- [ ] The same stop with your answer "Q4: …" unread; remove the label instead of `/retry` → the run-ended block
-  includes "Q4: …" (GM16).
+- [x] The same stop with your answer "Q4: …" unread; remove the label instead of `/retry` → the run-ended block
+  includes "Q4: …" (GM16). (2026-11-18, #22 run 4, the label removed while my instance still had the wrong key:
+  the block needs no model call.)
 
 **Recovery**
 - [x] Kill the app while the model is thinking (between your answer and the reply), start it again → exactly ONE

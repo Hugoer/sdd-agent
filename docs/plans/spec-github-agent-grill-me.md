@@ -690,13 +690,15 @@ the issue)"; over 60,000 characters the oldest answers left out and a first line
 cancel or for a replacement (GM17); no answer → `null`.
 
 **Acceptance criteria:**
-- [ ] The spec's example block for the spec's example rounds, word for word (unit)
-- [ ] A ```` ``` ```` fence inside → a four-backtick fence; `<!-- sdd-agent:test -->` gone; 2,500 characters with and
+- [x] The spec's example block for the spec's example rounds, word for word (unit)
+- [x] A ```` ``` ```` fence inside → a four-backtick fence; `<!-- sdd-agent:test -->` gone; 2,500 characters with and
   without a url; 61,000 characters → the oldest left out with the count; a round with no answer left out; the
   replaced header names run N+1 (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass (2026-11-18: unit 45 files / 1,047 tests, 9 of them in
+  `src/grill/answers-block.spec.ts`; the left-out count is the first line inside the code block, and the marker
+  removal is shared with `cleanModelText` as `withoutMarkers`)
 
 **Dependencies:** None
 **Files:** `src/grill/answers-block.ts` (+ `.spec.ts`)
@@ -712,21 +714,23 @@ plan Q1). `GrillService.transcript(runId)` for spec 7: the rounds (questions wit
 as written, comment id, url), in order; exported by `GrillModule`.
 
 **Acceptance criteria:**
-- [ ] Two answered rounds, the label removed → one run-ended comment ending with the block (cancel header), session
+- [x] Two answered rounds, the label removed → one run-ended comment ending with the block (cancel header), session
   `CANCELLED`, `status: draft` (integration)
-- [ ] The lane swapped → the "replaced" comment with GM17's header naming run N+1; the new run starts at Q1 and its
+- [x] The lane swapped → the "replaced" comment with GM17's header naming run N+1; the new run starts at Q1 and its
   prompt has none of the old answers (integration)
-- [ ] GM16: an answer stored while the run is stopped, never read → in the block; one received after the ending
+- [x] GM16: an answer stored while the run is stopped, never read → in the block; one received after the ending
   event → not in it (integration)
-- [ ] The run-ended comment's post failing once → the hook called twice → the same block, the session closed once,
+- [x] The run-ended comment's post failing once → the hook called twice → the same block, the session closed once,
   no answer read twice (integration)
-- [ ] No answer → no block; a `LIMIT` or `STOPPED` session keeps its status, its answers in the block (integration)
-- [ ] A `code-only` run cancelled → no block, no Grill row, no `getAccessLevel` call (integration, the real hook)
-- [ ] `transcript()`: rounds and answers in order; a `SKIPPED` session → only the answers its skip read (none at a
+- [x] No answer → no block; a `LIMIT` or `STOPPED` session keeps its status, its answers in the block (integration)
+- [x] A `code-only` run cancelled → no block, no Grill row, no `getAccessLevel` call (integration, the real hook)
+- [x] `transcript()`: rounds and answers in order; a `SKIPPED` session → only the answers its skip read (none at a
   plain run start) (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (2026-11-18: unit 45
+  files / 1,047 tests; integration 26 files / 255 tests, 10 of them in `test/grill-cancel.integration.spec.ts`;
+  the retried cancel event ends `IGNORED` `no-transition` after posting the pending comment, as spec 5 designed)
 
 **Dependencies:** T17, T18
 **Files:** `src/grill/grill.handler.ts`, `src/grill/grill.store.ts`, `src/grill/grill.service.ts`,
@@ -745,8 +749,9 @@ the description and adding the label again → run 2 starts at Q1 (or "no questi
 "Q4: …" unread, then the label removed → the block has "Q4: …".
 **Matrix rows:** "Cancel, restart and the block": all four; "Round limit": the last two; "Failure and `/retry`":
 the third.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] The rows above, ticked in the spec
+- [x] `typecheck`, `lint`, `test`, `test:integration` green
+- [x] The rows above, ticked in the spec (2026-11-18: `#A` = #22, runs 1 to 4; `#D` = #26; six `gemini-4-carbon`
+  calls, all answered on the first try, 23 s on average)
 - [ ] You review and commit
 
 ---

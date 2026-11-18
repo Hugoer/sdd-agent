@@ -8,11 +8,13 @@ import { WorkflowModule } from '../workflow/workflow.module.js';
 import { AnswerReader } from './answer-reader.service.js';
 import { GrillEvaluationService } from './grill-evaluation.service.js';
 import { GrillHandler } from './grill.handler.js';
+import { GrillService } from './grill.service.js';
 import { GrillStore } from './grill.store.js';
 
 /**
  * Spec 6: Grill Me. Registers the `grill` handler with spec 5's registry; WorkflowModule never imports it
  * (overview §1 module rules). GitHubModule and EventsModule for the issue port and the stored comments (plan P7).
+ * Exports GrillService: the transcript the Spec step reads (spec 7).
  */
 @Module({
   imports: [
@@ -22,7 +24,14 @@ import { GrillStore } from './grill.store.js';
     GitHubModule,
     EventsModule,
   ],
-  providers: [GrillStore, AnswerReader, GrillEvaluationService, GrillHandler],
+  providers: [
+    GrillStore,
+    AnswerReader,
+    GrillEvaluationService,
+    GrillHandler,
+    GrillService,
+  ],
+  exports: [GrillService],
 })
 export class GrillModule implements OnModuleInit {
   constructor(
