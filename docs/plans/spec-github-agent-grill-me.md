@@ -283,16 +283,17 @@ own small transaction, no answers); record an acting evaluation with its answers
 evaluation, a pending round, the ids of the comments it has read. Later tasks add the rest.
 
 **Acceptance criteria:**
-- [ ] The migration applies to an empty test database; `prisma migrate diff` from the migrations to the schema is
-  empty; `tasks` and `runs` keep their columns
-- [ ] A second session for one run, a round number twice in a session, two rounds for one evaluation and one comment
+- [x] The migration applies to an empty test database; `prisma migrate diff` from the migrations to the schema is
+  empty; `tasks` and `runs` keep their columns (2026-11-18: `20261118111741_grill`, applied with the six before it
+  to a new empty database in the test container: "No difference detected")
+- [x] A second session for one run, a round number twice in a session, two rounds for one evaluation and one comment
   read twice in a session all fail (integration)
-- [ ] A write with another lease owner throws `LeaseLostError` and writes nothing, in all four tables (integration)
-- [ ] Tx1 writes the evaluation, its answers, the session and the round together; a failure inside rolls all back
+- [x] A write with another lease owner throws `LeaseLostError` and writes nothing, in all four tables (integration)
+- [x] Tx1 writes the evaluation, its answers, the session and the round together; a failure inside rolls all back
   (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T6 (`assertHeld` exported)
 **Files:** `prisma/schema.prisma`, `prisma/migrations/<ts>_grill/migration.sql`, `test/db.ts`,
@@ -312,17 +313,17 @@ its questions, guesses and answers, then "New comments since the last call" (or 
 evaluation." / "None."); every comment untrusted with key `comment-<id>` and label "the comment by <login>".
 
 **Acceptance criteria:**
-- [ ] Every GMW4 rule has a test: an open number above the last asked, zero or negative; below the threshold with no
+- [x] Every GMW4 rule has a test: an open number above the last asked, zero or negative; below the threshold with no
   question and nothing open; a question or guess over 600 characters; a gap over 200; 11 gaps; 21 questions; at the
   threshold with questions and open numbers → valid (unit)
-- [ ] The schema goes through `withStructuredOutput` as spec 4 sends it (the scripted model records it), and Zod
+- [x] The schema goes through `withStructuredOutput` as spec 4 sends it (the scripted model records it), and Zod
   judges the raw answer: a mismatch is re-asked with the rule's message (unit)
-- [ ] The frame equals the spec's text for K 3, threshold 95, rounds 2, max 5 (unit)
-- [ ] The prompt: grouping by round, answers before round 1 first, keys and labels, the three "new comments"
+- [x] The frame equals the spec's text for K 3, threshold 95, rounds 2, max 5 (unit)
+- [x] The prompt: grouping by round, answers before round 1 first, keys and labels, the three "new comments"
   wordings; no comment, title or description text in a plain block (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/grill/grill-output.ts` (+ `.spec.ts`), `src/grill/grill-frame.ts`, `src/grill/grill-prompt.ts`
@@ -340,12 +341,16 @@ backticks (also at a line start or after punctuation; an e-mail address untouche
 marker removed.
 
 **Acceptance criteria:**
-- [ ] Each text equals the spec's example for the same input, marker first (unit)
-- [ ] No text has an `@` outside backticks, also with model text full of mentions (unit over every text)
-- [ ] A question or guess holding `<!-- sdd-agent:needs-human:x:1 -->` posts without it (unit)
+- [x] Each text equals the spec's example for the same input, marker first (unit; 2026-11-18: a paragraph the spec
+  wraps to fit the page is one line in the comment, as in spec 5's texts, since GitHub shows a line break where a
+  comment has one)
+- [x] No text has an `@` outside backticks, also with model text full of mentions (unit over every text; 2026-11-18:
+  mentions written together, `@a@b`, are wrapped as one, and when model text with a mention also has a backtick
+  outside any code span or a backslash, those characters are dropped, so the added backticks always hold)
+- [x] A question or guess holding `<!-- sdd-agent:needs-human:x:1 -->` posts without it (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/grill/grill-comments.ts` (+ `.spec.ts`)
@@ -355,8 +360,8 @@ marker removed.
 
 **On GitHub you'll see:** nothing new (the core isn't wired to the router yet).
 **Matrix rows:** none.
-- [ ] `typecheck`, `lint`, `test`, `test:integration` green
-- [ ] You ran `npm run db:migrate`; `\d grill_sessions`, `\d grill_evaluations`, `\d grill_rounds`, `\d
+- [x] `typecheck`, `lint`, `test`, `test:integration` green (2026-11-18: 1,038 unit, 204 integration)
+- [x] You ran `npm run db:migrate`; `\d grill_sessions`, `\d grill_evaluations`, `\d grill_rounds`, `\d
   grill_answers` show the spec's columns (and `notes`, P2)
 - [ ] You review and commit
 
