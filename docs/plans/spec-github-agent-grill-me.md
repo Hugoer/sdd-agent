@@ -1,8 +1,8 @@
 # Implementation Plan — Spec #6: Grill Me
 
-> **Created:** 2026-11-17 · **Status:** built: Tasks 0–21 done 2026-11-18 and 2026-11-19, the spec's matrix passed
-> on the sandbox; Checkpoint 7 waits for your review and commit · approved 2026-11-17 (fresh-context review
-> 2026-11-17, its 11 findings applied the same day: see "Review"; P1–P5 confirmed the same day)
+> **Created:** 2026-11-17 · **Status:** approved 2026-11-17, **built 2026-11-18 and verified 2026-11-19** (Tasks
+> 0–21, the spec's matrix passed on the sandbox; fresh-context review 2026-11-17, its 11 findings applied the same
+> day: see "Review"; P1–P5 confirmed the same day)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-grill-me.md` (spec 6, `grill-me`,
 > approved 2026-11-17) into ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec
