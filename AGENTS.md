@@ -28,9 +28,18 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (`SESSION_LEASE_SECONDS`, heartbeat); pure `decide()` with overview §3's rows; the router runs the action, the
   pending side effects and the lane-conflict reminder (one per set of labels); run start (check, injection
   warning), cancel and restart with one run-ended comment, `needs-human` with one stop comment and `/retry`,
-  closed issues, stale events. Steps plug in through `StepHandlerRegistry` (none registered yet, so every run
-  stops at its first step with `step-not-built`); `npm run db:runs`. Next in the build order: spec 6
-  (`grill-me`). Repo: `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
+  closed issues, stale events. Steps plug in through `StepHandlerRegistry`; `npm run db:runs`. Spec 6
+  (`grill-me`) built 2026-11-18: `GrillModule` (`src/grill`) registers the `grill` handler. At run start the bot
+  judges the issue with the target repo's `grill` skill (adapted from `interview-me`, MIT; the sandbox holds it
+  and its notice) and says no questions are needed or posts numbered questions with guesses
+  (`GRILL_MAX_QUESTIONS_PER_ROUND` per comment, up to `GRILL_MAX_ROUNDS` comments, until
+  `GRILL_CONFIDENCE_THRESHOLD`). Each answer comment is read once from the stored events (a burst, or comments
+  written during a call or while stopped, read together; 👀 while it waits for open questions); `/approve` and
+  `grill: skip` while asking; the round-limit stop; the answers block in the run-ended comment; four tables
+  (`grill_sessions`, `grill_evaluations`, `grill_rounds`, `grill_answers`) and `GrillService.transcript()` for
+  spec 7. The steps after Grill Me aren't built yet, so a run then stops at `spec` (`step-not-built`). Next in
+  the build order: spec 11 (`skill-discovery`; 2026-11-18, overview D27), then spec 7. Repo:
+  `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
 ## Tech Stack (from the idea doc)

@@ -1,8 +1,9 @@
 # Spec #6 — GitHub AI Agent: Grill Me
 
-> **Created:** 2026-11-17 · **Status:** approved 2026-11-17 (interview 2026-11-17: GM1–GM12 confirmed by
-> the developer; GMW1–GMW10 decided while writing, to review; GM13 from the draft's open question and GM14–GM17
-> from an independent review of the draft, both confirmed the same day) · plan:
+> **Created:** 2026-11-17 · **Status:** built 2026-11-18; every row of the "Verification matrix" passed on the
+> sandbox 2026-11-18 and 2026-11-19 (plan Tasks 0–21) · approved 2026-11-17 (interview 2026-11-17: GM1–GM12
+> confirmed by the developer; GMW1–GMW10 decided while writing, to review; GM13 from the draft's open question
+> and GM14–GM17 from an independent review of the draft, both confirmed the same day) · plan:
 > `docs/plans/spec-github-agent-grill-me.md`, approved 2026-11-17; its decisions P1–P3 and P5–P7 are written into
 > this spec, each marked "plan Pn"
 >
@@ -569,6 +570,8 @@ questions now, add `grill: skip`."
 ```
 
 With no gaps, the "Still unclear" list is left out and step 2 reads "Add those answers to the issue description."
+The number is the question comments posted, so a `GRILL_MAX_ROUNDS` lowered during a run still says how many were
+used (2026-11-18, plan T16).
 
 **Answers block** (appended by spec 5 to the run-ended comment, marker `run-ended:<runId>`):
 
@@ -924,8 +927,10 @@ it decides.
 - [x] In a round with two or more questions, answer only Q1 → 👀 by the bot on your comment and NO new bot
   comment, or (if your answer raised a new question) one round comment with "Still open from before: …". Status
   stays `grilling`; with 👀, the round counter does not move. (2026-11-18, #22: round 2 with "Still open from
-  before: Q2, Q3"; the 👀 branch on the side remark below.)
-- [x] Then answer the rest → exactly ONE reply. (2026-11-18, #22: the comment two rows up.)
+  before: Q2, Q3"; the 👀 branch on the side remark below. Run again 2026-11-19 after plan T17 reworked the wait,
+  #22 run 5: Q1 only → 👀, `WAITING` (open Q2, Q3), no bot comment, still round 1.)
+- [x] Then answer the rest → exactly ONE reply. (2026-11-18, #22: the comment two rows up. 2026-11-19, #22 run 5:
+  Q2 and Q3 → `CLEAR` at 96% and the `spec` stop as the one reply, no Grill Me comment, no 👀.)
 - [x] Two answer comments within a few seconds → ONE reply covering both; the second event `DONE`; no second
   `ASKED` for it. (2026-11-18, #25: the issue's lease held for 45 s, so both were stored first; one evaluation
   read both; the second event logged "nothing new (comment … already read)".)
@@ -964,17 +969,24 @@ it decides.
 
 **Clear and skipped**
 - [x] Issue `#B` with a complete description (who, what, done, out of scope) + `workflow: spec-code` → ONE comment
-  "**Grill Me: no questions needed.** …"; then the stop at `spec`; session `CLEAR`, rounds 0.
+  "**Grill Me: no questions needed.** …"; then the stop at `spec`; session `CLEAR`, rounds 0. (Run again
+  2026-11-19 after plan T17 moved the clear comment into the ended path: #23 run 3, 98%; run 2's run-ended
+  comment has no block.)
 - [x] Issue `#C`: `grill: skip` and `workflow: full-sdd` in one edit → ONE "Grill Me skipped (`grill: skip` is on):
-  …" comment, then the stop at `spec`; NO `execution_logs` row for `grill`.
+  …" comment, then the stop at `spec`; NO `execution_logs` row for `grill`. (Run again 2026-11-19 after plan T17:
+  #24 run 2, the label removed and added again with `grill: skip` still on; no `grill` call on the issue at all.)
 
 **Round limit** (`GRILL_MAX_ROUNDS=1`, issue `#D` vague; answer so that new topics open, e.g. "Q1: it depends,
 it must also sync with the bank and handle three currencies", and again if the bot only reacts with 👀: the limit
 needs the bot to want a new question)
 - [x] → `status: needs-human`; ONE stop comment as in "Round limit", starting "⚠️ **Grill Me used its only round
   and is N% sure**" (plan P3), with the three numbered steps and NO "To start again from scratch" line; the model
-  line last; `db:runs`: stop `grill: grill-limit`, not retryable. (2026-11-18, `#D` = #26: 20% sure, ten gaps.)
+  line last; `db:runs`: stop `grill: grill-limit`, not retryable. (2026-11-18, `#D` = #26: 20% sure, ten gaps.
+  Run again 2026-11-19 after plan T17 moved the limit into the ended path: #26 run 2, whose round 1 "of 5" was
+  posted before my instance restarted with `GRILL_MAX_ROUNDS=1`: "used its only round and is 20% sure", eight
+  gaps.)
 - [x] `/retry` → spec 5's reply "… stopped because the Grill round limit was reached, so it needs a restart …".
+  (2026-11-18 and 2026-11-19, #26 runs 1 and 2: `IGNORED` `retry-refused`.)
 - [x] Remove `workflow: full-sdd` → ONE run-ended comment ending with the answers block (code block; Q1 … with
   *Guess* lines; `<you>: …` with your answers as written); nobody notified by it. (2026-11-18, #26; the session
   stays `LIMIT`.)
@@ -1012,19 +1024,32 @@ needs the bot to want a new question)
   on restart the worker took the event up again and posted the one reply, the `spec` stop after `CLEAR` at 96% on
   `gemini-4-carbon` (`model: max-grill`); a killed call leaves no `execution_logs` row. Two earlier tries, on #23
   and #27, ended in Google stops after the restart.)
-- [ ] The overview's row "kill right after a question is posted, before it's recorded" → covered by the
-  integration test (the window is too short by hand).
+- [x] The overview's row "kill right after a question is posted, before it's recorded" → covered by the
+  integration test (the window is too short by hand). (2026-11-19: `test/grill-start.integration.spec.ts`, "Tx2
+  fails once → the comment is found by its marker: one comment", passes.)
 
-**Invariants**
-- [ ] No bot comment marker appears twice on an issue; no round number appears twice in a run.
-- [ ] Every answer comment from someone with access ends with a bot reply after it or a 👀 on it, except while the
-  run is stopped (answered after `/retry`) or after the run ended.
-- [ ] Question numbers never repeat within a run and start at Q1 in every run.
-- [ ] No Grill Me comment contains an `@` mention.
-- [ ] Waiting never moves "round N of M"; the limit comment appears only when the bot wanted another round.
+**Invariants** (2026-11-19: checked over everything stored since Checkpoint 3, when Grill Me first ran: the 97
+comments on `#A` to `#H` (#22–#29, 61 by the bot) and every Grill row in the dev database: 16 runs, 18 rounds, 32
+evaluations, 22 answers; one script, no failure)
+- [x] No bot comment marker appears twice on an issue; no round number appears twice in a run. (61 markers on 61
+  bot comments; round numbers 1, 2, … in each of the 11 runs with rounds, each header matching its row.)
+- [x] Every answer comment from someone with access ends with a bot reply after it or a 👀 on it, except while the
+  run is stopped (answered after `/retry`) or after the run ended. (All 36 comments by people: the 22 answers,
+  `/retry` and `/approve`; the answers written while a run was stopped got their reply after the `/retry`.)
+- [x] Question numbers never repeat within a run and start at Q1 in every run. (Each posted comment shows the
+  stored numbers.)
+- [x] No Grill Me comment contains an `@` mention. (33 Grill Me comments, the limit stops and the run-ended blocks
+  included; the one `@` name, your side remark, sits inside a block's code fence.)
+- [x] Waiting never moves "round N of M"; the limit comment appears only when the bot wanted another round. (The 3
+  `WAITING` evaluations proposed no question and took no round number; both `LIMIT` evaluations proposed 3.)
 
 **Not checked by hand, covered by automated tests:** the crash windows around Tx1 and Tx2; the cancel hook called
 twice; invalid answers three times; a Participant-only sender (a personal repo has no Triage role, overview).
+(2026-11-19, all passing: `test/grill-start.integration.spec.ts` "Tx1 fails once …", "posting fails once after
+Tx1 …", "Tx2 fails once …"; `test/grill-cancel.integration.spec.ts` "the run-ended comment's post fails once → the
+hook called again …"; `test/grill-limit.integration.spec.ts` "three answers listing Q7 as open … → the
+`invalid-answer` stop …"; `test/answer-reader.integration.spec.ts` "reads plain comments by people with access …"
+and `test/grill-commands.integration.spec.ts` "a Participant's `/approve` → spec 2's reply …".)
 
 ## Success criteria
 
@@ -1033,6 +1058,12 @@ twice; invalid answers three times; a Participant-only sender (a personal repo h
 - The overview, the idea doc's moved parts, the setup guide, `.env.example`, `AGENTS.md` (State) and README reflect
   this spec; the sandbox has the real skill and its notice.
 - No question comment is ever posted twice; every evaluation is in `grill_evaluations` with its `logId`.
+
+All three met 2026-11-19 (plan T21): every row above ticked; the four commands pass (unit 45 files / 1,047 tests,
+integration 26 files / 255 tests); the docs and the sandbox's `main` checked; each of the 18 `grill_rounds` rows
+has exactly one comment with its marker on the sandbox, the one it stores; each of the 32 evaluations has its own
+`execution_logs` row (step `grill`, the same issue and run), and each of the 32 successful `grill` calls of a run
+has its evaluation.
 
 ## Agreed for later specs
 

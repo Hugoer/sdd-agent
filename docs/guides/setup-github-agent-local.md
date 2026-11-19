@@ -14,13 +14,17 @@
 > **Updated:** 2026-11-17 for spec #5 (`docs/specs/spec-github-agent-router-session-lease.md`): the router (status
 > labels, runs, the stop comment), `SESSION_LEASE_SECONDS`, `npm run db:runs`, "When an issue is in
 > `needs-human`" (`/retry` or a restart), the router's ignore reasons.
+> **Updated:** 2026-11-18 for spec #6 (`docs/specs/spec-github-agent-grill-me.md`): Grill Me (the real `grill`
+> skill, the three `GRILL_*` variables, "When the bot asks questions", the Grill tables in "Usage data"), the
+> smoke test.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
 and accepted: `npm run db:events` shows the row `DONE`, the app log shows `accepted ISSUE_OPENED`, and the issue
-gets the `status: draft` label. A `workflow:` label starts a run; the workflow steps (Grill Me onwards) come with
-later specs, so for now every run stops at its first step with `status: needs-human` and one comment saying so.
-The model call the steps will use is in place: `npm run llm:smoke` (section 12) runs it once on a real issue
-with Gemini.
+gets the `status: draft` label. A `workflow:` label starts a run. In `workflow: full-sdd` and `workflow: spec-code`
+its first step, Grill Me, works: the bot asks numbered questions in a comment, or says none are needed, and reads
+your answers ("When the bot asks questions"). The steps after it come with later specs, so a run then stops at the
+Spec (a `workflow: code-only` run at its first step) with `status: needs-human` and one comment saying so.
+`npm run llm:smoke` (section 12) runs the model call once on a real issue with Gemini.
 
 **How the pieces connect:** GitHub sends a webhook → your ngrok static domain → the NestJS app on
 `localhost:3000` → PostgreSQL (Docker) → a background worker → intake: what the event is and whether its sender
@@ -171,12 +175,20 @@ The bot works only on this repo, never on the bot repo itself.
    - Model names must be in your key's model list (Google AI Studio). If a model keeps answering "high demand"
      (step 9, `provider-unavailable`), point the level at another one here: no bot change is needed.
 
-   The five skills, one line each until the step's own spec writes the real one. A skill is text only: every
-   file in its folder goes into the prompt (`SKILL.md` first, at most 204,800 bytes); nothing in it is run:
+   The five skills. A skill is text only: every file in its folder goes into the prompt (`SKILL.md` first, at
+   most 204,800 bytes); nothing in it is run. Grill Me's is real (spec 6): copy the reference sandbox's
+   [`grill/SKILL.md`](https://github.com/Hugoer/sdd-agent-sandbox/blob/main/.github-agent/skills/grill/SKILL.md),
+   adapted from `interview-me` (MIT), with its notice
+   [`THIRD-PARTY-NOTICES.md`](https://github.com/Hugoer/sdd-agent-sandbox/blob/main/.github-agent/skills/THIRD-PARTY-NOTICES.md),
+   which sits outside the skill's folder so it never reaches the model. The others are one line each until the
+   step's own spec writes the real one:
 
    ```sh
+   raw=https://raw.githubusercontent.com/Hugoer/sdd-agent-sandbox/main/.github-agent/skills
+   curl -fsSL "$raw/grill/SKILL.md" -o .github-agent/skills/grill/SKILL.md
+   curl -fsSL "$raw/THIRD-PARTY-NOTICES.md" -o .github-agent/skills/THIRD-PARTY-NOTICES.md
    p() { echo "Placeholder until spec $2 (\`$3\`) writes this step's skill." > .github-agent/skills/$1/SKILL.md; }
-   p grill 6 grill-me; p spec 7 spec-plan-approvals; p plan 7 spec-plan-approvals
+   p spec 7 spec-plan-approvals; p plan 7 spec-plan-approvals
    p code 9 coder; p quality-gate 10 quality-gate
    ```
 
@@ -284,6 +296,9 @@ NGROK_DOMAIN=<step 2>
 GOOGLE_API_KEY=<Google AI Studio>
 TARGET_BASE_BRANCH=main
 SESSION_LEASE_SECONDS=120
+GRILL_MAX_ROUNDS=5
+GRILL_MAX_QUESTIONS_PER_ROUND=3
+GRILL_CONFIDENCE_THRESHOLD=95
 ```
 
 `.env` and `*.pem` are gitignored. Never commit them. Use an absolute path for the key: `~` is not expanded.
@@ -292,6 +307,12 @@ SESSION_LEASE_SECONDS=120
 - `SESSION_LEASE_SECONDS` (default `120`, at least `30`): the bot handles one event per issue at a time and holds
   the issue's lease while it does, renewing it every third of this time. It only matters after a crash: the
   issue's other events wait at most this long. A smaller value makes the app refuse to start, naming it.
+- Grill Me ("When the bot asks questions"), each a whole number; a value outside its range makes the app refuse to
+  start, naming it:
+  - `GRILL_MAX_ROUNDS` (default `5`, 1–10): question comments per run. If the bot still wants to ask after the
+    last one, the run stops at the round limit.
+  - `GRILL_MAX_QUESTIONS_PER_ROUND` (default `3`, 1–10): questions per comment at most, the most important first.
+  - `GRILL_CONFIDENCE_THRESHOLD` (default `95`, 1–100): how sure the bot must be, in %, to write the Spec.
 - **Never set a LangChain tracing switch** (`LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2`, `LANGCHAIN_TRACING`,
   `LANGCHAIN_TRACING_V2`) to `true`, in `.env` or in your shell: it would send every prompt to LangSmith. The app
   refuses to start and names the switch.
@@ -305,7 +326,8 @@ npm run db:migrate   # applies the migrations
 
 **After pulling new code**, run `npm run db:migrate` again before `npm run dev`: a spec can add a column or a
 table (spec 2 added `external_ref` and filled it for the rows you already have; spec 4 added the
-`execution_logs` table; spec 5 added the `tasks` and `runs` tables). Nothing is deleted.
+`execution_logs` table; spec 5 added the `tasks` and `runs` tables; spec 6 the four Grill tables, "Usage data").
+Nothing is deleted.
 
 **Your data** lives in a named Docker volume and survives `npm run db:down` / `db:up`, `docker compose
 restart`, `docker compose down` / `up` and a Docker Desktop restart. Only `docker compose down -v` or
@@ -371,12 +393,23 @@ then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
 
 You can also redeliver the App's earlier failed `ping` (step 9): it's stored as `IGNORED` / `ping`.
 
-Try a label: add `workflow: full-sdd` → `accepted LANE_ADDED full-sdd`, `run 1 started (full-sdd)`, then the run
-stops at its first step (`grill`, not built yet): the row is `FAILED` with that reason, the issue shows
-`status: needs-human` and one comment ("Run 1 stopped at step `grill` …"), and `npm run db:runs` shows the run.
-Add `bug` → `IGNORED` / `other-label`; add `model: max-spec` → `IGNORED` / `model-label` (you're an Approver, so
-it stays). Comment on the issue → `accepted COMMENT`, `IGNORED` / `no-transition`; the log never contains the
-comment's text.
+Try a label: add `workflow: full-sdd` → `accepted LANE_ADDED full-sdd`, `run 1 started (full-sdd)`,
+`run 1: grill (start)`, then Grill Me calls the model (usually under a minute):
+
+```text
+LOG [LlmService] llm grill <you>/sdd-agent-sandbox#<n> gemini-4-carbon (standard) attempt 1: SUCCESS in 19041 ms
+LOG [GrillEvaluationService] #<n> run 1 grill: evaluation → ASKED (round 1, 3 of 3 questions, confidence 30)
+LOG [RouterService] #<n> status: grilling
+```
+
+The issue gets `status: grilling` and one comment "**Grill Me, round 1 of 5** …" with up to three numbered
+questions, each with a guess (for a complete issue, "**Grill Me: no questions needed.**" instead). Comment your
+answers (`Q1: …`): the bot posts the next round, puts 👀 on your comment while other questions are still open, or,
+once it is sure enough, goes on to the Spec, which isn't built yet: the row is `FAILED` with `step-not-built`, the
+issue shows `status: needs-human` and one comment ("Run 1 stopped at step `spec` …"), and `npm run db:runs` shows
+the run. Add `bug` → `IGNORED` / `other-label`; add `model: max-spec` → `IGNORED` / `model-label` (you're an
+Approver, so it stays). A comment on an issue with no run → `accepted COMMENT`, `IGNORED` / `no-transition`. The
+log never contains a comment's text.
 
 ## 9. Troubleshooting
 
@@ -595,6 +628,79 @@ row_of <id>
 The stored prompt holds whatever users wrote in the issue, inside `untrusted-data-…` blocks, as `webhook_events`
 already does. It never holds the bot's own keys.
 
+**Grill Me** keeps what it did in four tables, in numbers and times (its tokens stay in `execution_logs`, joined
+by `log_id`): `grill_sessions` (one per run: how it ended, rounds, first and last confidence), `grill_evaluations`
+(one per model evaluation: result, confidence, questions proposed, the question numbers still open, the gaps),
+`grill_rounds` (one per question comment: its questions and guesses, when it was posted) and `grill_answers` (one
+per comment read as an answer, as written). Every evaluation of one issue, oldest first:
+
+```sh
+set -a; source .env; set +a
+grill_of() {  # grill_of <issue number>
+  docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT e.created_at::time(0) AS at, \
+    r.number AS run, s.status AS session, s.rounds, e.after_round AS after, e.result, e.confidence AS conf, \
+    e.questions_proposed AS proposed, e.open, e.model_level AS level FROM grill_evaluations e \
+    JOIN grill_sessions s ON s.id = e.session_id JOIN runs r ON r.id = s.run_id \
+    JOIN tasks t ON t.id = s.task_id WHERE t.external_ref = '$TARGET_REPO#$1' ORDER BY e.created_at"
+}
+grill_of 14
+```
+
+- `session`: `ASKING` while the bot asks, then `CLEAR` (sure enough; with 0 rounds, clear from the start),
+  `LIMIT` (the round limit), `SKIPPED` (`grill: skip` at the start), `STOPPED` (`grill: skip` while asking) or
+  `CANCELLED` (the run was cancelled or replaced).
+- `after`: the question comments posted when the evaluation ran (0 = before the first). `result`: `ASKED` (posted
+  a round), `WAITING` (👀, waits for the open questions), `CLEAR`, `LIMIT`, or `SUPERSEDED` (thrown away: a comment
+  arrived while the model was thinking, so the bot asked again with it).
+
+## When the bot asks questions
+
+A `workflow: full-sdd` or `workflow: spec-code` run starts with Grill Me (spec 6): the bot judges whether the
+issue says enough to write a Spec, following the target repo's `grill` skill. If it is sure enough
+(`GRILL_CONFIDENCE_THRESHOLD`, 95%), it posts "**Grill Me: no questions needed.**" and goes on to the Spec.
+Otherwise the issue gets `status: grilling` and one comment, "**Grill Me, round 1 of 5** · confidence 40% (the bot
+writes the Spec at 95%)", with up to three numbered questions (`GRILL_MAX_QUESTIONS_PER_ROUND`), each with the
+bot's guess. The questions are in the issue's language; the bot's own lines are in English.
+
+- **Answer** in a comment on the issue, by number: `Q1: only the bill's creator`; `Q2: yes` accepts the guess. One
+  comment or several, in any order. Anyone with Triage access or more can answer ("Reference: who can do what");
+  comments from anyone else, and comments written before the run started, are never read.
+- **Each comment is read once, as written.** An edit isn't read: to change an answer, write a new comment.
+  Comments written while the model is thinking (a call can take a minute) are read in the same go, so one reply
+  covers them all.
+- **The bot's reply** to your answers is one of:
+  - the next round, numbered on from the last question (round 2 starts at Q4 after Q1–Q3), with "Still open from
+    before: …" when some are still unanswered;
+  - a 👀 reaction on your comment and nothing else: the bot read it and waits for the questions still open (the
+    round counter doesn't move);
+  - nothing from Grill Me once it is sure enough: the Spec is the reply. Until spec 7, the run then stops at
+    `spec` (`step-not-built`).
+- **`/approve`** gets one reply listing the questions still open: there's nothing to approve before the Spec.
+  **`/retry`** gets "Run N isn't stopped". Neither is read as an answer.
+- **To stop the questions,** add `grill: skip`: one comment "Grill Me stopped by `<you>` (`grill: skip` added) …",
+  and the bot writes the Spec from the issue and the answers so far. On the issue before the run starts, it skips
+  Grill Me ("Grill Me skipped …").
+- **If a model call fails,** the run stops with `status: needs-human` and a comment naming the cause ("When an
+  issue is in `needs-human`"). Answers written while it is stopped get no reply; after `/retry` the bot reads them
+  all and replies once.
+- **The round limit:** after `GRILL_MAX_ROUNDS` (5) question comments, if the bot still wants to ask, the run stops
+  with "⚠️ **Grill Me used all 5 rounds and is N% sure** …", what is still unclear and three steps: remove the
+  `workflow:` label (the bot posts your answers so far, ready to copy), add them to the issue description, and add
+  the label again. `/retry` can't continue it.
+- **Removing or swapping the `workflow:` label** ends the run with one comment that ends with your answers in a
+  code block: each round's questions and guesses, then `<login>: <answer>`. The next run starts from the issue
+  description only, so copy what matters into it.
+
+The app log has one line per evaluation, never the issue's text:
+
+```text
+#14 run 1 grill: evaluation → ASKED (round 1, 3 of 3 questions, confidence 30)
+#14 run 1 grill: evaluation → WAITING (open Q2, Q3; 👀 on 1 comment)
+#14 run 1 grill: evaluation → SUPERSEDED (1 newer comment)
+#14 run 1 grill: evaluation → CLEAR (confidence 96)
+#14 run 1 grill: evaluation → LIMIT (confidence 80)
+```
+
 ## When an issue is in `needs-human`
 
 A run stops with the `status: needs-human` label and one comment that names the step, the reason and its code in
@@ -604,13 +710,14 @@ backticks (e.g. `step-not-built`, `credits-exhausted`, `step-config`), and the w
   puts the issue back in the status it had and runs the failed step again, in the same run. Work already done is
   not redone. If it fails again, the run stops again with a new comment.
 - **A restart:** remove the `workflow:` label and add it again. The run ends ("Run 2 (`full-sdd`) was
-  cancelled …"), and a new run starts from scratch. Swapping to another `workflow:` label replaces the run in one
-  go ("Run 2 … was replaced by run 3 …").
+  cancelled …", with Grill Me's answers so far in a code block), and a new run starts from scratch. Swapping to
+  another `workflow:` label replaces the run in one go ("Run 2 … was replaced by run 3 …").
 
-A stop that is a result of the work (e.g. the Grill round limit) can only be restarted: `/retry` gets a reply
-saying so. A `/retry` that can't do anything always gets one reply: no run on the issue, the run isn't stopped,
-or it was written before the run stopped (comment it again). Until the workflow steps are built (spec 6 on),
-every run stops at its first step with `step-not-built`; `/retry` then stops it again the same way.
+A stop that is a result of the work (e.g. the Grill round limit, "When the bot asks questions") can only be
+restarted: `/retry` gets a reply saying so. A `/retry` that can't do anything always gets one reply: no run on the
+issue, the run isn't stopped, or it was written before the run stopped (comment it again). Until the steps after
+Grill Me are built (spec 7 on), a run that gets past Grill Me stops at `spec` with `step-not-built` (a
+`workflow: code-only` run at its first step); `/retry` then stops it again the same way.
 
 Every run, newest first (the last 20):
 
@@ -698,6 +805,8 @@ The bot creates these 16 labels when it starts, if they're missing (names compar
 create them by hand. The bot never edits or deletes a label, so a color or description you change stays.
 `status: *` labels are set by the bot only; `workflow: *`, `grill: skip` and `model: max-*` by humans only, the
 model labels by Approvers only. A label never holds a model name: the models are in `workflow.json`.
+`grill: skip` on the issue when a run starts skips Grill Me; added while the bot is asking, it stops the
+questions, and the bot writes the Spec from the issue and the answers so far ("When the bot asks questions").
 
 | Label | Color | Description |
 |---|---|---|
@@ -734,3 +843,8 @@ summary) passes the secret scanner first. A match is replaced by `[REDACTED: <ki
 | `own-secret` | the exact values of `GITHUB_WEBHOOK_SECRET` and `GOOGLE_API_KEY` (8 characters or longer) |
 
 It is a list, not a proof: a secret split over two lines, encoded, or of another format is not found.
+
+**No `@` mention in Grill Me's comments.** The questions, guesses and gaps come from the model: every `@name` in
+them is put in backticks and any hidden `sdd-agent` marker is removed, so a question can't notify anyone or pass
+for a bot comment. Logins are written in backticks without `@`. Your answers, quoted in the run-ended comment, sit
+inside a code block, where a mention notifies nobody.

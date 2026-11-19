@@ -1,7 +1,8 @@
 # Implementation Plan — Spec #6: Grill Me
 
-> **Created:** 2026-11-17 · **Status:** approved 2026-11-17, not built (fresh-context review 2026-11-17, its 11
-> findings applied the same day: see "Review"; P1–P5 confirmed the same day)
+> **Created:** 2026-11-17 · **Status:** built: Tasks 0–21 done 2026-11-18 and 2026-11-19, the spec's matrix passed
+> on the sandbox; Checkpoint 7 waits for your review and commit · approved 2026-11-17 (fresh-context review
+> 2026-11-17, its 11 findings applied the same day: see "Review"; P1–P5 confirmed the same day)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-grill-me.md` (spec 6, `grill-me`,
 > approved 2026-11-17) into ordered, verifiable tasks (skill `agent-skills:planning-and-task-breakdown`). The spec
@@ -770,9 +771,11 @@ section 8 "Smoke test" (a `full-sdd` label now calls the model and posts questio
 what changed. The spec's status line and any line the build had to change.
 
 **Acceptance criteria:**
-- [ ] Every command and variable in the guide exists (`package.json`, `envSchema`); the example query runs on the dev
-  database
-- [ ] `AGENTS.md` says spec 6 is built and names spec 11 (`skill-discovery`) as next
+- [x] Every command and variable in the guide exists (`package.json`, `envSchema`); the example query runs on the dev
+  database (2026-11-18: `grill_of` as written, on #22 and #26; the two `curl` links of section 3 fetch the files
+  from the sandbox's `main`. The sandbox README's "only way out of `needs-human`" line, stale since spec 5, is fixed
+  in your sandbox clone, not committed)
+- [x] `AGENTS.md` says spec 6 is built and names spec 11 (`skill-discovery`) as next
 
 **Verification:**
 - [ ] Manual: you read the changed guide sections once
@@ -789,15 +792,28 @@ as agreed at Checkpoint 3. Rows passed at Checkpoints 3–6 run again only where
 Results ticked in the spec; the spec's and the plan's status lines set.
 
 **Acceptance criteria:**
-- [ ] Every matrix row is ticked or reported failing with its output (no silent skips); the "Invariants" are scoped
-  to rows stored since Checkpoint 3 and say so
-- [ ] "Not checked by hand": the integration tests named (crash windows, the hook twice, invalid answers, a
-  Participant-only sender) pass
-- [ ] The spec's success criteria: no question comment posted twice (one query over the sandbox's comments and
-  `grill_rounds`), every evaluation in `grill_evaluations` with its `log_id`
+- [x] Every matrix row is ticked or reported failing with its output (no silent skips); the "Invariants" are scoped
+  to rows stored since Checkpoint 3 and say so (2026-11-19: no row failed. Run again on the sandbox because plan
+  T17 moved their path into `ended()` and the wait into `acted()`: "no questions needed" on #23 run 3, "skipped" on
+  #24 run 2, the 👀 wait and the `spec` stop after a round on #22 run 5, the round limit and its `/retry` on #26
+  run 2 with my instance at `GRILL_MAX_ROUNDS=1`; five `gemini-4-carbon` calls, all answered on the first try, 20 s
+  on average. The
+  invariants: one script over the 97 comments on #22–#29 and the dev database's Grill rows, its output in the
+  scratchpad (`t21/check.log`). The overview's five rows marked 6 are the spec's rows on cancel with answered
+  rounds, answering only Q1, `grill: skip` and `/approve` while asking, the kill after a post, and the round limit:
+  all passed, left unticked in the overview like the rows of specs 1–5)
+- [x] "Not checked by hand": the integration tests named (crash windows, the hook twice, invalid answers, a
+  Participant-only sender) pass (2026-11-19: the seven tests named in the spec, by name, in a verbose run of their
+  five suites: 43 tests pass)
+- [x] The spec's success criteria: no question comment posted twice (one query over the sandbox's comments and
+  `grill_rounds`), every evaluation in `grill_evaluations` with its `log_id` (2026-11-19: 18 rounds, each with
+  exactly one comment carrying its marker, the stored one; 32 evaluations, each with its own `execution_logs`
+  row; the 32 successful `grill` calls of a run, each with its evaluation; the other 31 calls with a run are
+  errors: 28 `provider-unavailable`, 3 `bad-api-key`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` green
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` green (2026-11-19, after Task 20:
+  unit 45 files / 1,047 tests, integration 26 files / 255 tests)
 
 **Dependencies:** T20
 **Files:** `docs/specs/spec-github-agent-grill-me.md` and this plan (checkboxes and status only), plus fixes if a row
@@ -806,8 +822,9 @@ fails
 
 ### Checkpoint 7 — Complete
 
-- [ ] The spec's "Success criteria" are all checked
-- [ ] "Spec 6 check A" to "E" closed (P4)
+- [x] The spec's "Success criteria" are all checked (2026-11-19, the note under them)
+- [x] "Spec 6 check A" to "E" closed (P4) (2026-11-19, as completed, with `#F` to `#H` (#27–#29), made for this
+  matrix too; their `issues.closed` events `IGNORED` `unsupported-event`)
 - [ ] You review and commit; spec 11 (`skill-discovery`) is next in the build order
 
 ---
