@@ -1179,7 +1179,7 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   - `context_loads` has that `loaded` row with a reason about money;
   - the comment and the row agree.
 - [ ] `#A`'s first `execution_logs` row (turn 1): its `prompt` holds:
-  - the root `AGENTS.md` text ("integer cents");
+  - the root `AGENTS.md` text ("Amounts are integers in minor units (cents)"; the README's wording, moved by plan P2);
   - the line "- money-rules: …" and "- src/AGENTS.md (…bytes)";
   - NOT "PINEAPPLE", NOT "CLAUDE.md";
   - `agents_chars` and `lists_chars` > 0.

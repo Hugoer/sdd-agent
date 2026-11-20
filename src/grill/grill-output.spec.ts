@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryIssueProvider } from '../../test/fakes/in-memory-issue-provider.js';
+import { InMemoryContextLoads } from '../../test/fakes/in-memory-context-loads.js';
 import { ScriptedChatModelFactory } from '../../test/fakes/scripted-chat-model.factory.js';
 import type { StepSetup } from '../contracts/step.js';
 import type {
@@ -175,6 +176,7 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
       factory,
       new InjectionWarningService(issues),
       logs,
+      new InMemoryContextLoads().asService(),
     );
 
     const result = await service.call({

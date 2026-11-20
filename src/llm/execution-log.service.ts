@@ -9,7 +9,7 @@ import type { PromptSizes } from './prompt.js';
 
 const MAX_ERROR_LENGTH = 2_000;
 
-/** One model call attempt, as LlmService saw it (spec 4 "Owned table: ExecutionLog"). */
+/** One model request, as LlmService saw it (spec 4 "Owned table: ExecutionLog"; spec 11: one row per request). */
 export interface ExecutionLogEntry {
   task: TaskRef;
   runId?: string;
@@ -18,6 +18,10 @@ export interface ExecutionLogEntry {
   model: ResolvedModel;
   skillCommit: string;
   attempt: number;
+  /** Spec 11: the `LlmService.call()` the request belongs to. */
+  callId?: string;
+  /** Spec 11 (SDW13): the request's number in its call, 1, 2, …; `attempt` when not given. */
+  turn?: number;
   error?: { code: LlmErrorCode; message: string };
   /** The model call only. */
   durationMs: number;
@@ -35,7 +39,7 @@ export interface ExecutionLogEntry {
   providerMeta?: unknown;
 }
 
-/** Writes ExecutionLog rows: insert only, one per attempt, success or failure (L11). */
+/** Writes ExecutionLog rows: insert only, one per model request, success or failure (L11; spec 11). */
 @Injectable()
 export class ExecutionLogService {
   constructor(private readonly prisma: PrismaService) {}
@@ -56,6 +60,8 @@ export class ExecutionLogService {
         modelLevel: entry.model.level,
         skillCommit: entry.skillCommit,
         attempt: entry.attempt,
+        callId: entry.callId ?? null,
+        turn: entry.turn ?? entry.attempt,
         status: entry.error ? 'ERROR' : 'SUCCESS',
         errorCode: entry.error?.code ?? null,
         errorMessage: entry.error?.message.slice(0, MAX_ERROR_LENGTH) ?? null,
@@ -68,6 +74,9 @@ export class ExecutionLogService {
         skillChars: entry.sizes.skill,
         untrustedChars: entry.sizes.untrusted,
         otherChars: entry.sizes.other,
+        agentsChars: entry.sizes.agents,
+        listsChars: entry.sizes.lists,
+        loadedChars: entry.sizes.loaded,
         answerChars: entry.answerChars ?? null,
         injectionKinds: entry.injectionKinds,
         cutSources: entry.cutSources,

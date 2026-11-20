@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
@@ -13,7 +14,9 @@ import {
   CHAT_MODEL_FACTORY,
   type ChatModelFactory,
 } from './chat-model.factory.js';
+import { ContextLoadService } from './context-load.service.js';
 import { ExecutionLogService } from './execution-log.service.js';
+import { findInjectionKinds } from './injection-patterns.js';
 import { InjectionWarningService } from './injection-warning.service.js';
 import type { LlmCall, LlmResult } from './llm-call.js';
 import {
@@ -52,12 +55,15 @@ export class LlmService {
     @Inject(CHAT_MODEL_FACTORY) private readonly factory: ChatModelFactory,
     private readonly warnings: InjectionWarningService,
     private readonly logs: ExecutionLogService,
+    private readonly loads: ContextLoadService,
   ) {}
 
   async call<T>(input: LlmCall<T>): Promise<LlmResult<T>> {
     const { context, setup } = input;
+    // Spec 11 (SDW13): every request of this call is a row with this id and its turn number.
+    const callId = randomUUID();
     // 1–2. Guard every untrusted block and build the messages; warnings are posted before the model is called.
-    const prompt = buildPrompt(input.frame, setup.skill, input.turns);
+    const prompt = buildPrompt(input.frame, setup, input.turns);
     for (const { source, kinds } of prompt.injections) {
       await this.warnings.warn(context.task, source, kinds);
     }
@@ -67,15 +73,19 @@ export class LlmService {
     ];
     const cutSources = prompt.cuts.map(({ source }) => source.key);
     const model = this.factory.create(setup.model.name);
+    await this.recordStartFiles(input, callId);
 
     const messages: PromptMessage[] = [...prompt.messages];
     const sizes: PromptSizes = { ...prompt.sizes };
-    for (let attempt = 1; ; attempt++) {
+    /** Messages already stored on an earlier row: a later turn stores only the ones added since (L18). */
+    let stored = 0;
+    for (let attempt = 1, turn = 1; ; attempt++, turn++) {
+      const sent = toMessages(messages);
       const result = await this.ask(
         model,
         setup.model.name,
         input.output,
-        toMessages(messages),
+        sent,
       );
       const raw = result.raw;
       const logId = await this.logs.record({
@@ -86,6 +96,8 @@ export class LlmService {
         model: setup.model,
         skillCommit: setup.commit,
         attempt,
+        callId,
+        turn,
         error: result.ok
           ? undefined
           : { code: result.error.code, message: result.error.message },
@@ -94,11 +106,12 @@ export class LlmService {
         answerChars: raw?.text.length,
         injectionKinds,
         cutSources,
-        prompt: mapChatMessagesToStoredMessages(toMessages(messages)),
+        prompt: mapChatMessagesToStoredMessages(sent.slice(stored)),
         answer: raw ? mapChatMessagesToStoredMessages([raw])[0] : undefined,
         usage: raw?.usage_metadata,
         providerMeta: raw?.response_metadata,
       });
+      stored = sent.length;
       this.logger.log(
         `llm ${context.step} ${context.task.externalRef} ${setup.model.name} (${setup.model.level}) attempt ${attempt}: ` +
           `${result.ok ? 'SUCCESS' : `ERROR ${result.error.code}`} in ${Math.round(result.durationMs)} ms`,
@@ -118,6 +131,60 @@ export class LlmService {
       if (answer !== '') messages.push({ role: 'assistant', content: answer });
       messages.push({ role: 'user', content: reask });
       sizes.other += answer.length + reask.length;
+    }
+  }
+
+  /**
+   * Spec 11 step 2: one `context_loads` row per file given at start, the step's SKILL.md and the root AGENTS.md
+   * (trigger `start`, turn 0, `loaded`). A root AGENTS.md that matches an injection pattern still loads (trusted,
+   * base branch): one log line with its kinds, never its text, and the kinds on its row (SDW8, GM13).
+   */
+  private async recordStartFiles<T>(
+    { context, setup }: LlmCall<T>,
+    callId: string,
+  ): Promise<void> {
+    const { skill, repo } = setup;
+    const files = [
+      {
+        kind: 'step-skill' as const,
+        skill: skill.step,
+        path: `${skill.path.replace(/\/+$/, '')}/SKILL.md`,
+        text: skill.instructions,
+      },
+      ...(repo.rootAgents
+        ? [
+            {
+              kind: 'agents' as const,
+              path: 'AGENTS.md',
+              text: repo.rootAgents.text,
+            },
+          ]
+        : []),
+    ];
+    for (const file of files) {
+      const injectionKinds = findInjectionKinds(file.text);
+      if (file.kind === 'agents' && injectionKinds.length > 0)
+        this.logger.warn(
+          `context ${context.step} @${setup.commit.slice(0, 7)}: AGENTS.md matches an injection pattern ` +
+            `(${injectionKinds.join(', ')}); loaded anyway, the repository's instructions on the base branch are trusted`,
+        );
+      await this.loads.insert({
+        task: context.task,
+        runId: context.runId,
+        step: context.step,
+        callId,
+        turn: 0,
+        trigger: 'start',
+        kind: file.kind,
+        skill: 'skill' in file ? file.skill : undefined,
+        path: file.path,
+        commit: setup.commit,
+        model: setup.model.name,
+        outcome: 'loaded',
+        bytes: Buffer.byteLength(file.text),
+        chars: file.text.length,
+        injectionKinds,
+      });
     }
   }
 

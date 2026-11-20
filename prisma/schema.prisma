@@ -43,7 +43,7 @@ model WebhookEvent {
 /// inserted by ExecutionLogService; never updated or deleted by the app. Token columns: empty = not reported.
 model ExecutionLog {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  /// When the attempt ended.
+  /// When the request ended (spec 11: one row per model request; was per attempt).
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
   platform          String
   taskId            String   @map("task_id")
@@ -58,8 +58,12 @@ model ExecutionLog {
   modelLevel        String   @map("model_level")
   /// The base-branch commit the skill and the map were read at.
   skillCommit       String   @map("skill_commit")
-  /// 1 = first ask, 2 and 3 = re-asks.
+  /// 1 = a load turn or a first answer, 2 and 3 = re-asks (spec 11, SDW13).
   attempt           Int
+  /// Spec 11: the `LlmService.call()` the row belongs to; empty on rows written before spec 11.
+  callId            String?  @map("call_id") @db.Uuid
+  /// Spec 11 (SDW13): 1, 2, … within the call; rows written before spec 11 have `turn = attempt`.
+  turn              Int      @default(1)
   /// `SUCCESS` or `ERROR`.
   status            String
   errorCode         String?  @map("error_code")
@@ -71,16 +75,26 @@ model ExecutionLog {
   outputTokens      Int?     @map("output_tokens")
   cachedInputTokens Int?     @map("cached_input_tokens")
   reasoningTokens   Int?     @map("reasoning_tokens")
+  /// The step's frame, the fixed paragraphs and (spec 11) the "Loading:" paragraph.
   frameChars        Int      @map("frame_chars")
+  /// The step skill block, with its "Other files" list (spec 11).
   skillChars        Int      @map("skill_chars")
   untrustedChars    Int      @map("untrusted_chars")
+  /// Everything else in the turns; spec 11: also the model's earlier messages with their tool calls.
   otherChars        Int      @map("other_chars")
+  /// Spec 11 (SDW9): the root AGENTS.md section.
+  agentsChars       Int      @default(0) @map("agents_chars")
+  /// Spec 11 (SDW9): the skills list and the AGENTS.md list.
+  listsChars        Int      @default(0) @map("lists_chars")
+  /// Spec 11 (SDW9): the tool messages (loaded files and one-line answers).
+  loadedChars       Int      @default(0) @map("loaded_chars")
   answerChars       Int?     @map("answer_chars")
   /// Kinds matched in this call's untrusted texts; empty = none.
   injectionKinds    String[] @map("injection_kinds")
   /// Source keys of the untrusted texts that were cut.
   cutSources        String[] @map("cut_sources")
-  /// The messages as sent (LangChain StoredMessage[], after wrapping and cutting).
+  /// The messages as sent (LangChain StoredMessage[], after wrapping and cutting). Spec 11 (L18): turn 1 holds the
+  /// whole prompt; a later turn only the messages added since the previous row.
   prompt            Json     @db.JsonB
   /// The answer as received, before the schema check; empty when the call itself failed.
   answer            Json?    @db.JsonB
@@ -91,7 +105,62 @@ model ExecutionLog {
 
   @@index([platform, taskId, createdAt])
   @@index([step, model])
+  @@index([callId, turn])
   @@map("execution_logs")
+}
+
+/// Spec 11 ("Owned table: ContextLoad"): one row per file the model got or asked for. Written only by
+/// ContextLoadService; a row is inserted when the file is given or asked for, and only its two token columns are
+/// set later in the same call.
+model ContextLoad {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// When the file was given or asked for.
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  platform        String
+  taskId          String   @map("task_id")
+  externalRef     String   @map("external_ref")
+  /// As `execution_logs.run_id` (`smoke-<id>` for the smoke script).
+  runId           String?  @map("run_id")
+  step            String
+  /// The call; joins `execution_logs.call_id`.
+  callId          String   @map("call_id") @db.Uuid
+  /// The request whose answer asked for it; 0 = given at start.
+  turn            Int
+  /// `start` or `tool`.
+  trigger         String
+  /// `load_skill` or `load_file`; empty for `start`.
+  tool            String?
+  /// The name or path as the model wrote it (cut at 300 characters).
+  requested       String?
+  /// The model's reason (cut at 300); `(none given)` when missing; empty for `start`.
+  reason          String?
+  /// `step-skill`, `repo-skill`, `agents`; empty when nothing matched.
+  kind            String?
+  /// The step name (`step-skill`) or the repo skill's name.
+  skill           String?
+  /// The file's repo path; empty when nothing matched.
+  path            String?
+  /// The call's base-branch commit.
+  commit          String
+  /// The call's model (the key of the token count).
+  model           String
+  /// `loaded`, `already-loaded`, `not-found`, `too-large`, `unreadable`, `limit-reached`, `error` (plan P21).
+  outcome         String
+  /// From the listing, when the file is known.
+  bytes           Int?
+  /// The file's own text, in characters (what `tokens` counts, plan P16); only for `loaded`.
+  chars           Int?
+  /// The provider's count (SD5); empty = no count.
+  tokens          Int?
+  /// The bot's estimate (SD5); empty = no input tokens reported.
+  estimatedTokens Int?     @map("estimated_tokens")
+  /// Kinds matched in the file (SDW8); empty = none.
+  injectionKinds  String[] @map("injection_kinds")
+
+  @@index([callId])
+  @@index([platform, taskId, createdAt])
+  @@index([path, commit, model])
+  @@map("context_loads")
 }
 
 /// One row per issue (spec 5, "Owned tables"). `status` is the source of truth; `shownStatus` is the `status: *`

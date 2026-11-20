@@ -541,12 +541,14 @@ nullable), `turn` (int, default 1; existing rows `turn = attempt`), `agents_char
 `test/db.ts` empties `context_loads`.
 
 **Acceptance criteria:**
-- [ ] The migration applies to an empty database and to one with spec 4's rows (their `turn` = `attempt`)
-- [ ] `test/db.integration.spec.ts` checks the table and the new columns exist with their defaults
-- [ ] `execution-log.integration.spec.ts:73–108` (every column) expects the five new columns with their defaults
+- [x] The migration applies to an empty database and to one with spec 4's rows (their `turn` = `attempt`)
+  (2026-11-20: a throwaway database in the test container, three spec 4 rows with attempts 1–3 → turns 1–3)
+- [x] `test/db.integration.spec.ts` checks the table and the new columns exist with their defaults
+- [x] `execution-log.integration.spec.ts:73–108` (every column) expects the five new columns with their defaults
 
 **Verification:**
-- [ ] `npm run typecheck && npm run test:integration` pass; you run `npm run db:migrate`
+- [x] `npm run typecheck && npm run test:integration` pass; you run `npm run db:migrate` (2026-11-21: 78 rows,
+  `turn = attempt`)
 
 **Dependencies:** None (any time before T12)
 **Files:** `prisma/schema.prisma`, `prisma/migrations/<ts>_skill_discovery/migration.sql`, `test/db.ts`,
@@ -562,13 +564,13 @@ returns the id; `setEstimates(ids, perChar)`; `setTokens(id, n)`; `knownTokens(p
 count.
 
 **Acceptance criteria:**
-- [ ] A row with `callId`, `turn` 2 and the three sizes reads back as written (integration,
+- [x] A row with `callId`, `turn` 2 and the three sizes reads back as written (integration,
   `execution-log.integration.spec.ts`'s `entry()` updated)
-- [ ] A `context_loads` row of each outcome reads back; `setEstimates` and `setTokens` set only their columns;
+- [x] A `context_loads` row of each outcome reads back; `setEstimates` and `setTokens` set only their columns;
   `knownTokens` finds a count by path, commit and model, and ignores another model (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T11
 **Files:** `src/llm/execution-log.service.ts`, `src/llm/context-load.service.ts`, `src/llm/prompt.ts` (the sizes
@@ -586,17 +588,17 @@ messages added since on later turns, and writes the start rows: the step's `SKIL
 root `AGENTS.md` gets the GM13 log line). `logId` is the call's last row.
 
 **Acceptance criteria:**
-- [ ] The system message in the spec's order with the root `AGENTS.md` section; without one, the section left out;
+- [x] The system message in the spec's order with the root `AGENTS.md` section; without one, the section left out;
   the seven sizes add up to every character sent (unit, `prompt.spec.ts` rewritten)
-- [ ] A re-ask: two rows, one `callId`, turns 1 and 2, attempts 1 and 2; the second row's `prompt` holds only the
+- [x] A re-ask: two rows, one `callId`, turns 1 and 2, attempts 1 and 2; the second row's `prompt` holds only the
   answer and the re-ask (unit)
-- [ ] Every call writes the start rows, one per given file; a root `AGENTS.md` with an injection pattern loads, logs
+- [x] Every call writes the start rows, one per given file; a root `AGENTS.md` with an injection pattern loads, logs
   one line with its kinds, posts nothing, and its row holds the kinds (unit)
-- [ ] A Grill run start on a fake repo with a root `AGENTS.md`: the turn-1 `prompt` holds its text and the two start
+- [x] A Grill run start on a fake repo with a root `AGENTS.md`: the turn-1 `prompt` holds its text and the two start
   rows exist (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T7, T12
 **Files:** `src/llm/prompt.ts` (+ spec), `src/llm/llm.service.ts` (+ spec), `src/grill/grill-output.spec.ts`,
@@ -604,9 +606,10 @@ root `AGENTS.md` gets the GM13 log line). `logId` is the call's last row.
 **Scope:** M
 
 ### Checkpoint 3 — The root `AGENTS.md` and the records on the sandbox
-- [ ] A new issue + `workflow: full-sdd` → its turn-1 `execution_logs.prompt` holds the root `AGENTS.md` ("integer
-  cents"), NOT "PINEAPPLE", NOT "CLAUDE.md"; `agents_chars` > 0; `call_id` set; `turn` 1
-- [ ] `context_loads` has its two start rows (`step-skill` and `agents`, turn 0, `loaded`); `tokens` and
+- [x] A new issue + `workflow: full-sdd` → its turn-1 `execution_logs.prompt` holds the root `AGENTS.md` ("Amounts
+  are integers in minor units (cents)", the sandbox's wording; was quoted as "integer cents"), NOT "PINEAPPLE", NOT
+  "CLAUDE.md"; `agents_chars` > 0; `call_id` set; `turn` 1 (2026-11-21: #33, `agents_chars` 832, Grill round 1 posted)
+- [x] `context_loads` has its two start rows (`step-skill` and `agents`, turn 0, `loaded`); `tokens` and
   `estimated_tokens` still empty (Phase 4)
 - [ ] You review and commit
 

@@ -14,6 +14,7 @@ const TASK = {
   externalRef: 'test-owner/test-repo#14',
 };
 const COMMIT = 'ab12'.repeat(10);
+const CALL_ID = '00000000-0000-4000-8000-0000000000c1';
 const PROMPT = [
   { type: 'system', data: { content: 'frame and skill' } },
   {
@@ -33,8 +34,18 @@ function entry(overrides: Partial<ExecutionLogEntry> = {}): ExecutionLogEntry {
     model: { provider: 'google', name: 'gemini-4-hydrogen', level: 'standard' },
     skillCommit: COMMIT,
     attempt: 1,
+    callId: CALL_ID,
+    turn: 1,
     durationMs: 1234.4,
-    sizes: { frame: 10, skill: 20, untrusted: 30, other: 4 },
+    sizes: {
+      frame: 10,
+      skill: 20,
+      agents: 5,
+      lists: 6,
+      untrusted: 30,
+      loaded: 7,
+      other: 4,
+    },
     answerChars: 17,
     injectionKinds: ['override-instructions'],
     cutSources: ['description'],
@@ -86,6 +97,8 @@ describe('ExecutionLogService (real PostgreSQL)', () => {
       modelLevel: 'standard',
       skillCommit: COMMIT,
       attempt: 1,
+      callId: CALL_ID,
+      turn: 1,
       status: 'SUCCESS',
       errorCode: null,
       errorMessage: null,
@@ -98,6 +111,9 @@ describe('ExecutionLogService (real PostgreSQL)', () => {
       skillChars: 20,
       untrustedChars: 30,
       otherChars: 4,
+      agentsChars: 5,
+      listsChars: 6,
+      loadedChars: 7,
       answerChars: 17,
       injectionKinds: ['override-instructions'],
       cutSources: ['description'],
@@ -161,5 +177,23 @@ describe('ExecutionLogService (real PostgreSQL)', () => {
       cachedInputTokens: null,
       reasoningTokens: null,
     });
+  });
+
+  it('spec 11: a later request of a call (turn 2, attempt 1) reads back as written', async () => {
+    const id = await logs.record(entry({ turn: 2, attempt: 1 }));
+
+    expect(
+      await t.prisma.executionLog.findUniqueOrThrow({ where: { id } }),
+    ).toMatchObject({ callId: CALL_ID, turn: 2, attempt: 1 });
+  });
+
+  it('spec 11: without a call id and a turn (as before spec 11) → call_id empty, turn = attempt', async () => {
+    const id = await logs.record(
+      entry({ callId: undefined, turn: undefined, attempt: 3 }),
+    );
+
+    expect(
+      await t.prisma.executionLog.findUniqueOrThrow({ where: { id } }),
+    ).toMatchObject({ callId: null, turn: 3, attempt: 3 });
   });
 });

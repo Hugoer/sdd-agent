@@ -185,6 +185,71 @@ describe('LlmService.call() in the booted app (real PostgreSQL, fakes)', () => {
     ]);
   });
 
+  it('spec 11: a root AGENTS.md → in the turn-1 prompt, two start rows with the call id; a re-ask row stores only the new messages', async () => {
+    const AGENTS = '# Conventions\n- Amounts are integer cents.\n';
+    t.repo.seedFile('main', 'AGENTS.md', AGENTS);
+    try {
+      t.models.reply({ answer: 'not json' }).replyJson({ summary: 'ok' });
+      const { setup, call } = await prepareAndCall(105);
+      const result = await call;
+
+      expect(setup.repo.rootAgents).toEqual({
+        text: AGENTS,
+        bytes: Buffer.byteLength(AGENTS),
+      });
+      const rows = await t.prisma.executionLog.findMany({
+        orderBy: { turn: 'asc' },
+      });
+      expect(rows.map(({ turn, attempt }) => [turn, attempt])).toEqual([
+        [1, 1],
+        [2, 2],
+      ]);
+      expect(rows[1].callId).toBe(rows[0].callId);
+      expect(rows[1].id).toBe(result.logId);
+      const first = rows[0].prompt as {
+        type: string;
+        data: { content: string };
+      }[];
+      expect(first[0].type).toBe('system');
+      expect(first[0].data.content).toContain(
+        `<agents path="AGENTS.md" commit="${setup.commit}">\n${AGENTS}\n</agents>`,
+      );
+      expect(rows[0].agentsChars).toBeGreaterThan(AGENTS.length);
+      expect(
+        (rows[1].prompt as { type: string }[]).map(({ type }) => type),
+      ).toEqual(['ai', 'human']);
+
+      const loads = await t.prisma.contextLoad.findMany({
+        orderBy: { kind: 'desc' }, // step-skill, then agents
+      });
+      expect(loads).toEqual([
+        expect.objectContaining({
+          callId: rows[0].callId,
+          turn: 0,
+          trigger: 'start',
+          kind: 'step-skill',
+          skill: 'spec',
+          path: `${SKILL_DIR}/SKILL.md`,
+          commit: setup.commit,
+          model: 'gemini-4-hydrogen',
+          outcome: 'loaded',
+        }),
+        expect.objectContaining({
+          callId: rows[0].callId,
+          turn: 0,
+          trigger: 'start',
+          kind: 'agents',
+          path: 'AGENTS.md',
+          bytes: Buffer.byteLength(AGENTS),
+          chars: AGENTS.length,
+          outcome: 'loaded',
+        }),
+      ]);
+    } finally {
+      t.repo.removeFile('main', 'AGENTS.md');
+    }
+  });
+
   it('a comment posted with withNotes() reaches the fake with the model line; a token in it arrives redacted', async () => {
     t.models.replyJson({ summary: 'Rounding bug.' });
     const { ref, call } = await prepareAndCall(104);

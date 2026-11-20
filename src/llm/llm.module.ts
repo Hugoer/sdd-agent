@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { GitHubModule } from '../github/github.module.js';
 import { CHAT_MODEL_FACTORY } from './chat-model.factory.js';
+import { ContextLoadService } from './context-load.service.js';
 import { ExecutionLogService } from './execution-log.service.js';
 import { GoogleChatModelFactory } from './google/google-chat-model.factory.js';
 import { InjectionWarningService } from './injection-warning.service.js';
@@ -20,6 +21,7 @@ import { StepConfigService } from './step-config.service.js';
     StepConfigService,
     InjectionWarningService,
     ExecutionLogService,
+    ContextLoadService,
     LlmService,
   ],
   exports: [

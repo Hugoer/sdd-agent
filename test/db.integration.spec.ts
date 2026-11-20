@@ -105,6 +105,91 @@ describe('database wiring', () => {
     });
   });
 
+  describe('context_loads and the new execution_logs columns (spec 11)', () => {
+    it('an execution_logs row written without them: empty call_id, turn 1, three sizes 0', async () => {
+      const row = await prisma.executionLog.create({
+        data: {
+          platform: 'GITHUB',
+          taskId: '1',
+          externalRef: 'test-owner/test-repo#1',
+          step: 'grill',
+          provider: 'google',
+          model: 'm',
+          modelLevel: 'standard',
+          skillCommit: 'c',
+          attempt: 2,
+          status: 'SUCCESS',
+          durationMs: 1,
+          frameChars: 1,
+          skillChars: 1,
+          untrustedChars: 1,
+          otherChars: 1,
+          injectionKinds: [],
+          cutSources: [],
+          prompt: [],
+        },
+      });
+
+      expect(row).toMatchObject({
+        callId: null,
+        turn: 1,
+        agentsChars: 0,
+        listsChars: 0,
+        loadedChars: 0,
+      });
+    });
+
+    it('a context_loads row gets its id and time; the optional columns stay empty', async () => {
+      const row = await prisma.contextLoad.create({
+        data: {
+          platform: 'GITHUB',
+          taskId: '1',
+          externalRef: 'test-owner/test-repo#1',
+          step: 'grill',
+          callId: '00000000-0000-4000-8000-000000000001',
+          turn: 0,
+          trigger: 'start',
+          commit: 'c',
+          model: 'm',
+          outcome: 'loaded',
+          injectionKinds: [],
+        },
+      });
+
+      expect(row).toMatchObject({
+        id: expect.any(String) as string,
+        createdAt: expect.any(Date) as Date,
+        runId: null,
+        tool: null,
+        requested: null,
+        reason: null,
+        kind: null,
+        skill: null,
+        path: null,
+        bytes: null,
+        chars: null,
+        tokens: null,
+        estimatedTokens: null,
+        injectionKinds: [],
+      });
+    });
+
+    it('the three context_loads indexes and the (call_id, turn) index exist', async () => {
+      const indexes = await prisma.$queryRaw<{ name: string }[]>`
+        SELECT indexname AS name FROM pg_indexes
+        WHERE tablename IN ('context_loads', 'execution_logs') ORDER BY indexname`;
+
+      expect(indexes.map(({ name }) => name)).toEqual(
+        expect.arrayContaining([
+          'context_loads_call_id_idx',
+          'context_loads_platform_task_id_created_at_idx',
+          'context_loads_path_commit_model_idx',
+          'execution_logs_call_id_turn_idx',
+        ]),
+      );
+    });
+  });
+
   it('resetDatabase refuses any database but the test one', async () => {
     const other = new PrismaService(
       new ConfigService({

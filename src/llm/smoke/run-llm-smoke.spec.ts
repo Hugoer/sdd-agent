@@ -7,6 +7,7 @@ import {
   ScriptedChatModelFactory,
   type ScriptedReply,
 } from '../../../test/fakes/scripted-chat-model.factory.js';
+import { InMemoryContextLoads } from '../../../test/fakes/in-memory-context-loads.js';
 import { skillMd } from '../../../test/fixtures/skills.js';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
@@ -159,7 +160,12 @@ function world(options: World = {}) {
     deps: {
       stepConfig,
       warnings,
-      llm: new LlmService(factory, warnings, logs),
+      llm: new LlmService(
+        factory,
+        warnings,
+        logs,
+        new InMemoryContextLoads().asService(),
+      ),
       issues,
       repo,
       rowsOf: (runId: string) =>
