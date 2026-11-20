@@ -627,6 +627,9 @@ export type WorkflowInput = {
   (`name` = its folder name, lowercase letters, digits and hyphens, at most 64; a `description` of 1–1,024
   characters), and two `repoSkills` folders can't hold the same name. A broken skill → `FAILED(invalid skills:
   <path>: <reason>; …)` → `needs-human` + one comment naming every broken skill. Checked at the same moments.
+  A stop names the first failing check only (spec 4's rule, 2026-11-20, spec 11 plan P1): `invalid workflow.json`
+  (`repoSkills` included), then `missing skills` / `skill too large`, then the root `AGENTS.md` (`too large`,
+  `unreadable`), then `invalid skills`; after a fix and `/retry`, the next problem shows.
   ~~Missing file → every step uses its built-in default prompt; a step missing from the map → that step's
   default.~~
 - **Invalid** map (bad JSON, unknown step, missing path, missing or invalid `models`) → `FAILED(invalid workflow.json)` → `needs-human` + one

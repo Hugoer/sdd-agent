@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #11: Skill Discovery
 
-> **Created:** 2026-11-20 · **Status:** draft, not approved (fresh-context review 2026-11-20, its findings applied
+> **Created:** 2026-11-20 · **Status:** approved 2026-11-20 (fresh-context review 2026-11-20, its findings applied
 > the same day: see "Review"; P1–P4 and the write-time P6, P7, P10, P16, P19, P21 confirmed the same day, all as
 > guessed but P21: an `error` outcome)
 >
@@ -64,7 +64,7 @@ order").
 | P4 | `npm run llm:smoke -- --issue N --step grill` on the sandbox, which now has `money-rules`. Check 6 is spec 4's one-call check; check 7 posts its summary as a comment on issue `N`. | Check 6 offers no tools: it gets the root `AGENTS.md` but nothing to load (no lists, no step-skill files), so it stays one request (two with `--reask`) and its comment never has a "Read:" line. Check 9 is the one call that loads. *Alternative:* check 6 runs like any step: it may load files, its comment may have a "Read:" line, and `--reask` checks only the answer requests. | "Commands" (one line) |
 | P5 | No difference. | **The probe (Task 1):** a script in the scratchpad, never in the repo, imports the repo's installed `@langchain/google` and `@langchain/core` by absolute path and reads `GOOGLE_API_KEY` with `node --env-file=.env`. I run it; if the auto-mode classifier blocks reading the key, you run the one command I give you (`! node --env-file=.env <path>`). The result goes into Task 1 and the spec's "Risk" (one dated line each). | "Risk" (the result) |
 | P6 | No difference. | **The probe also sends one `countTokens` request** (no model call) to confirm the reply's `totalTokens` and that the key works in the header, before Task 20 builds it. *Alternative:* find out at Checkpoint 5. | — |
-| P7 | No difference. | **One request is built by the provider seam:** `ChatModelFactory` gains `request(model, { tools?, schema?, toolsOff? })`, the runnable for one request, so Google's option names (`responseSchema`, the function-calling mode) stay in `src/llm/google/` (L2), and because `withStructuredOutput` returns a sequence on which `bindTools` can't be called. `LlmService` judges `raw.text` with Zod as today (it already ignores the parser's `parsed`). The exact mechanism inside the Google adapter is the one Task 1 shows works. *Alternative:* `LlmService` passes Google's option names itself. | "Contracts" (`ChatModelFactory`) |
+| P7 | No difference. | **One request is built by the provider seam:** `ChatModelFactory` gains `request(model, { tools?, schema?, toolsOff? })`, the runnable for one request, so Google's option names (`responseSchema`, the function-calling mode) stay in `src/llm/google/` (L2), and because `withStructuredOutput` returns a sequence on which `bindTools` can't be called. `LlmService` judges `raw.text` with Zod as today (it already ignores the parser's `parsed`). The exact mechanism inside the Google adapter is the one Task 1 shows works (2026-11-20: `withConfig({ tools, responseSchema })`; `toolsOff` dropped, since no mode `NONE` is needed). *Alternative:* `LlmService` passes Google's option names itself. | "Contracts" (`ChatModelFactory`) |
 | P8 | Only the wording of one stop message. | **A step skill's `SKILL.md` that isn't text** stops the run with `invalid skills: <path>: not text`, like a repo skill's, instead of spec 4's `unreadable skill file: <path>`. Rule: SD12's table ("Not text (LW3) → `not text`", every skill), the later decision. Other step-skill files are no longer read up front, so `unreadable skill file` is gone. | "What the bot finds" (the step-skill row); "Changes to earlier specs' behavior" (the spec 4 bullet) |
 | P9 | No difference. | **Files:** the header reader and check go into their own pure `src/llm/skill-header.ts` (used by the step-skill loader and the catalog); `repo-catalog.ts` keeps the listing rules. Spec's "File names are a guide". | "Project structure" |
 | P10 | No difference. | **`RepoCatalogService` (SDW15) holds one entry:** commit → `workflow.json` text, the full listing, the root `AGENTS.md` text, every step skill's and repo skill's `SKILL.md` text. `readWorkflow()`, `prepare()` and `checkRun()` all read through it, so a run start and its first Grill evaluation at the same commit read GitHub once (plus one `resolveRef` each). Content problems (too large, not text, bad header) are recorded with the reads and turned into `StepConfigError`s by `prepare()` / `checkRun()`, so smoke check 2 can show each lane's problem; GitHub errors pass through and nothing is kept. `load_skill` takes `SKILL.md` from that entry, or reads it at `setup.commit` when the entry has moved on. | — |
@@ -193,8 +193,9 @@ lines it changes" for every confirmed decision, each with the date and the plan'
 did), plus the review's fixes that need no choice.
 
 **Acceptance criteria:**
-- [ ] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named (P1)
-- [ ] Every matrix row a decision changes can be checked as written
+- [x] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named (P1)
+- [x] Every matrix row a decision changes can be checked as written (review fixes 8, 14 and 15 too: check 9 prints
+  `(known)`, the sixth branch `smoke/spec-11-two-loads`, "a new issue like `#A`")
 
 **Verification:**
 - [ ] Manual: you read the diff of both documents
@@ -230,12 +231,13 @@ It prints each request's HTTP status, duration, finish reason and `usage_metadat
 a prompt or answer than its length.
 
 **Acceptance criteria:**
-- [ ] Each of 1–3 recorded as PASS or "fallback needed", with its evidence; 4 recorded with the reply's shape
-- [ ] One dated "Probe result" paragraph under this task: the fallbacks the build uses (none, 1, 3) and the
+- [x] Each of 1–3 recorded as PASS or "fallback needed", with its evidence; 4 recorded with the reply's shape
+- [x] One dated "Probe result" paragraph under this task: the fallbacks the build uses (none, 1, 3) and the
   mechanism T15 builds into the seam; one dated line in the spec's "Risk"
-- [ ] If fallback 1 is needed: T17 gets its criterion (the load turns carry tools and no format, then one request
+- [x] If fallback 1 is needed: T17 gets its criterion (the load turns carry tools and no format, then one request
   with the format and no tools); if fallback 3: T15's seam declares the tools with mode `NONE` when `toolsOff`
-- [ ] Nothing added to the repo but those two doc lines; the script stays in the scratchpad
+  (neither is needed)
+- [x] Nothing added to the repo but those two doc lines; the script stays in the scratchpad
 
 **Verification:**
 - [ ] Manual: you read the result; `git status` shows only the two docs
@@ -243,6 +245,35 @@ a prompt or answer than its length.
 **Dependencies:** None (T0 can come first or after)
 **Files:** a scratchpad script; `docs/plans/spec-github-agent-skill-discovery.md`, the spec's "Risk"
 **Scope:** S
+
+**Probe result (2026-11-20, `gemini-4-carbon`; the first run got HTTP 403 "billing account has an outstanding
+balance" on every model request, the rerun after the billing fix passed).** Every check passed: **the build uses no
+fallback.**
+
+1. **PASS: tools and the answer format in one request.** HTTP 200. The model answered with one `load_skill` call
+   (`name: money-rules` and a one-line reason), no text, so `tool_choice: 'any'` wasn't needed. On an issue needing
+   nothing, the same tools and format gave JSON text that Zod accepts. The request body holds the two function
+   declarations, `responseMimeType: application/json` and `responseJsonSchema`, and no `toolConfig` (Gemini's
+   default, `AUTO`).
+2. **PASS: the round trip.** The `AIMessage` as received plus one `ToolMessage` (by `tool_call_id`) → HTTP 200 and an
+   answer Zod accepts. Gemini gives each call its own id. The thought signature sits on the tool call
+   (`tool_calls[i].thoughtSignature`) and on its content block (`content[i]`, `contentBlocks[i]`), and the outgoing
+   model turn carried it back. A text answer has its signature in `additional_kwargs.originalTextContentBlock`.
+3. **PASS: a request without tools after tool calls.** The history of 2 with the tools left out (the format only) →
+   HTTP 200 and an answer Zod accepts. Mode `NONE` isn't needed.
+4. **`countTokens`:** HTTP 200 with the key in the `x-goog-api-key` header; the reply is `{ totalTokens,
+   promptTokensDetails }` (102 tokens for a 234-character text).
+
+**What T15 builds:** `request(model, { tools?, schema? })` = `create(model).withConfig({ tools, responseSchema:
+schema })`, each key only when given, invoked with spec 4's timeout; it returns the raw `AIMessage` (no parser). One
+more request confirmed it sends the same body as `withStructuredOutput(schema, { method: 'jsonSchema', includeRaw:
+true })` with `tools` as a call option, which is that same `withConfig` plus a parser (`parsed: null` on a tool-call
+answer). **`toolsOff` is dropped** from P7's seam: a request after a limit or a re-ask simply has no `tools`. T17's
+fallback-1 criterion doesn't apply.
+
+Two numbers for later tasks: the two tool declarations cost about 237 input tokens per request (830 with the tools,
+593 without, same history), part of what `estimatedTokens` absorbs (spec "Token counts"). `usage_metadata.output_tokens`
+includes the thinking tokens (`output_token_details.reasoning`), as spec 4 already stores them.
 
 ### Checkpoint 1 — The probe's answer
 - [ ] You read the probe result and T0's spec lines; you commit the docs
@@ -607,15 +638,16 @@ texts of the spec's table. Once a limit is hit, every later request of that answ
 
 ### Task 15: The request seam, and tool calls in the scripted fake
 
-**Description:** P7 with Task 1's result. `ChatModelFactory.request(model, { tools?, schema?, toolsOff? })` returns the
-runnable for one request; the Google adapter builds it the way the probe showed; `LlmService` sends every request
+**Description:** P7 with Task 1's result. `ChatModelFactory.request(model, { tools?, schema? })` returns the
+runnable for one request (`toolsOff` dropped: the probe needed no mode `NONE`); the Google adapter builds it the way
+the probe showed (`withConfig({ tools, responseSchema })`, the raw `AIMessage`); `LlmService` sends every request
 through it and judges `raw.text` as today (no behavior change yet). The scripted fake: `ScriptedAnswer.toolCalls?: {
 name, args, id? }[]` (an `AIMessage` with tool calls and, unless given, no text); each recorded call keeps the tools
-offered, whether a schema was sent and `toolsOff`.
+offered and whether a schema was sent.
 
 **Acceptance criteria:**
-- [ ] The Google adapter's request carries tools and the format together (or per the probe's fallback), and
-  `toolsOff` per the probe (unit, no network)
+- [ ] The Google adapter's request carries tools and the format together; without `tools`, none are declared (unit,
+  no network)
 - [ ] The fake answers with tool calls and records the options; the tests that asserted `structured` (`llm.service.spec.ts:115,
   149`, `grill-output.spec.ts:187`, the fake's own spec) assert the request options instead
 - [ ] Every other suite passes unchanged
@@ -676,12 +708,12 @@ LangChain messages throughout; `loaded` and `other` sizes grow with the turns. A
   request holds the `AIMessage` as received and its `ToolMessage`; the load turn's `answerChars` = its text plus its
   calls' arguments as JSON (unit)
 - [ ] Text output (`output: 'text'`) with a load turn: the tools alone, then the text answer (unit; spec 7's case)
-- [ ] The limit → the next request has no tools (`toolsOff` per T15) and the same system message; a re-ask has no
+- [ ] The limit → the next request has no tools (none declared, T15) and the same system message; a re-ask has no
   tools; `invalid-answer` after loads; a tool call in an answer to a request without tools is judged as text (unit)
 - [ ] A model that asks for a file on every turn → at most `SKILL_DISCOVERY_MAX_LOADS + 4` requests (unit)
 - [ ] A `ProviderError` while loading → thrown, the rows already written stay (unit)
-- [ ] If Task 1 called for fallback 1: the load turns carry no format and one last request carries the format and no
-  tools (unit)
+- ~~If Task 1 called for fallback 1: the load turns carry no format and one last request carries the format and no
+  tools (unit)~~ Not needed (probe, 2026-11-20).
 
 **Verification:**
 - [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
