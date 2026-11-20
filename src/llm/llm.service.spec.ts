@@ -28,9 +28,11 @@ const SETUP: StepSetup = {
     step: 'spec',
     path: '.github-agent/skills/spec',
     commit: COMMIT,
-    files: [{ path: 'SKILL.md', text: 'Placeholder skill.' }],
+    instructions: 'Placeholder skill.',
+    files: [],
   },
   model: { provider: 'scripted', name: 'gemini-4-hydrogen', level: 'standard' },
+  repo: { rootAgents: null, skills: [], agents: [] },
 };
 const schema = z.object({ summary: z.string().min(1), wordCount: z.number() });
 const DESCRIPTION = 'The bill splitter rounds cents wrongly.';

@@ -1139,11 +1139,11 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   sandbox's grill skill line asks for it.
 
 **Startup**
-- [ ] `SKILL_DISCOVERY_MAX_LOADS=0` → the app refuses to start, naming it; `51` → refuses; `50` → starts.
-- [ ] `SKILL_DISCOVERY_MAX_BYTES=1023` → refuses, naming it; `1048577` → refuses; `1024` → starts.
+- [x] `SKILL_DISCOVERY_MAX_LOADS=0` → the app refuses to start, naming it; `51` → refuses; `50` → starts.
+- [x] `SKILL_DISCOVERY_MAX_BYTES=1023` → refuses, naming it; `1048577` → refuses; `1024` → starts.
 
 **Smoke** (`npm run dev` stopped)
-- [ ] `npm run llm:smoke -- --issue N --step grill` → check 3 prints:
+- [x] `npm run llm:smoke -- --issue N --step grill` → check 3 prints:
   - the grill `SKILL.md` and "0 other files";
   - the root `AGENTS.md` with its size;
   - 1 repo skill `money-rules` with its description's length;
@@ -1158,15 +1158,15 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   - `tokens` and `estimated_tokens` filled on all three.
 - [ ] Run the smoke again → check 9 prints `(known)` for the three counts: no second count for the same path,
   commit and model.
-- [ ] `--base smoke/spec-11-bad-folder` → check 1 shows `repoSkills: .claude/skill`. Check 2 (informative)
+- [x] `--base smoke/spec-11-bad-folder` → check 1 shows `repoSkills: .claude/skill`. Check 2 (informative)
   passes and lists "invalid workflow.json: repoSkills folder not found: .claude/skill" for each lane. Check 3
   `FAIL` with the same message; NO model call.
-- [ ] `--base smoke/spec-11-big-agents` → check 2 passes and lists "AGENTS.md too large (…, limit 204,800)" for
+- [x] `--base smoke/spec-11-big-agents` → check 2 passes and lists "AGENTS.md too large (…, limit 204,800)" for
   each lane; check 3 `FAIL` with it; NO model call.
 - [ ] `--base smoke/spec-11-plain` → check 3:
   - root and folder `AGENTS.md` listed, NO repo skill, although `.claude/skills/money-rules` exists;
   - check 9 `SKIP` (no repo skill).
-- [ ] `--base smoke/spec-11-bad-skills` (SD12) → check 2 passes and lists, for `full-sdd` and `spec-code`, one
+- [x] `--base smoke/spec-11-bad-skills` (SD12) → check 2 passes and lists, for `full-sdd` and `spec-code`, one
   "invalid skills: …" naming the `spec` skill's `` name `Spec` is not lowercase letters, digits and hyphens ``,
   `.claude/skills/no-desc/SKILL.md: no description` and `` `money-rules` is in both `.claude/skills` and
   `.agents/skills` ``. For `code-only`, only the last two. Check 3 (`grill`) `FAIL` with the last two; NO model
@@ -1204,10 +1204,10 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   - the Grill comment has "The bot looked for skill `tax-rules`, which this repo doesn't have.";
   - `context_loads` has `not-found` rows for `tax-rules` and `CLAUDE.md`;
   - NO "PINEAPPLE" in the comment.
-- [ ] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then a new issue + `workflow: full-sdd` →
+- [x] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then a new issue + `workflow: full-sdd` →
   `status: needs-human` and ONE comment naming "repoSkills folder not found: .claude/skill"; NO Grill question.
   Restore `main` afterwards.
-- [ ] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-skills`, then a new issue + `workflow: full-sdd` (SD12) →
+- [x] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-skills`, then a new issue + `workflow: full-sdd` (SD12) →
   `status: needs-human` and ONE comment "Run 1 stopped before its first step: invalid skills: …" naming all three
   problems, with `/retry` and the restart; NO Grill question. Restart the app on `main`, then `/retry` → Grill Me
   starts.

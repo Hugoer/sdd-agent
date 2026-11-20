@@ -5,6 +5,7 @@ import { ExecutionLogService } from './execution-log.service.js';
 import { GoogleChatModelFactory } from './google/google-chat-model.factory.js';
 import { InjectionWarningService } from './injection-warning.service.js';
 import { LlmService } from './llm.service.js';
+import { RepoCatalogService } from './repo-catalog.service.js';
 import { StepConfigService } from './step-config.service.js';
 
 /**
@@ -15,6 +16,7 @@ import { StepConfigService } from './step-config.service.js';
   imports: [GitHubModule],
   providers: [
     { provide: CHAT_MODEL_FACTORY, useClass: GoogleChatModelFactory },
+    RepoCatalogService,
     StepConfigService,
     InjectionWarningService,
     ExecutionLogService,

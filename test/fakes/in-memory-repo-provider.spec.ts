@@ -74,6 +74,21 @@ describe('InMemoryRepoProvider', () => {
     await expect(repo.listFiles(moved, 'skills/spec')).resolves.toHaveLength(2);
   });
 
+  it('removeFile: the file is gone from the ref and the ref moves to a new SHA; a commit keeps it', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'a.md', 'a');
+    repo.seedFile('main', 'b.md', 'b');
+    const before = await repo.resolveRef('main');
+
+    repo.removeFile('main', 'b.md');
+
+    const after = await repo.resolveRef('main');
+    expect(after).not.toBe(before);
+    expect(await repo.readFile('main', 'b.md')).toBeNull();
+    expect(await repo.readFile(before, 'b.md')).toBe('b');
+    expect(() => repo.removeFile('no-such-ref', 'a.md')).not.toThrow();
+  });
+
   it('resolveRef: an unknown ref → permanent error naming it; failNext applies', async () => {
     const repo = new InMemoryRepoProvider();
 

@@ -11,13 +11,13 @@ import type {
 } from '../../contracts/issue-provider.js';
 import { LlmError, StepConfigError } from '../../contracts/llm-error.js';
 import type { RepoProvider } from '../../contracts/repo-provider.js';
-import type { StepName, StepSetup } from '../../contracts/step.js';
+import type { RepoContext, StepName, StepSetup } from '../../contracts/step.js';
 import { cutText } from '../input-guard.js';
 import type { InjectionWarningService } from '../injection-warning.service.js';
 import type { Block, LlmResult } from '../llm-call.js';
 import type { LlmService } from '../llm.service.js';
 import { withNotes } from '../prompt.js';
-import { listSkill } from '../skill-loader.js';
+import { isBinary } from '../skill-loader.js';
 import type {
   StepConfigService,
   WorkflowAtCommit,
@@ -139,7 +139,6 @@ export async function runLlmSmoke(
   print: Print,
 ): Promise<boolean> {
   const { stepConfig } = deps;
-  let workflow: WorkflowAtCommit | undefined;
   let task: UnifiedTask | undefined;
   let setup: StepSetup | undefined;
   let result: LlmResult<Summary> | undefined;
@@ -148,7 +147,7 @@ export async function runLlmSmoke(
     [
       '1 workflow',
       async () => {
-        workflow = await stepConfig.readWorkflow(options.base);
+        const workflow = await stepConfig.readWorkflow(options.base);
         return describeWorkflow(workflow, options.base);
       },
     ],
@@ -162,7 +161,7 @@ export async function runLlmSmoke(
           externalRef: `${deps.targetRepo}#${options.issue}`,
         });
         setup = await stepConfig.prepare(options.step, task, options.base);
-        return describeSkill(deps.repo, workflow!, setup);
+        return describeSkill(deps.repo, setup);
       },
     ],
     [
@@ -224,7 +223,9 @@ function describeWorkflow(
           .join(', ')}`,
     )
     .join('; ');
-  return `${base} @ ${commit}; skills ${skills}; models ${models}`;
+  const repoSkills =
+    config.repoSkills.length > 0 ? config.repoSkills.join(', ') : '(none)';
+  return `${base} @ ${commit}; skills ${skills}; repoSkills: ${repoSkills}; models ${models}`;
 }
 
 /** Check 2 (informative): a lane with missing steps doesn't fail the smoke; any other error does. */
@@ -245,24 +246,51 @@ async function laneCheck(
   return results.join('; ');
 }
 
-/** Check 3: the files and their sizes, the total characters, the binary files left out. Never content. */
+/**
+ * Check 3: SKILL.md's size and characters, the number of other files, the binary files left out; then (spec 11)
+ * the catalog: the root AGENTS.md's size, each repo skill with its description's length and its number of other
+ * files, each listed AGENTS.md. Paths, names and sizes only, never content.
+ */
 async function describeSkill(
   repo: RepoProvider,
-  { config }: WorkflowAtCommit,
-  { skill, commit }: StepSetup,
+  { skill, commit, repo: context }: StepSetup,
 ): Promise<string> {
-  const listing = await listSkill(repo, config.skills, skill.step, commit);
-  const files = skill.files
-    .map((file) => `${file.path} (${Buffer.byteLength(file.text)} B)`)
-    .join(', ');
-  const chars = skill.files.reduce((sum, file) => sum + file.text.length, 0);
+  const listed = (await repo.listFiles(commit, skill.path)) ?? [];
+  const others = skill.files.length;
   const prefix = `${skill.path.replace(/\/+$/, '')}/`;
-  const skipped =
-    listing?.skipped.map((file) => file.path.slice(prefix.length)) ?? [];
+  const skipped = listed
+    .filter((file) => isBinary(file.path))
+    .map((file) => file.path.slice(prefix.length));
   return (
-    `${skill.path} @ ${commit.slice(0, 7)}: ${files}; ${chars} chars; skipped ` +
-    (skipped.length > 0 ? skipped.join(', ') : 'none')
+    `${skill.path} @ ${commit.slice(0, 7)}: SKILL.md (${Buffer.byteLength(skill.instructions)} B), ` +
+    `${others} other ${others === 1 ? 'file' : 'files'}; ${skill.instructions.length} chars; skipped ` +
+    (skipped.length > 0 ? skipped.join(', ') : 'none') +
+    `; ${describeCatalog(context)}`
   );
+}
+
+function describeCatalog({ rootAgents, skills, agents }: RepoContext): string {
+  const count = (n: number, one: string, many = `${one}s`) =>
+    `${n} ${n === 1 ? one : many}`;
+  const root = rootAgents
+    ? `root AGENTS.md (${rootAgents.bytes} B)`
+    : 'no root AGENTS.md';
+  const repoSkills =
+    count(skills.length, 'repo skill') +
+    (skills.length === 0
+      ? ''
+      : `: ${skills
+          .map(
+            (s) =>
+              `${s.name} (description ${s.description.length} chars, ${count(s.files.length, 'other file')})`,
+          )
+          .join(', ')}`);
+  const listed =
+    `${agents.length} AGENTS.md listed` +
+    (agents.length === 0
+      ? ''
+      : `: ${agents.map((a) => `${a.path} (${a.bytes} B)`).join(', ')}`);
+  return `${root}, ${repoSkills}, ${listed}`;
 }
 
 /** The issue's two untrusted texts, as check 5 checks them and check 6 sends them. */

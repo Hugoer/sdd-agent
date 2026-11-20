@@ -53,6 +53,11 @@ export class InMemoryRepoProvider implements RepoProvider {
     this.refs.set(ref, files);
   }
 
+  /** Spec 11: removes a seeded file, so a test that seeds broken content leaves the shared repo clean. */
+  removeFile(ref: string, path: string): void {
+    this.refs.get(ref)?.delete(path);
+  }
+
   seedPullRequest(
     branch: string,
     options: { byBot: boolean; state?: 'open' | 'closed' },

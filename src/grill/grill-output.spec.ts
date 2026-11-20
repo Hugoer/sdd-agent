@@ -146,13 +146,15 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
       step: 'grill',
       path: '.github-agent/skills/grill',
       commit: 'ab12'.repeat(10),
-      files: [{ path: 'SKILL.md', text: 'Placeholder skill.' }],
+      instructions: 'Placeholder skill.',
+      files: [],
     },
     model: {
       provider: 'scripted',
       name: 'gemini-4-hydrogen',
       level: 'standard',
     },
+    repo: { rootAgents: null, skills: [], agents: [] },
   };
 
   it('goes through withStructuredOutput; Zod judges the answer, and a mismatch is re-asked with the rule’s message', async () => {

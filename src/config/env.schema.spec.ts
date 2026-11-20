@@ -51,6 +51,8 @@ describe('validateEnv', () => {
       GRILL_MAX_ROUNDS: 5,
       GRILL_MAX_QUESTIONS_PER_ROUND: 3,
       GRILL_CONFIDENCE_THRESHOLD: 95,
+      SKILL_DISCOVERY_MAX_LOADS: 10,
+      SKILL_DISCOVERY_MAX_BYTES: 204800,
     });
   });
 
@@ -61,6 +63,10 @@ describe('validateEnv', () => {
     ['GRILL_MAX_QUESTIONS_PER_ROUND', '10', 10],
     ['GRILL_CONFIDENCE_THRESHOLD', '1', 1],
     ['GRILL_CONFIDENCE_THRESHOLD', '100', 100],
+    ['SKILL_DISCOVERY_MAX_LOADS', '1', 1],
+    ['SKILL_DISCOVERY_MAX_LOADS', '50', 50],
+    ['SKILL_DISCOVERY_MAX_BYTES', '1024', 1024],
+    ['SKILL_DISCOVERY_MAX_BYTES', '1048576', 1048576],
   ])('accepts %s=%s', (name, value, expected) => {
     expect(validateEnv({ ...valid, [name]: value })).toMatchObject({
       [name]: expected,
@@ -129,6 +135,13 @@ describe('validateEnv', () => {
     ['GRILL_CONFIDENCE_THRESHOLD', '101'],
     ['GRILL_CONFIDENCE_THRESHOLD', 'abc'],
     ['GRILL_CONFIDENCE_THRESHOLD', '2.5'],
+    ['SKILL_DISCOVERY_MAX_LOADS', '0'],
+    ['SKILL_DISCOVERY_MAX_LOADS', '51'],
+    ['SKILL_DISCOVERY_MAX_LOADS', 'abc'],
+    ['SKILL_DISCOVERY_MAX_LOADS', '2.5'],
+    ['SKILL_DISCOVERY_MAX_BYTES', '1023'],
+    ['SKILL_DISCOVERY_MAX_BYTES', '1048577'],
+    ['SKILL_DISCOVERY_MAX_BYTES', 'abc'],
   ])('rejects %s=%s naming the variable', (name, value) => {
     expect(errorOf({ ...valid, [name]: value })).toMatch(
       new RegExp(`- ${name}: `),

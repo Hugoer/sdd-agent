@@ -85,7 +85,7 @@ describe('run start without step handlers (spec 5, T14)', () => {
       'main',
       WORKFLOW_CONFIG_PATH,
       JSON.stringify({
-        skills: { qualityGate: '.github-agent/skills/qualityGate' },
+        skills: { qualityGate: '.github-agent/skills/quality-gate' },
         models: {
           standard: { default: 'gemini-4-hydrogen' },
           max: { default: 'gemini-4-carbon' },
@@ -105,6 +105,27 @@ describe('run start without step handlers (spec 5, T14)', () => {
     expect(comments[0].body).toContain('(`step-config`)');
     expect(comments[0].body).not.toContain(
       injectionWarningMarker('description'),
+    );
+  });
+
+  it('spec 11 (SD12): a step skill with a broken header → needs-human before the first step, one comment naming it', async () => {
+    const issue = seedIssue(t, 45, { labels: ['workflow: full-sdd'] });
+    t.repo.seedFile(
+      'main',
+      '.github-agent/skills/spec/SKILL.md',
+      '---\nname: Spec\ndescription: Writes the Spec.\n---\nPlaceholder spec.',
+    );
+
+    const row = await deliver(t, lane(45, 'full-sdd'));
+
+    const reason =
+      'invalid skills: .github-agent/skills/spec/SKILL.md: name `Spec` is not lowercase letters, digits and hyphens';
+    expect(row).toMatchObject({ status: 'FAILED', lastError: reason });
+    expect(t.issues.labelsOf(issue)).toContain('status: needs-human');
+    const comments = t.issues.commentsOf(issue);
+    expect(comments).toHaveLength(1);
+    expect(comments[0].body).toContain(
+      `⚠️ **Run 1 stopped before its first step:** ${reason}. (\`step-config\`)`,
     );
   });
 

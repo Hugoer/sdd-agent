@@ -198,7 +198,7 @@ did), plus the review's fixes that need no choice.
   `(known)`, the sixth branch `smoke/spec-11-two-loads`, "a new issue like `#A`")
 
 **Verification:**
-- [ ] Manual: you read the diff of both documents
+- [x] Manual: you read the diff of both documents
 
 **Dependencies:** your approval of this plan
 **Files:** `docs/specs/spec-github-agent-skill-discovery.md`, `docs/specs/spec-github-agent-architecture-overview.md`
@@ -240,7 +240,7 @@ a prompt or answer than its length.
 - [x] Nothing added to the repo but those two doc lines; the script stays in the scratchpad
 
 **Verification:**
-- [ ] Manual: you read the result; `git status` shows only the two docs
+- [x] Manual: you read the result; `git status` shows only the two docs
 
 **Dependencies:** None (T0 can come first or after)
 **Files:** a scratchpad script; `docs/plans/spec-github-agent-skill-discovery.md`, the spec's "Risk"
@@ -276,7 +276,7 @@ Two numbers for later tasks: the two tool declarations cost about 237 input toke
 includes the thinking tokens (`output_token_details.reasoning`), as spec 4 already stores them.
 
 ### Checkpoint 1 — The probe's answer
-- [ ] You read the probe result and T0's spec lines; you commit the docs
+- [x] You read the probe result and T0's spec lines; you commit the docs
 
 ---
 
@@ -289,12 +289,12 @@ includes the thinking tokens (`output_token_details.reasoning`), as spec 4 alrea
 defaults and one comment line each; `test/test-env.ts` sets the defaults.
 
 **Acceptance criteria:**
-- [ ] `0`, `51`, `abc`, `2.5` for loads and `1023`, `1048577` for bytes → the startup error names the variable;
+- [x] `0`, `51`, `abc`, `2.5` for loads and `1023`, `1048577` for bytes → the startup error names the variable;
   `1`, `50`, `1024`, `1048576` → accepted; unset → 10 and 204800 (unit)
-- [ ] `.env.example` lists both with their defaults and one comment line each
+- [x] `.env.example` lists both with their defaults and one comment line each
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/config/env.schema.ts` (+ `.spec.ts`), `.env.example`, `test/test-env.ts`
@@ -313,16 +313,16 @@ load with load_file when the method points to one:" with `- <repo path> (N bytes
 tool to load them: no sandbox step skill has any before then.
 
 **Acceptance criteria:**
-- [ ] A 204,800-byte `SKILL.md` with a 500 KB reference passes; a 204,801-byte `SKILL.md` alone fails; the message
+- [x] A 204,800-byte `SKILL.md` with a 500 KB reference passes; a 204,801-byte `SKILL.md` alone fails; the message
   counts `SKILL.md` only (unit; the rewrites listed under "Existing tests")
-- [ ] The other files are never read (`repo.calls`); the prompt holds `SKILL.md`'s text and each listed path with its
+- [x] The other files are never read (`repo.calls`); the prompt holds `SKILL.md`'s text and each listed path with its
   size, not the files' text (unit)
-- [ ] The rewritten tests of `skill-loader.spec.ts` (GM13's injection now in `SKILL.md`),
+- [x] The rewritten tests of `skill-loader.spec.ts` (GM13's injection now in `SKILL.md`),
   `step-config.service.spec.ts:103–116` and `:249`, `prompt.spec.ts:40` and `run-llm-smoke.spec.ts` pass; every
   other suite passes unchanged
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/step.ts`, `src/llm/skill-loader.ts` (+ spec), `src/llm/prompt.ts` (+ spec),
@@ -340,14 +340,14 @@ tool to load them: no sandbox step skill has any before then.
 characters with its backticks removed (SDW18).
 
 **Acceptance criteria:**
-- [ ] One test per row of SD12's table, with its exact reason
-- [ ] Plain, quoted, `|` and `>` forms for `name` and `description`; a flow mapping, an anchor, a tag → "written in a
+- [x] One test per row of SD12's table, with its exact reason
+- [x] Plain, quoted, `|` and `>` forms for `name` and `description`; a flow mapping, an anchor, a tag → "written in a
   form the bot can't read"; CRLF, a byte-order mark, a continued plain value, a trailing ` #` comment (P19)
-- [ ] Several broken skills → one message in the order given; a value with backticks and over 64 characters → cut and
+- [x] Several broken skills → one message in the order given; a value with backticks and over 64 characters → cut and
   cleaned
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/llm/skill-header.ts` (+ `.spec.ts`)
@@ -362,20 +362,20 @@ at every step; `checkRun` reads the `SKILL.md` of every step the run uses and ch
 `seedWorkflow`'s folders follow the sandbox (`quality-gate`, P12).
 
 **Acceptance criteria:**
-- [ ] `checkRun` on a lane whose `spec` skill says `name: Spec` and whose `plan` skill has no `description` → one
+- [x] `checkRun` on a lane whose `spec` skill says `name: Spec` and whose `plan` skill has no `description` → one
   `invalid skills: …` naming both, `spec` first; with a step also missing → `missing skills: …` only (unit)
-- [ ] `prepare('grill', …)` with a broken `grill` header → the same error; a broken header on another step's skill
+- [x] `prepare('grill', …)` with a broken `grill` header → the same error; a broken header on another step's skill
   doesn't stop `prepare('grill', …)` (unit)
-- [ ] A step skill mapped with a trailing `/` (`.github-agent/skills/code/`) is checked against `code`, the last
+- [x] A step skill mapped with a trailing `/` (`.github-agent/skills/code/`) is checked against `code`, the last
   non-empty segment (unit; review, 2026-11-20)
-- [ ] A step skill with a valid header: the whole `SKILL.md`, header included, is in the prompt (unit)
-- [ ] A new issue with `workflow: full-sdd` whose `spec` skill header is broken → `needs-human`, ONE comment "Run 1
+- [x] A step skill with a valid header: the whole `SKILL.md`, header included, is in the prompt (unit)
+- [x] A new issue with `workflow: full-sdd` whose `spec` skill header is broken → `needs-human`, ONE comment "Run 1
   stopped before its first step: invalid skills: …", no Grill question (integration)
-- [ ] Every suite under "Existing tests: every fake step skill" passes; `run-start.integration.spec.ts` still expects
+- [x] Every suite under "Existing tests: every fake step skill" passes; `run-start.integration.spec.ts` still expects
   `missing skills: code`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T3, T4
 **Files:** `src/llm/skill-loader.ts`, `src/llm/step-config.service.ts` (+ specs), `test/router-helpers.ts`,
@@ -396,13 +396,13 @@ is in both `<f1>` and `<f2>` ``). The contract types `RepoSkill` and `RepoContex
 in T7, with the code that fills it.
 
 **Acceptance criteria:**
-- [ ] `repoSkills` missing, `[]`, valid, with `..`, with a leading `/`, a duplicate, 11 folders (unit)
-- [ ] Root and folder `AGENTS.md`; `agents.md` and `CLAUDE.md` never listed; a nested `SKILL.md`, a binary file in a
+- [x] `repoSkills` missing, `[]`, valid, with `..`, with a leading `/`, a duplicate, 11 folders (unit)
+- [x] Root and folder `AGENTS.md`; `agents.md` and `CLAUDE.md` never listed; a nested `SKILL.md`, a binary file in a
   skill, an empty `SKILL.md`, the root `AGENTS.md` over the cap, a missing folder, a duplicate name (unit)
-- [ ] The step's own folder under `repoSkills` is left out of the step's list; another step's folder is listed (unit)
+- [x] The step's own folder under `repoSkills` is left out of the step's list; another step's folder is listed (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T4
 **Files:** `src/llm/workflow-config.ts` (+ spec), `src/llm/repo-catalog.ts` (+ spec), `src/contracts/step.ts`
@@ -419,17 +419,17 @@ the step's own folder, `agents` sorted by path) and logs `context grill @4f2c1ab
 skill; 1 AGENTS.md listed; step skill + 0 files`.
 
 **Acceptance criteria:**
-- [ ] Two `prepare()`s at the same commit → the second calls `resolveRef` only; a new commit → everything read again,
+- [x] Two `prepare()`s at the same commit → the second calls `resolveRef` only; a new commit → everything read again,
   the old entry gone; a GitHub error while reading → nothing kept, the error passes through (unit)
-- [ ] `prepare()`'s `repo.calls` for a fresh commit: `resolveRef`, `workflow.json`, one `listFiles(commit, '')`, the
+- [x] `prepare()`'s `repo.calls` for a fresh commit: `resolveRef`, `workflow.json`, one `listFiles(commit, '')`, the
   root `AGENTS.md`, every `SKILL.md`, each at the commit (unit; `step-config.service.spec.ts:95` rewritten)
-- [ ] `setup.repo` on a repo with SD9-like content; on a repo with none, or an empty root `AGENTS.md`:
+- [x] `setup.repo` on a repo with SD9-like content; on a repo with none, or an empty root `AGENTS.md`:
   `rootAgents: null`, empty lists (unit)
-- [ ] A root `AGENTS.md` that isn't valid UTF-8 is recorded with the reads as unreadable, and nothing else is lost
+- [x] A root `AGENTS.md` that isn't valid UTF-8 is recorded with the reads as unreadable, and nothing else is lost
   (unit; T8 turns it into the stop)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T5, T6
 **Files:** `src/contracts/step.ts`, `src/llm/repo-catalog.service.ts` (+ spec), `src/llm/step-config.service.ts`
@@ -445,21 +445,21 @@ duplicate names, in one `invalid skills` error. `prepare()` runs the same checks
 skill, at every step.
 
 **Acceptance criteria:**
-- [ ] A `repoSkills` folder missing → `checkRun` fails at run start → `needs-human`, one comment naming
+- [x] A `repoSkills` folder missing → `checkRun` fails at run start → `needs-human`, one comment naming
   `repoSkills folder not found: .claude/skill`, no question (integration)
-- [ ] A root `AGENTS.md` over the cap → the same with `AGENTS.md too large (…, limit 204,800)` (integration); not
+- [x] A root `AGENTS.md` over the cap → the same with `AGENTS.md too large (…, limit 204,800)` (integration); not
   valid UTF-8 → `unreadable AGENTS.md` (unit)
-- [ ] A repo skill without `description` and a step skill whose `name` isn't its folder → one comment naming both
+- [x] A repo skill without `description` and a step skill whose `name` isn't its folder → one comment naming both
   (integration)
-- [ ] A broken repo skill merged while Grill Me waits for answers → nothing posted until the next answer, then "Run 1
+- [x] A broken repo skill merged while Grill Me waits for answers → nothing posted until the next answer, then "Run 1
   stopped at step `grill`: invalid skills: …" and no new round (integration)
-- [ ] P1's order with two problems at once; an invalid repo skill under a folder the step doesn't use still stops
+- [x] P1's order with two problems at once; an invalid repo skill under a folder the step doesn't use still stops
   `prepare()` (unit)
-- [ ] Each test that seeds broken content removes it afterwards, so the suite's shared fake repo is clean for the next
+- [x] Each test that seeds broken content removes it afterwards, so the suite's shared fake repo is clean for the next
   test: `InMemoryRepoProvider.removeFile(ref, path)` (+ its spec) (review, 2026-11-20)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T7
 **Files:** `src/llm/step-config.service.ts` (+ spec), `test/router-helpers.ts` (`seedDiscovery`, P12),
@@ -481,13 +481,13 @@ line asks for `money-rules` and its `references/rounding.md`: the matrix's `SKIL
 there when the model asks for only one file on `main` (review, 2026-11-20: the row's own fallback needs that line).
 
 **Acceptance criteria:**
-- [ ] Every skill in the clone passes T4's check (I run it on the files); `money-rules/SKILL.md` is over 1,024 bytes
-- [ ] The README's conventions section links to `AGENTS.md` and keeps the step-skills bullet (P2)
-- [ ] The branch script makes exactly the changes the matrix's preconditions list (and the sixth branch's line), one
+- [x] Every skill in the clone passes T4's check (I run it on the files); `money-rules/SKILL.md` is over 1,024 bytes
+- [x] The README's conventions section links to `AGENTS.md` and keeps the step-skills bullet (P2)
+- [x] The branch script makes exactly the changes the matrix's preconditions list (and the sixth branch's line), one
   commit per branch
 
 **Verification:**
-- [ ] Manual: you read the diff in the clone, commit and push it; you run the branch script; `git ls-remote` shows
+- [x] Manual: you read the diff in the clone, commit and push it; you run the branch script; `git ls-remote` shows
   the six branches
 
 **Dependencies:** T4 (the header rule); pushed before Checkpoint 2
@@ -504,25 +504,28 @@ description's length and its number of other files, each listed `AGENTS.md`. Che
 problems; check 3 fails with them, before any model call.
 
 **Acceptance criteria:**
-- [ ] Check 3 on SD9-like content prints the five parts and never a file's text; on no content, "no root AGENTS.md,
+- [x] Check 3 on SD9-like content prints the five parts and never a file's text; on no content, "no root AGENTS.md,
   0 repo skills, 0 AGENTS.md listed" (unit)
-- [ ] A missing `repoSkills` folder: check 1 shows it, check 2 lists the problem per lane, check 3 fails, check 6
+- [x] A missing `repoSkills` folder: check 1 shows it, check 2 lists the problem per lane, check 3 fails, check 6
   never runs (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T7, T8
 **Files:** `src/llm/smoke/run-llm-smoke.ts` (+ spec)
 **Scope:** S
 
 ### Checkpoint 2 — What the bot reads, and the stops, on the sandbox
-- [ ] T9 is on the sandbox's `main` and the six branches exist
-- [ ] Matrix "Startup": both rows
-- [ ] Matrix "Smoke": check 3 on `main` (the four parts, NO `CLAUDE.md`); `--base` `bad-folder`, `big-agents`,
+- [x] T9 is on the sandbox's `main` (`4c93fa5`) and the six branches exist (2026-11-20)
+- [x] Matrix "Startup": both rows (2026-11-20: `0`, `51`, `1023`, `1048577` refused naming the variable; `50`, `1024`
+  started; my instance on port 3101, test database)
+- [x] Matrix "Smoke": check 3 on `main` (the four parts, NO `CLAUDE.md`); `--base` `bad-folder`, `big-agents`,
   `plain` (check 9 comes in T22), `bad-skills`
-- [ ] My instance with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then `bad-skills`: a new issue + `workflow:
+- [x] My instance with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then `bad-skills`: a new issue + `workflow:
   full-sdd` → `needs-human` and ONE comment each; back on `main`, `/retry` → Grill Me starts
+  (2026-11-20: smoke on throwaway #30; #31 on `bad-folder` and #32 on `bad-skills` stopped with ONE comment each,
+  no model call; back on `main`, `/retry` on both → Grill Me round 1 posted; #30–#32 closed)
 - [ ] You review and commit
 
 ---

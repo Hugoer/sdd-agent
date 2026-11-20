@@ -16,4 +16,7 @@ export const testEnv = {
   GRILL_MAX_ROUNDS: '5',
   GRILL_MAX_QUESTIONS_PER_ROUND: '3',
   GRILL_CONFIDENCE_THRESHOLD: '95',
+  // Spec 11: the defaults (a limit suite sets its own before boot).
+  SKILL_DISCOVERY_MAX_LOADS: '10',
+  SKILL_DISCOVERY_MAX_BYTES: '204800',
 };

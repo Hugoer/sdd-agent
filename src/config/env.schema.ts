@@ -88,6 +88,9 @@ export const envSchema = z.object({
   GRILL_MAX_ROUNDS: integerFromTo(1, 10).default(5),
   GRILL_MAX_QUESTIONS_PER_ROUND: integerFromTo(1, 10).default(3),
   GRILL_CONFIDENCE_THRESHOLD: integerFromTo(1, 100).default(95),
+  // Spec 11 (SD6): files the model may ask for, and bytes it may load on demand, per call.
+  SKILL_DISCOVERY_MAX_LOADS: integerFromTo(1, 50).default(10),
+  SKILL_DISCOVERY_MAX_BYTES: integerFromTo(1024, 1_048_576).default(204_800),
   LANGSMITH_TRACING: tracingOff,
   LANGSMITH_TRACING_V2: tracingOff,
   LANGCHAIN_TRACING: tracingOff,

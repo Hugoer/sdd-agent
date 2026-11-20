@@ -13,6 +13,7 @@ import { WORKFLOW_CONFIG_PATH } from '../src/llm/workflow-config.js';
 import { resetDatabase } from './db.js';
 import { newDeliveryId, postWebhook, startApp, type TestApp } from './app.js';
 import { HUMAN, issuesOpened } from './fixtures/github/payloads.js';
+import { skillMd } from './fixtures/skills.js';
 
 // Spec 4 in the booted app: LlmModule is wired, CHAT_MODEL_FACTORY is the scripted fake (plan P8).
 
@@ -71,7 +72,11 @@ describe('LlmService.call() in the booted app (real PostgreSQL, fakes)', () => {
         },
       }),
     );
-    t.repo.seedFile('main', `${SKILL_DIR}/SKILL.md`, 'Placeholder skill.');
+    t.repo.seedFile(
+      'main',
+      `${SKILL_DIR}/SKILL.md`,
+      skillMd('spec', 'Placeholder skill.'),
+    );
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

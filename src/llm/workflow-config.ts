@@ -22,6 +22,15 @@ const skillPath = z
   );
 const modelName = z.string().regex(/^[A-Za-z0-9._-]{1,100}$/, MODEL_NAME_RULE);
 
+/** Spec 11 (SD1, SDW11): 0–10 folders, each a skill path; a trailing `/` is ignored, so `a/` and `a` are one. */
+const repoSkillsSchema = z
+  .array(skillPath.transform((path) => path.replace(/\/+$/, '')))
+  .max(10, 'must name at most 10 folders')
+  .refine(
+    (folders) => new Set(folders).size === folders.length,
+    'must not name a folder twice',
+  );
+
 /** Steps may be absent: that is "missing skill" at run time, not an invalid file. */
 const skillsSchema = z.strictObject({
   grill: skillPath.optional(),
@@ -43,6 +52,8 @@ const levelSchema = z.strictObject({
 /** Unknown top-level keys are ignored (z.object strips them). */
 const workflowSchema = z.object({
   skills: skillsSchema,
+  /** Spec 11: where the repo's own skills live; missing = none. */
+  repoSkills: repoSkillsSchema.default([]),
   models: z.object({ standard: levelSchema, max: levelSchema }),
 });
 
@@ -99,7 +110,7 @@ function describeIssue(issue: z.core.$ZodIssue): string {
     case 'invalid_type':
       return issue.input === undefined
         ? `${where}: missing`
-        : `${where}: must be ${issue.expected === 'object' ? 'an object' : `a ${issue.expected}`}`;
+        : `${where}: must be ${/^[aeiou]/.test(issue.expected) ? 'an' : 'a'} ${issue.expected}`;
     case 'unrecognized_keys':
       return `${where}: unknown ${issue.keys.length === 1 ? 'key' : 'keys'} ${issue.keys.map((key) => `"${key}"`).join(', ')}`;
     default:

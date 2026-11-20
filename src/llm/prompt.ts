@@ -14,7 +14,7 @@ export interface PromptMessage {
 export interface PromptSizes {
   /** The step's frame and the two fixed paragraphs (and the blank lines between the parts). */
   frame: number;
-  /** The skill block, with its one-line introduction. */
+  /** The skill block, with its one-line introduction and its "Other files" list (spec 11). */
   skill: number;
   /** Every data block as sent: tags, text and cut line. */
   untrusted: number;
@@ -97,14 +97,22 @@ export function withNotes(body: string, notes: string[]): string {
   return `${body}\n\n---\n${notes.map((note) => `<sub>${note}</sub>`).join('\n')}`;
 }
 
+/** Spec 11 (SD4): SKILL.md whole; the other files by repo path and size, only when there are some. */
 function skillSection(skill: LoadedSkill): string {
-  const files = skill.files.map(
-    (file) => `<file path="${file.path}">\n${file.text}\n</file>`,
-  );
+  const others =
+    skill.files.length === 0
+      ? ''
+      : '\nOther files of this skill, to load with load_file when the method points to one:\n' +
+        skill.files
+          .map(
+            (file) =>
+              `- ${file.path} (${file.bytes.toLocaleString('en-US')} bytes)`,
+          )
+          .join('\n');
   return (
     "The method to follow, written by this repository's maintainers:\n" +
     `<skill step="${skill.step}" path="${skill.path}" commit="${skill.commit}">\n` +
-    `${files.join('\n')}\n</skill>`
+    `<file path="SKILL.md">\n${skill.instructions}\n</file>${others}\n</skill>`
   );
 }
 

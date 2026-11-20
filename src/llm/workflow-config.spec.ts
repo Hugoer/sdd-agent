@@ -48,8 +48,11 @@ function errorOf(text: string | null): string {
 }
 
 describe('parseWorkflowConfig', () => {
-  it("accepts the sandbox's starting file", () => {
-    expect(parseWorkflowConfig(JSON.stringify(SANDBOX))).toEqual(SANDBOX);
+  it("accepts the sandbox's starting file; spec 11: no repoSkills key → none", () => {
+    expect(parseWorkflowConfig(JSON.stringify(SANDBOX))).toEqual({
+      ...SANDBOX,
+      repoSkills: [],
+    });
   });
 
   it('ignores unknown top-level keys and accepts a step missing from skills', () => {
@@ -162,6 +165,71 @@ describe('parseWorkflowConfig', () => {
     expect(message).toContain('skills.spec: must be a directory path');
     expect(message).toContain('models.max: missing');
   });
+
+  it.each<[string, unknown, string[]]>([
+    ['[]', [], []],
+    ['one folder', ['.claude/skills'], ['.claude/skills']],
+    [
+      'two folders, a trailing / ignored',
+      ['.claude/skills/', '.agents/skills'],
+      ['.claude/skills', '.agents/skills'],
+    ],
+    [
+      '10 folders',
+      [...Array(10).keys()].map((n) => `s${n}`),
+      [...Array(10).keys()].map((n) => `s${n}`),
+    ],
+  ])('spec 11: repoSkills %s → accepted', (_name, value, expected) => {
+    expect(
+      parseWorkflowConfig(variant(['repoSkills', value])).repoSkills,
+    ).toEqual(expected);
+  });
+
+  it.each<[string, unknown, string]>([
+    [
+      'a .. segment',
+      ['skills/../secrets'],
+      'invalid workflow.json: repoSkills.0: must be a directory path relative to the repo root (no leading "/", no ".." segment)',
+    ],
+    [
+      'a leading /',
+      ['.claude/skills', '/etc'],
+      'invalid workflow.json: repoSkills.1: must be a directory path',
+    ],
+    [
+      'an empty path',
+      [''],
+      'invalid workflow.json: repoSkills.0: must be a directory path',
+    ],
+    [
+      'a duplicate (a trailing / ignored)',
+      ['.claude/skills', '.claude/skills/'],
+      'invalid workflow.json: repoSkills: must not name a folder twice',
+    ],
+    [
+      '11 folders',
+      [...Array(11).keys()].map((n) => `s${n}`),
+      'invalid workflow.json: repoSkills: must name at most 10 folders',
+    ],
+    [
+      'not an array',
+      '.claude/skills',
+      'invalid workflow.json: repoSkills: must be an array',
+    ],
+    [
+      'a number in it',
+      [7],
+      'invalid workflow.json: repoSkills.0: must be a string',
+    ],
+  ])(
+    'spec 11: repoSkills with %s → %j, never quoting the value',
+    (_name, value, message) => {
+      const error = errorOf(variant(['repoSkills', value]));
+      expect(error).toContain(message);
+      expect(error).not.toContain('secrets');
+      expect(error).not.toContain('/etc');
+    },
+  );
 
   it('accepts a model name of 100 characters with ".", "_" and "-"', () => {
     const name = `${'a'.repeat(96)}.b_-`;
