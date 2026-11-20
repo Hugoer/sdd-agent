@@ -10,7 +10,10 @@
 > lanes, step outcomes, rows 9, 12, 14–16 and the diagram; §4; §5; §6; edge case 6; the verification rows marked
 > 6), approved with that spec on 2026-11-17 · amended 2026-11-17 with spec 6's plan (P1: §3 row 16; P2: §6
 > `GrillEvaluation`) · amended 2026-11-18 (D27, decided by the user during spec 6's build: a new spec 11
-> `skill-discovery`; §1 rows 7, 9–11 and the build order, §4, edge cases 7, 9–11, verification rows 7, 9–11)
+> `skill-discovery`; §1 rows 7, 9–11 and the build order, §4, edge cases 7, 9–11, verification rows 7, 9–11) ·
+> amended 2026-11-20 with spec 11's draft (interview 2026-11-19: SD1–SD9; review answers 2026-11-20: SD10–SD13;
+> D27 annotated; §1 row 11; §4 the step types and the step-skill contract; §5; §6; edge cases 7–11; the
+> verification rows marked 11), approved with that spec on 2026-11-20
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -170,7 +173,13 @@ comments, without acting under the developer's identity or touching their checko
   conventions live in those files; loading all of them into every prompt doesn't scale, and copying them into a
   step skill means two copies to keep in step. A new spec 11 (`skill-discovery`), built after spec 6, writes the
   shared code and switches Grill Me over; specs 7, 9 and 10 use it from the start (§1). Spec 11 changes §4's
-  step-skill contract first; the details are under "Edge cases routed to later specs" (7, 9–11).
+  step-skill contract first; the details are under "Edge cases routed to later specs" (7, 9–11). **Specified
+  2026-11-20 in `spec-github-agent-skill-discovery.md`** (interview 2026-11-19, SD1–SD9): `repoSkills` in
+  `workflow.json` names the skill folders; the root `AGENTS.md` is in every prompt; the other `AGENTS.md` files and
+  the repo skills are listed and loaded on demand with two bot-owned tools (`load_skill`, `load_file`), step-skill
+  files too; at most `SKILL_DISCOVERY_MAX_LOADS` files and `SKILL_DISCOVERY_MAX_BYTES` bytes per call, never failing
+  a step; a "Read:" line under the comment; every file the model got in `context_loads`, with the provider's token
+  count and the bot's estimate.
 
 ## Contradictions found in the idea doc
 
@@ -207,7 +216,7 @@ Numbers are IDs, not build order.
 | 8 | `workspace-git` | `WorkspaceModule` · `src/workspace` | git runner (`execFile`), bot worktree, workspace lease + queue, setup command, bot identity, per-command token | 3, 5 | max |
 | 9 | `coder` | `CoderModule` · `src/coder` | Coder agent loop (LangGraph), file tools, command allowlist, lint/test gate, commit/push/PR, red and interrupted runs; 2026-11-18 (D27): spec 11's discovery in the loop, a folder's `AGENTS.md` for the files it works on | 4, 7, 8, 11 (2026-11-18) | xhigh |
 | 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files | 4, 9, 11 (2026-11-18) | xhigh |
-| 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded in `ExecutionLog`; switches Grill Me over | 3, 4, 6 | xhigh |
+| 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
 
 **Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → 8 → 9 → 10 (2026-11-18: spec 11 added, D27). Specs 2 and 4 can
 swap; spec 8 only needs 3 and 5.
@@ -521,17 +530,30 @@ export type StepName = 'grill' | 'spec' | 'plan' | 'code' | 'qualityGate';
 export type ModelLevel = 'standard' | 'max';
 
 /** What a target-repo skill contributes to a step: instructions, nothing else. Text files only, read at one
- *  base-branch commit; nothing is executed (replaces StepSkill, 2026-11-12, spec 4). */
+ *  base-branch commit; nothing is executed (replaces StepSkill, 2026-11-12, spec 4). 2026-11-20 (spec 11):
+ *  SKILL.md goes into the prompt, the other text files are listed and loaded on demand. */
 export interface LoadedSkill {
   step: StepName;
   path: string;   // directory mapped in .github-agent/workflow.json
   commit: string; // commit SHA everything was read at
-  files: { path: string; text: string }[]; // SKILL.md first, then by path; paths relative to `path`
+  // ~~files: { path: string; text: string }[]; // SKILL.md first, then by path~~ (spec 4)
+  instructions: string;  // SKILL.md (spec 11)
+  files: ListedFile[];   // the other text files, repo paths, sorted; never SKILL.md (spec 11)
+}
+export interface ListedFile { path: string; bytes: number } // a repo path, from the listing (spec 11)
+
+/** A skill of the target repo, found under a `repoSkills` folder (added 2026-11-20, spec 11). */
+export interface RepoSkill { name: string; description: string; path: string; files: ListedFile[] }
+/** What the target repo offers a step besides its step skill, at the same commit (added 2026-11-20, spec 11). */
+export interface RepoContext {
+  rootAgents: { text: string; bytes: number } | null; // the root AGENTS.md, always in the prompt
+  skills: RepoSkill[];                                 // listed; never the step's own skill
+  agents: ListedFile[];                                // every other AGENTS.md, listed
 }
 
 /** The model a step run uses (D23) and what the run was read with (added 2026-11-12, spec 4). */
 export interface ResolvedModel { provider: string; name: string; level: ModelLevel }
-export interface StepSetup { commit: string; skill: LoadedSkill; model: ResolvedModel }
+export interface StepSetup { commit: string; skill: LoadedSkill; model: ResolvedModel; repo: RepoContext } // repo: spec 11
 
 /** Added 2026-11-10 (spec 3, G5). Every provider failure. The worker retries `transient` and fails
  *  `permanent` at once; providers never retry a call themselves. */
@@ -568,10 +590,10 @@ export type WorkflowInput = {
 
 | Step (`workflow.json` key) | Output, Zod-validated (bot-owned) | Tools (bot-owned) | Limits |
 |---|---|---|---|
-| Grill Me (`grill`) | ~~`{ confidence: 0–100, questions: string[] (0..K), gaps: string[] }`~~ 2026-11-17 (spec 6): `{ confidence: 0–100, questions: { question, guess }[] (the bot posts at most K), open: number[], gaps: string[] }` | none | `GRILL_MAX_ROUNDS`, `GRILL_MAX_QUESTIONS_PER_ROUND`, `GRILL_CONFIDENCE_THRESHOLD` |
-| Spec (`spec`), Plan (`plan`) | Markdown document (shape: spec 7) | none | input guardrails (spec 4) |
-| Coder (`code`) | Final summary (shape: spec 9) | read, write, list, search files in the bot worktree; `runCommand` limited to `CODER_ALLOWED_COMMANDS`. No git. | `CODER_MAX_STEPS`, `CODER_MAX_FIX_ATTEMPTS` |
-| Quality Gate (`qualityGate`) | `{ verdict: APPROVED \| NEEDS_DECISIONS \| BLOCKED, summary, findings[] }` | read-only file tools at the PR head (spec 10) | `QUALITY_GATE_MAX_STEPS` |
+| Grill Me (`grill`) | ~~`{ confidence: 0–100, questions: string[] (0..K), gaps: string[] }`~~ 2026-11-17 (spec 6): `{ confidence: 0–100, questions: { question, guess }[] (the bot posts at most K), open: number[], gaps: string[] }` | ~~none~~ 2026-11-20 (spec 11): `load_skill`, `load_file` (repo skills, step-skill files, folder `AGENTS.md` files, at the base-branch commit), offered only when something can be loaded | `GRILL_MAX_ROUNDS`, `GRILL_MAX_QUESTIONS_PER_ROUND`, `GRILL_CONFIDENCE_THRESHOLD`; `SKILL_DISCOVERY_MAX_LOADS`, `SKILL_DISCOVERY_MAX_BYTES` per call (spec 11) |
+| Spec (`spec`), Plan (`plan`) | Markdown document (shape: spec 7) | ~~none~~ 2026-11-20 (spec 11): `load_skill`, `load_file`, as Grill Me; a read-only repo-file tool is spec 7's question | input guardrails (spec 4); spec 11's two limits per call |
+| Coder (`code`) | Final summary (shape: spec 9) | read, write, list, search files in the bot worktree; `runCommand` limited to `CODER_ALLOWED_COMMANDS`. No git. 2026-11-20 (spec 11): plus `load_skill`, `load_file` at the base-branch commit | `CODER_MAX_STEPS`, `CODER_MAX_FIX_ATTEMPTS`; a load budget per loop (spec 9) |
+| Quality Gate (`qualityGate`) | `{ verdict: APPROVED \| NEEDS_DECISIONS \| BLOCKED, summary, findings[] }` | read-only file tools at the PR head (spec 10). 2026-11-20 (spec 11): plus `load_skill`, `load_file` at the base-branch commit | `QUALITY_GATE_MAX_STEPS`; a load budget per loop (spec 10) |
 
 - **Map:** `.github-agent/workflow.json` in the target repo: `{ "skills": { "<step>": "<directory relative to the
   repo root>" } }`. Read with `RepoProvider.readFile` at `TARGET_BASE_BRANCH` at the start of every step run
@@ -593,26 +615,39 @@ export type WorkflowInput = {
   entry wins, otherwise `default`. Both `default`s are required. Names are Gemini model codes and are not checked
   against Google's list: an unknown one fails at the step's first call → `FAILED(unknown model: <name>)`. The
   names above are examples; spec 4 sets the sandbox's.
+- **Repo skills (2026-11-20, spec 11):** the optional `"repoSkills": [".claude/skills"]` names 0–10 folders whose
+  direct sub-folders with a `SKILL.md` ~~(and a `description` in its header)~~ are the repo's skills, listed by name and
+  description. A listed folder missing from the tree is an invalid map. Without the key, no repo skill is listed;
+  `AGENTS.md` files need no setting.
 - **Required (D18, 2026-11-10):** every step a run uses needs a skill in the map (per lane: §3 R6). There is no
   built-in fallback. A needed step missing from the map, or a mapped directory without a `SKILL.md` →
   `FAILED(missing skills: <steps>)` → `needs-human` + one comment naming them (2026-11-12, spec 4: a missing
   `workflow.json` is now `invalid workflow.json`, since the file also holds the models). Checked when the run starts and again when a step loads its skill.
+  **2026-11-20 (spec 11, SD12):** every skill, step skills and repo skills alike, needs a valid Agent Skills header
+  (`name` = its folder name, lowercase letters, digits and hyphens, at most 64; a `description` of 1–1,024
+  characters), and two `repoSkills` folders can't hold the same name. A broken skill → `FAILED(invalid skills:
+  <path>: <reason>; …)` → `needs-human` + one comment naming every broken skill. Checked at the same moments.
   ~~Missing file → every step uses its built-in default prompt; a step missing from the map → that step's
   default.~~
 - **Invalid** map (bad JSON, unknown step, missing path, missing or invalid `models`) → `FAILED(invalid workflow.json)` → `needs-human` + one
   comment naming the problem.
-- **The skill only changes instructions.** Its text goes into the system prompt; output schema, tools, limits and
+- **The skill only changes instructions.** Its text goes into the system prompt (2026-11-20, spec 11: its
+  `SKILL.md`; files loaded on demand arrive as tool messages, still trusted instructions); output schema, tools, limits and
   guardrails are enforced in code, so no prompt wording can widen them. The bot's own frame is always in the
   prompt; the skill supplies the method.
-- **A skill is text only (2026-11-12, spec 4):** every text file of its directory goes into the prompt,
-  `SKILL.md` first, all read at one commit (`RepoProvider.resolveRef`); at most 204,800 bytes per skill; known
-  binary types are skipped; nothing is ever executed (running a skill's scripts: idea doc §11 "Future").
+- **A skill is text only (2026-11-12, spec 4):** ~~every text file of its directory goes into the prompt,
+  `SKILL.md` first,~~ all read at one commit (`RepoProvider.resolveRef`); ~~at most 204,800 bytes per skill~~;
+  known binary types are skipped; nothing is ever executed (running a skill's scripts: idea doc §11 "Future").
+  **2026-11-20 (spec 11):** `SKILL.md` goes into the prompt (at most 204,800 bytes); the other text files, scripts
+  included, are listed and loaded on demand as text.
 - **Trust:** skills on the base branch are trusted instructions. Everything else from GitHub (issue, comments,
-  approved Spec/Plan text, diffs, repo files) is untrusted data.
+  approved Spec/Plan text, diffs, repo files) is untrusted data. **2026-11-20 (spec 11):** the repo skills listed
+  by `repoSkills` and every file named `AGENTS.md`, on the base branch, are trusted instructions too. `CLAUDE.md`,
+  `.github/copilot-instructions.md` and other tools' files are never read as instructions (D27).
 - **2026-11-18 (D27):** the target repo's own skills and its `AGENTS.md` files will be discoverable in every
   step: listed in the prompt, loaded on demand with a bot-owned tool, trusted like step skills and read at the
   same base-branch commit. Spec 11 (`skill-discovery`) changes this contract first (the map, every step's tools,
-  the trust line above).
+  the trust line above). → done 2026-11-20 in the lines above.
 
 ## 5. Config schema
 
@@ -636,6 +671,8 @@ needs a new variable adds it here first.
 | `GRILL_MAX_ROUNDS` | `5` | integer 1–10 | 6 |
 | `GRILL_MAX_QUESTIONS_PER_ROUND` | `3` | integer 1–10 (2026-11-17, spec 6 GM3; was 1–5); `1` = one question per round | 6 |
 | `GRILL_CONFIDENCE_THRESHOLD` | `95` | integer 1–100 | 6 |
+| `SKILL_DISCOVERY_MAX_LOADS` | `10` | integer 1–50; files the model may ask for per call (2026-11-20) | 11 |
+| `SKILL_DISCOVERY_MAX_BYTES` | `204800` | integer 1,024–1,048,576; bytes loaded on demand per call (2026-11-20) | 11 |
 | `WORKSPACE_REPO_PATH` | required | absolute path to a git repo (startup check) | 8 |
 | `WORKSPACE_WORKTREE_PATH` | required | absolute path outside `WORKSPACE_REPO_PATH`; created at startup if missing | 8 |
 | `WORKSPACE_SETUP_COMMAND` | empty (install by hand) | one command, no shell operators | 8 |
@@ -661,7 +698,8 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 | Table | Owner | Purpose | Extended by |
 |---|---|---|---|
 | `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
-| `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | — |
+| `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | 11 (2026-11-20: one row per model request, with the call id, the turn and three more sizes; after the first row of a call, only its new messages) |
+| `ContextLoad` | 11 | One row per file a step's model got or asked for (2026-11-20): when (call, turn), what (kind, path, commit), why (the model's reason), the outcome, characters, the provider's token count and the bot's estimate | — |
 | `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
 | `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) and the event that ended the run (2026-11-16, spec 5 plan Checkpoint 2: so a late run-ended comment still names who changed the label) | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): ~~conversation (`StoredMessage` JSON),~~ status, round count. 2026-11-17 (spec 6 GMW2): the run id, the last question number, first and last confidence, who stopped it; no conversation JSON, the prompt is rebuilt from the Grill tables every time | — |
@@ -691,7 +729,9 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 7. **Exactly once:** every bot comment and PR uses the two-transaction + hidden-marker pattern; a retried event
    first completes any pending side effect of its task and never duplicates one.
 8. **Ports:** core logic uses `IssueProvider` / `RepoProvider`; only `GitHubModule` touches Octokit. No `gh` CLI.
-9. **Untrusted input:** issue text, comments, approved Spec/Plan text, diffs and repo files are data, not
+9. **Untrusted input** (2026-11-20, spec 11: except the base branch's `AGENTS.md` files and the repo skills listed
+   by `repoSkills`, which are trusted instructions like step skills, §4 "Trust"): issue text, comments, approved
+   Spec/Plan text, diffs and repo files are data, not
    instructions. Input guardrails (injection, size) run before every LLM call.
 10. **Secret scanning** runs on everything the bot sends out: comments, PR bodies, check-run summaries and the
     diff before every push.
@@ -762,10 +802,16 @@ can be joined to it; the many calls of an agent loop are found by run and step.
   document; spec 7 adds the case to transition-table row 20. **Added 2026-11-12 (spec 4, L17):** the document
   table keeps the text as posted, after the secret scanner; the LLM's raw answer is in `ExecutionLog`. **Added
   2026-11-18 (D27):** Spec and Plan run through spec 11's discovery, so the `spec` or `plan` step skill can tell
-  the model to load another repo skill or a folder's `AGENTS.md`.
+  the model to load another repo skill or a folder's `AGENTS.md`. **Added 2026-11-20 (spec 11 interview):** they
+  get it through `prepare` and `call` with no extra code; to decide: a read-only repo-file tool for Spec and Plan
+  (e.g. to read a file an `AGENTS.md` points to); the Plan's inputs: the approved Spec only, or also the issue and
+  the Grill answers.
 - **8:** an explicit-URL fetch needs an explicit refspec (update `refs/remotes/origin/*` or a bot-owned ref
   namespace?); branch name format with the run number; the agent branch checked out in the developer's clone;
-  concurrent fetches.
+  concurrent fetches. **Added 2026-11-20 (spec 11, SD13):** a git-backed `RepoProvider` (a bot-fetched local copy,
+  read at the base-branch commit with `git ls-tree` / `git show <commit>:<path>`, never a branch's working files)
+  that could replace the GitHub adapter for any git host, without making Grill Me, Spec or Plan wait for the
+  workspace lease; spec 7 then decides whether its read-only repo-file tool reads from it.
 - **9:** a crash between push and PR (`AgentPullRequest` written first, `findPullRequest` on retry); a failure in
   the middle of the loop (commit locally like a red run, or leave the tree dirty?); changed-files scoping for lint
   and tests; signed commits (idea doc §10 known risk); a secret found in the diff → `FAILED`. **Added 2026-11-12 (spec 4,
@@ -775,20 +821,28 @@ can be joined to it; the many calls of an agent loop are found by run and step.
   Coder's loop gets spec 11's lists and loading tool; whether a folder's `AGENTS.md` is also added on its own
   (proposed: to a file tool's answer the first time the Coder works under that folder, the closest file winning
   on a conflict, as the agents.md convention says); always read at the base-branch commit, never from the
-  worktree.
+  worktree. **2026-11-20 (spec 11):** the two tools come from `ContextLoaderService`; spec 9 sets the loop's load
+  budget; `context_loads.turn` is the loop's turn and `execution_logs.call_id` the loop's id; a folder's `AGENTS.md`
+  added on its own is a row with trigger `start`.
 - **10:** `pull_request.opened` arrives while the Coder job still holds the task lease (it waits); the newest head
   wins; PRs of cancelled runs are still reviewed; the step cap is reached → which verdict; each run logs its input
   list for the "no LLM judges its own output" check. **Added 2026-11-18 (D27, required):** spec 11's lists and
   loading tool; the `AGENTS.md` files on the path of each changed file, read at the base branch, never at the PR
-  head.
-- **11 (added 2026-11-18, D27):** where `workflow.json` says the repo's skills live (e.g. `.claude/skills`); the
+  head. **2026-11-20 (spec 11):** the same `ContextLoaderService` and rows as spec 9; those `AGENTS.md` files are
+  given at start (trigger `start`); spec 10 sets the loop's load budget.
+- **11 (added 2026-11-18, D27):** ~~where `workflow.json` says the repo's skills live (e.g. `.claude/skills`); the
   two lists in each prompt (each `SKILL.md`'s name and description; each `AGENTS.md` path) and whether the root
   `AGENTS.md` is always in the prompt (proposed: yes, it holds the general rules); finding every `AGENTS.md` at
   one commit (a `RepoProvider` method or one tree listing); the loading tool (e.g. `loadSkill(name)`, and one for
   an `AGENTS.md` path) and the bounded tool loop in `LlmService.call()` for Grill Me, Spec and Plan (a cap on
   loads per call); a skill the step skill names that isn't in the list; size caps; the injection check line on
   loaded text, as for step skills; what each call loaded, in `ExecutionLog` (usage data); switching Grill Me
-  over (its prompt frame and spec 6's tests).
+  over (its prompt frame and spec 6's tests).~~ → resolved 2026-11-20 in
+  `docs/specs/spec-github-agent-skill-discovery.md`: `repoSkills` (SD1); the root `AGENTS.md` always, the others
+  listed (SD2); one tree listing (`listFiles(commit, '')`); `load_skill` and `load_file`, step-skill files on
+  demand too (SD3, SD4); two limits in `.env` (SD6); an unknown skill gets a line under the comment (SD7); the
+  "Read:" line (SD8); injection matches logged and stored, never blocking (SDW8); `context_loads` and one
+  `ExecutionLog` row per model request (SD5, SDW9); Grill Me switched over with no frame change.
 
 ## Tech stack, commands, code style, tests
 
@@ -893,6 +947,13 @@ account with `triage` access").
   it (not allowlisted), the remote base branch is unchanged.
 - [ ] (11) The `grill` step skill tells the model to use another repo skill → that round's logged input shows the
   skill loaded on demand; the prompt lists the repo's skills and `AGENTS.md` files, never a `CLAUDE.md` (D27).
+  (2026-11-20, spec 11: the load is a `context_loads` row and a "Read:" line under the comment; the root
+  `AGENTS.md` is in the prompt.)
+- [ ] (11) A step skill names a skill the repo doesn't have, or asks for `CLAUDE.md` → the step still answers; one
+  line "The bot looked for skill `…`, which this repo doesn't have."; `CLAUDE.md`'s text is never in a prompt or a
+  comment (spec 11, SD7).
+- [ ] (11) A repo skill without `description`, or a step skill whose `name` isn't its folder name; add `workflow:
+  full-sdd` → `needs-human` + exactly one comment naming every broken skill; NO Grill question (spec 11, SD12).
 - [ ] (7) The `spec` step skill tells the model to use another repo skill → the Spec run's logged input shows that
   skill loaded on demand (D27).
 - [ ] (9) The base branch has a root `AGENTS.md`, a `src/components/AGENTS.md`, a repo skill for building a
