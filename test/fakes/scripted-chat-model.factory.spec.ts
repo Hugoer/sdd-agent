@@ -123,6 +123,22 @@ describe('ScriptedChatModelFactory', () => {
     expect(factory.calls).toHaveLength(1);
   });
 
+  it('spec 11: counts tokens with countWith (null by default) and records each request', async () => {
+    const factory = new ScriptedChatModelFactory();
+
+    expect(await factory.countTokens('model-a', 'abc')).toBeNull();
+    factory.countWith = (_model, text) => text.length;
+    expect(await factory.countTokens('model-b', 'abcd')).toBe(4);
+    factory.countWith = () =>
+      new Promise((resolve) => setTimeout(() => resolve(9), 5));
+    expect(await factory.countTokens('model-b', 'x')).toBe(9);
+    expect(factory.counted).toEqual([
+      { model: 'model-a', text: 'abc' },
+      { model: 'model-b', text: 'abcd' },
+      { model: 'model-b', text: 'x' },
+    ]);
+  });
+
   it('maps finish reasons and foreign errors like a provider', () => {
     const factory = new ScriptedChatModelFactory();
     const cut = new AIMessage({

@@ -31,6 +31,11 @@ export interface ChatModelFactory {
     model: string,
     options: RequestOptions,
   ): Runnable<BaseMessage[], AIMessage>;
+  /**
+   * Spec 11 (SD5, SDW17): the provider's own token count for a text; null when it has none or the count failed
+   * (the adapter logs the failure's code, never the key). Never throws.
+   */
+  countTokens(model: string, text: string): Promise<number | null>;
   /** A thrown error → its `LlmError`. */
   toLlmError(error: unknown, model: string): LlmError;
   /** What the provider reports inside a successful answer (a cut or blocked answer, plan P3); null = usable. */

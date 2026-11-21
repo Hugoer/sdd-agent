@@ -799,11 +799,11 @@ and returns `totalTokens`, or `null` on any error or timeout, with one log line 
 scripted fake scripts counts (a number, `null`, a delay) and records each request.
 
 **Acceptance criteria:**
-- [ ] A reply → its number; an HTTP error, a network error and a timeout → `null` with a log line; the key is never in
+- [x] A reply → its number; an HTTP error, a network error and a timeout → `null` with a log line; the key is never in
   the URL or a log line (unit, no network)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T15
 **Files:** `src/llm/chat-model.factory.ts`, `src/llm/google/google-chat-model.factory.ts` (+ spec),
@@ -820,15 +820,15 @@ a failure leaves it empty. After any other `LlmError`, no count: the error is th
 the output or the error. Log lines `context tokens <path> @<sha7> <model>: N (counted|known)` or `count failed (<code>)`.
 
 **Acceptance criteria:**
-- [ ] Estimates from the carrying row; empty when that row has no input tokens (unit)
-- [ ] A count reused for the same path, commit and model; another model counts again; a count that fails or times out
+- [x] Estimates from the carrying row; empty when that row has no input tokens (unit)
+- [x] A count reused for the same path, commit and model; another model counts again; a count that fails or times out
   → empty, the call still succeeds (unit)
-- [ ] An error on a load turn writes its row and throws, with no `countTokens` call (SD10); `invalid-answer` after
+- [x] An error on a load turn writes its row and throws, with no `countTokens` call (SD10); `invalid-answer` after
   loads still counts (unit)
-- [ ] T19's Grill test: the start rows and the `loaded` row have `tokens` and `estimated_tokens` (integration)
+- [x] T19's Grill test: the start rows and the `loaded` row have `tokens` and `estimated_tokens` (integration)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T17, T20
 **Files:** `src/llm/llm.service.ts` (+ spec), `src/llm/context-load.service.ts`, `test/grill-discovery.integration.spec.ts`
@@ -845,26 +845,29 @@ smoke logs only warnings and errors; `SKIP` with no repo skill. `rowsOf` orders 
 `calls` = rows with `turn = 1`, new `turns` = rows, new sums `agents_chars`, `lists_chars`, `loaded_chars`.
 
 **Acceptance criteria:**
-- [ ] Check 9 PASS with a scripted load then a summary, its token lines `(counted)` then `(known)` on a second run;
+- [x] Check 9 PASS with a scripted load then a summary, its token lines `(counted)` then `(known)` on a second run;
   FAIL when the model loads nothing; SKIP with no repo skill (unit; `run-llm-smoke.spec.ts:186` and `:348` updated
   for the extra line)
-- [ ] Check 6 sends no tools on SD9-like content and on a step skill with a reference; `--reask` still expects two
+- [x] Check 6 sends no tools on SD9-like content and on a step skill with a reference; `--reask` still expects two
   rows (unit)
-- [ ] `npm run db:usage` runs and shows the new columns on the dev database
+- [x] `npm run db:usage` runs and shows the new columns on the dev database
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T21
 **Files:** `src/llm/smoke/run-llm-smoke.ts` (+ spec), `src/llm/smoke/llm-smoke.ts`, `package.json`
 **Scope:** M
 
 ### Checkpoint 5 — Tokens and check 9 on the sandbox
-- [ ] Matrix "Smoke": check 9 `PASS` (one `call_id`, turns 1 and 2, `attempt` 1 both); its `context_loads` rows
+- [x] Matrix "Smoke": check 9 `PASS` (one `call_id`, turns 1 and 2, `attempt` 1 both); its `context_loads` rows
   with reasons, `tokens` and `estimated_tokens`; the second run's check 9 prints `(known)` for the three counts;
   `--base smoke/spec-11-plain` → check 9 `SKIP`
-- [ ] Matrix "Grill Me on GitHub": `model: max-grill` on `#A`, or on a new issue like `#A` if `#A` has left Grill Me
-- [ ] `npm run db:usage` shows calls, turns and the three sums
+- [x] Matrix "Grill Me on GitHub": `model: max-grill` on `#A`, or on a new issue like `#A` if `#A` has left Grill Me
+- [x] `npm run db:usage` shows calls, turns and the three sums
+  2026-11-21: smoke on issue #43 (main twice, then `smoke/spec-11-plain`), `model: max-grill` on #44 (both closed).
+  The second run's check 9 also loaded `references/rounding.md` (three turns, counted once); the three earlier
+  counts printed `(known)`. With one model name for both levels, the max call reused every count.
 - [ ] You review and commit
 
 ---

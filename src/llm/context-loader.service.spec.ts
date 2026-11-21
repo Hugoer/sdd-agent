@@ -166,6 +166,7 @@ describe('ContextLoaderService.load', () => {
         `<file path="${MONEY}/SKILL.md">\n${MONEY_MD}\n</file>\n` +
         'Other files of this skill, to load with load_file when the skill points to one:\n' +
         `- ${ROUNDING} (14 bytes)\n</skill>`,
+      loaded: { rowId: 'load-1', path: `${MONEY}/SKILL.md`, text: MONEY_MD },
     });
     expect(reads(repo)).toEqual([]);
     expect(loads.rows).toEqual([
@@ -218,14 +219,17 @@ describe('ContextLoaderService.load', () => {
       {
         outcome: 'loaded',
         answer: `<file path="${ROUNDING}">\nRound half up.\n</file>`,
+        loaded: { rowId: 'load-2', path: ROUNDING, text: 'Round half up.' },
       },
       {
         outcome: 'loaded',
         answer: `<file path="${QUESTIONS}">\n# Questions\n</file>`,
+        loaded: { rowId: 'load-3', path: QUESTIONS, text: '# Questions' },
       },
       {
         outcome: 'loaded',
         answer: '<file path="src/AGENTS.md">\n# src rules\n</file>',
+        loaded: { rowId: 'load-4', path: 'src/AGENTS.md', text: '# src rules' },
       },
     ]);
     expect(

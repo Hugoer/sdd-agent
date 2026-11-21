@@ -82,14 +82,18 @@ export class ContextLoadService {
   }
 
   /**
-   * SD5: `estimatedTokens = round(chars × perChar)` on these rows, where `perChar` is the input tokens per
-   * character of the request that carried them. Rows without characters (nothing loaded) stay empty.
+   * SD5: `estimatedTokens = round(chars × perChar)` on the files one request carried first: the call's rows of
+   * `turn` (the start rows, turn 0, for request 1; a turn's loads for the next request), where `perChar` is that
+   * request's input tokens per character sent. Rows without characters (nothing loaded) stay empty.
    */
-  async setEstimates(ids: string[], perChar: number): Promise<void> {
-    if (ids.length === 0) return;
+  async setEstimates(
+    callId: string,
+    turn: number,
+    perChar: number,
+  ): Promise<void> {
     await this.prisma.$executeRaw`
       UPDATE context_loads SET estimated_tokens = ROUND(chars * ${perChar}::numeric)::int
-      WHERE id = ANY(${ids}::uuid[]) AND chars IS NOT NULL`;
+      WHERE call_id = ${callId}::uuid AND turn = ${turn} AND chars IS NOT NULL`;
   }
 
   /** SD5: the provider's own count for the row's file. */

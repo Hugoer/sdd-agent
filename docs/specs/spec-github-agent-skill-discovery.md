@@ -695,7 +695,10 @@ A `WAITING` evaluation posts nothing, so its loads exist only in the tables.
 - `context grill #12 turn 1: load_skill money-rules → loaded (2,140 bytes)`
 - `… load_file CLAUDE.md → not-found`
 - `context tokens .claude/skills/money-rules/SKILL.md @4f2c1ab gemini-4-carbon: 512 (counted)`. The count part
-  reads `(known)` when a stored count is reused, or `count failed (<code>)`.
+  reads `(known)` when a stored count is reused, or `count failed (<code>)`. 2026-11-21 (build): `countTokens`
+  returns only a number or null, so the code is on the adapter's own line (`countTokens gemini-4-carbon: count
+  failed (HTTP 429)`; `timeout`, `no response`, `no totalTokens`), and this line reads `count failed (no count from
+  the provider)`.
 
 ### Token counts (SD5, SDW17)
 
@@ -766,7 +769,9 @@ class ContextLoaderService {
   /** runs one request: resolves, checks the budget, reads at setup.commit, writes its context_loads row.
    *  2026-11-21 (build): `tool` is any name the model wrote; one the bot didn't offer is `not-found` */
   load(call: LoadContext, request: { tool: string; name?: string; path?: string; reason?: string },
-    budget: LoadBudget): Promise<{ answer: string; outcome: LoadOutcome }>;
+    budget: LoadBudget): Promise<{ answer: string; outcome: LoadOutcome;
+      loaded?: { rowId: string; path: string; text: string } }>;   // 2026-11-21 (build): a loaded file's row
+                                                                    // and text, counted at the end (SDW17)
 }
 export type LoadOutcome = 'loaded' | 'already-loaded' | 'not-found' | 'too-large' | 'unreadable' | 'limit-reached'
   | 'error';                                   // the read failed on GitHub; the error is then thrown (plan P21)
@@ -1155,21 +1160,21 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   - 1 repo skill `money-rules` with its description's length;
   - 1 listed `AGENTS.md` (`src/AGENTS.md`);
   - NO `CLAUDE.md` anywhere.
-- [ ] The same run → check 9 `PASS`: one `load_skill money-rules` → `loaded` and a valid summary in the same call
+- [x] The same run → check 9 `PASS`: one `load_skill money-rules` → `loaded` and a valid summary in the same call
   (tools and the answer format together; Risk). Its `execution_logs` rows: one `call_id`, turns 1 and 2,
   `attempt` 1 both.
-- [ ] Its `context_loads` rows:
+- [x] Its `context_loads` rows:
   - `start` rows for `SKILL.md` (`step-skill`) and `AGENTS.md` (`agents`), turn 0;
   - a `tool` row for `money-rules` with the model's reason;
   - `tokens` and `estimated_tokens` filled on all three.
-- [ ] Run the smoke again → check 9 prints `(known)` for the three counts: no second count for the same path,
+- [x] Run the smoke again → check 9 prints `(known)` for the three counts: no second count for the same path,
   commit and model.
 - [x] `--base smoke/spec-11-bad-folder` → check 1 shows `repoSkills: .claude/skill`. Check 2 (informative)
   passes and lists "invalid workflow.json: repoSkills folder not found: .claude/skill" for each lane. Check 3
   `FAIL` with the same message; NO model call.
 - [x] `--base smoke/spec-11-big-agents` → check 2 passes and lists "AGENTS.md too large (…, limit 204,800)" for
   each lane; check 3 `FAIL` with it; NO model call.
-- [ ] `--base smoke/spec-11-plain` → check 3:
+- [x] `--base smoke/spec-11-plain` → check 3:
   - root and folder `AGENTS.md` listed, NO repo skill, although `.claude/skills/money-rules` exists;
   - check 9 `SKIP` (no repo skill).
 - [x] `--base smoke/spec-11-bad-skills` (SD12) → check 2 passes and lists, for `full-sdd` and `spec-code`, one
@@ -1230,7 +1235,7 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   that removes `money-rules`' `description`, then answer it (SD12) → `status: needs-human` and ONE comment "Run 1 stopped at step `grill`: invalid skills:
   .claude/skills/money-rules/SKILL.md: no description"; NO new round. The merge itself posted nothing. Revert
   the change, `/retry` → the evaluation runs.
-- [ ] Add `model: max-grill` to `#A` (or to a new issue like `#A`, if `#A` has left Grill Me) and answer → the new rows' `model` is the `max` model; the token counts are
+- [x] Add `model: max-grill` to `#A` (or to a new issue like `#A`, if `#A` has left Grill Me) and answer → the new rows' `model` is the `max` model; the token counts are
   asked again for that model, or reused if it's the same model name.
 
 **Base branch only**

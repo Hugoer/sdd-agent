@@ -1,11 +1,23 @@
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 import { z } from 'zod';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
 import { CONTEXT_TOOLS } from '../context-tools.js';
-import { GoogleChatModelFactory } from './google-chat-model.factory.js';
+import {
+  COUNT_TIMEOUT_MS,
+  GoogleChatModelFactory,
+} from './google-chat-model.factory.js';
 
 // Built at run time and not key-shaped: no real key is ever written into the repo.
 const KEY = ['test', 'google', 'key', 'value'].join('-');
@@ -212,6 +224,81 @@ describe('GoogleChatModelFactory.request (spec 11, plan P7)', () => {
     ]);
     expect(raw.text).toBe('');
   });
+});
+
+describe('GoogleChatModelFactory.countTokens (spec 11)', () => {
+  const TEXT = 'Amounts are integer cents.';
+  let warn: MockInstance<Logger['warn']>;
+  beforeEach(() => {
+    warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const sentTo = () =>
+    fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+  const logged = () => warn.mock.calls.map(([line]) => String(line));
+
+  it('a reply → its totalTokens: the text alone, the key in the header and never in the URL, 10 s', async () => {
+    fetchStub.mockResolvedValue(
+      json(200, { totalTokens: 7, promptTokensDetails: [] }),
+    );
+
+    expect(await factory.countTokens(MODEL, TEXT)).toBe(7);
+
+    const [url, init] = sentTo();
+    expect(url).toBe(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:countTokens`,
+    );
+    expect(url).not.toContain(KEY);
+    expect(new Headers(init.headers).get('x-goog-api-key')).toBe(KEY);
+    expect(JSON.parse(init.body as string)).toEqual({
+      contents: [{ role: 'user', parts: [{ text: TEXT }] }],
+    });
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(COUNT_TIMEOUT_MS).toBe(10_000);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'an HTTP error',
+      () => json(429, googleError(429, 'RESOURCE_EXHAUSTED')),
+      'HTTP 429',
+    ],
+    [
+      'a reply without totalTokens',
+      () => json(200, { other: 1 }),
+      'no totalTokens',
+    ],
+  ])('%s → null and one log line naming the code', async (_, reply, code) => {
+    fetchStub.mockResolvedValue(reply());
+
+    expect(await factory.countTokens(MODEL, TEXT)).toBeNull();
+    expect(logged()).toEqual([`countTokens ${MODEL}: count failed (${code})`]);
+  });
+
+  it.each([
+    ['no response', new TypeError('fetch failed'), 'no response'],
+    [
+      'the 10 s timeout',
+      new DOMException(
+        'The operation was aborted due to timeout',
+        'TimeoutError',
+      ),
+      'timeout',
+    ],
+  ])(
+    '%s → null and one log line, never the key or the text',
+    async (_, error, code) => {
+      fetchStub.mockRejectedValue(error);
+
+      expect(await factory.countTokens(MODEL, TEXT)).toBeNull();
+      expect(logged()).toEqual([
+        `countTokens ${MODEL}: count failed (${code})`,
+      ]);
+      expect(logged().join()).not.toContain(KEY);
+      expect(logged().join()).not.toContain(TEXT);
+    },
+  );
 });
 
 describe('GoogleChatModelFactory.toLlmError', () => {

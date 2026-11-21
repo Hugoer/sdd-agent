@@ -123,6 +123,19 @@ export function buildPrompt(
   return { tag, messages, sizes, injections, cuts };
 }
 
+/** Every character of a request: its seven sizes added up (spec 11 SD5: `sentChars` of the estimate). */
+export function totalChars(sizes: PromptSizes): number {
+  return (
+    sizes.frame +
+    sizes.skill +
+    sizes.agents +
+    sizes.lists +
+    sizes.untrusted +
+    sizes.loaded +
+    sizes.other
+  );
+}
+
 /** Spec 11 (SDW9): the characters of a model message: its text, plus each tool call's arguments as JSON. */
 export function answerChars(message: AIMessage): number {
   return (message.tool_calls ?? []).reduce(

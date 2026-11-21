@@ -139,14 +139,17 @@ describe('ContextLoadService (real PostgreSQL)', () => {
     expect(reason).toBe('é'.repeat(300));
   });
 
-  it('setEstimates sets round(chars × perChar) on the rows with characters only; setTokens its own column', async () => {
+  it("setEstimates sets round(chars × perChar) on the call's rows of one turn that have characters; setTokens its own column", async () => {
     const loaded = await loads.insert(entry({ chars: 1000 }));
     const notFound = await loads.insert(
       entry({ outcome: 'not-found', chars: undefined }),
     );
-    const other = await loads.insert(entry({ chars: 500 }));
+    const laterTurn = await loads.insert(entry({ turn: 2, chars: 500 }));
+    const otherCall = await loads.insert(
+      entry({ callId: '00000000-0000-4000-8000-0000000000c2', chars: 500 }),
+    );
 
-    await loads.setEstimates([loaded, notFound], 0.2505);
+    await loads.setEstimates(CALL_ID, 1, 0.2505);
     await loads.setTokens(loaded, 241);
 
     expect(await row(loaded)).toMatchObject({
@@ -155,15 +158,11 @@ describe('ContextLoadService (real PostgreSQL)', () => {
       chars: 1000,
       outcome: 'loaded',
     });
-    expect(await row(notFound)).toMatchObject({
-      estimatedTokens: null,
-      tokens: null,
-    });
-    expect(await row(other)).toMatchObject({
-      estimatedTokens: null,
-      tokens: null,
-    });
-    await expect(loads.setEstimates([], 1)).resolves.toBeUndefined();
+    for (const id of [notFound, laterTurn, otherCall])
+      expect(await row(id)).toMatchObject({
+        estimatedTokens: null,
+        tokens: null,
+      });
   });
 
   it('knownTokens finds a stored count by path, commit and model, and ignores another model or commit', async () => {

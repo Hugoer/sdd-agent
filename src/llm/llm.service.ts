@@ -26,9 +26,17 @@ import {
   answerChars,
   buildPrompt,
   notesFor,
+  totalChars,
   type PromptMessage,
   type PromptSizes,
 } from './prompt.js';
+
+/** Spec 11 (SDW17): a file the call loaded: its `context_loads` row, counted at the end of the call. */
+interface CountedFile {
+  rowId: string;
+  path: string;
+  text: string;
+}
 
 /** Spec 4 LlmService.call() step 3 (plan P2): the model call's own limit; LangChain's retries are off. */
 export const CALL_TIMEOUT_MS = 300_000;
@@ -89,7 +97,8 @@ export class LlmService {
       ...new Set(prompt.injections.flatMap(({ kinds }) => kinds)),
     ];
     const cutSources = prompt.cuts.map(({ source }) => source.key);
-    await this.recordStartFiles(input, callId);
+    /** SDW17: every file the call loaded (its row, path and text), counted at the end. */
+    const toCount = await this.recordStartFiles(input, callId);
 
     const budget = this.loader.budget(setup);
     /** SD7: the names of the `load_skill` requests that ended `not-found`. */
@@ -134,6 +143,16 @@ export class LlmService {
         providerMeta: raw?.response_metadata,
       });
       stored = sent.length;
+      // SD5: the files this request carried first (the start files on turn 1, the previous turn's loads) get
+      // their estimate from its input tokens per character sent; none when it reported no input tokens.
+      const inputTokens = raw?.usage_metadata?.input_tokens;
+      const sentChars = totalChars(sizes);
+      if (inputTokens && sentChars > 0)
+        await this.loads.setEstimates(
+          callId,
+          turn - 1,
+          inputTokens / sentChars,
+        );
       this.logger.log(
         `llm ${context.step} ${context.task.externalRef} ${setup.model.name} (${setup.model.level}) turn ${turn} ` +
           `attempt ${attempt}: ${result.ok ? 'SUCCESS' : `ERROR ${result.error.code}`}` +
@@ -146,7 +165,7 @@ export class LlmService {
         sizes.other += answerChars(result.raw);
         for (const call of result.loads) {
           const request = requestOf(call);
-          const { answer, outcome } = await this.loader.load(
+          const { answer, outcome, loaded } = await this.loader.load(
             {
               task: context.task,
               runId: context.runId,
@@ -160,6 +179,7 @@ export class LlmService {
           );
           if (outcome === 'not-found' && request.tool === LOAD_SKILL)
             lookedFor.push(request.name ?? '');
+          if (loaded) toCount.push(loaded);
           messages.push(
             new ToolMessage({
               content: answer,
@@ -173,6 +193,7 @@ export class LlmService {
         continue;
       }
       if (result.ok) {
+        await this.countTokens(setup, toCount);
         const notes = notesFor(setup.model, prompt.cuts, {
           skill: setup.skill,
           repo: setup.repo,
@@ -182,7 +203,10 @@ export class LlmService {
         });
         return { output: result.output, model: setup.model, notes, logId };
       }
-      if (result.mismatch === undefined || attempt === MAX_ATTEMPTS) {
+      // SD10: after a Google error nothing is counted; after invalid-answer the model did answer, so it is.
+      if (result.mismatch === undefined) throw result.error;
+      if (attempt === MAX_ATTEMPTS) {
+        await this.countTokens(setup, toCount);
         throw result.error;
       }
       // 6. Re-ask, without tools (SDW12): the model's answer and the format problem, as two more turns. With no
@@ -202,12 +226,13 @@ export class LlmService {
   /**
    * Spec 11 step 2: one `context_loads` row per file given at start, the step's SKILL.md and the root AGENTS.md
    * (trigger `start`, turn 0, `loaded`). A root AGENTS.md that matches an injection pattern still loads (trusted,
-   * base branch): one log line with its kinds, never its text, and the kinds on its row (SDW8, GM13).
+   * base branch): one log line with its kinds, never its text, and the kinds on its row (SDW8, GM13). Gives the
+   * rows to count at the end.
    */
   private async recordStartFiles<T>(
     { context, setup }: LlmCall<T>,
     callId: string,
-  ): Promise<void> {
+  ): Promise<CountedFile[]> {
     const { skill, repo } = setup;
     const files = [
       {
@@ -226,6 +251,7 @@ export class LlmService {
           ]
         : []),
     ];
+    const rows: CountedFile[] = [];
     for (const file of files) {
       const injectionKinds = findInjectionKinds(file.text);
       if (file.kind === 'agents' && injectionKinds.length > 0)
@@ -233,7 +259,7 @@ export class LlmService {
           `context ${context.step} @${setup.commit.slice(0, 7)}: AGENTS.md matches an injection pattern ` +
             `(${injectionKinds.join(', ')}); loaded anyway, the repository's instructions on the base branch are trusted`,
         );
-      await this.loads.insert({
+      const rowId = await this.loads.insert({
         task: context.task,
         runId: context.runId,
         step: context.step,
@@ -250,7 +276,41 @@ export class LlmService {
         chars: file.text.length,
         injectionKinds,
       });
+      rows.push({ rowId, path: file.path, text: file.text });
     }
+    return rows;
+  }
+
+  /**
+   * SDW17 (step 7): each loaded file of the call gets the provider's count, in parallel: a count stored for the
+   * same path, commit and model is reused, else `countTokens` is asked (10 s, in the adapter). A failure leaves the
+   * row empty; nothing here changes the call's output or error. One log line per file, never its text.
+   */
+  private async countTokens(
+    setup: LlmCall<unknown>['setup'],
+    files: CountedFile[],
+  ): Promise<void> {
+    const model = setup.model.name;
+    await Promise.all(
+      files.map(async ({ rowId, path, text }) => {
+        let outcome: string;
+        try {
+          const known = await this.loads.knownTokens(path, setup.commit, model);
+          const tokens = known ?? (await this.factory.countTokens(model, text));
+          if (tokens === null) {
+            outcome = 'count failed (no count from the provider)';
+          } else {
+            await this.loads.setTokens(rowId, tokens);
+            outcome = `${tokens.toLocaleString('en-US')} (${known === null ? 'counted' : 'known'})`;
+          }
+        } catch (error) {
+          outcome = `count failed (${error instanceof Error ? error.name : typeof error})`;
+        }
+        this.logger.log(
+          `context tokens ${path} @${setup.commit.slice(0, 7)} ${model}: ${outcome}`,
+        );
+      }),
+    );
   }
 
   /**

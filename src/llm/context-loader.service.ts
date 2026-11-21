@@ -33,6 +33,13 @@ import {
 import { findInjectionKinds } from './injection-patterns.js';
 import { RepoCatalogService, readText } from './repo-catalog.service.js';
 
+/** What one request gave the model; for a `loaded` file also its row and text, counted at the end of the call. */
+export interface LoadResult {
+  answer: string;
+  outcome: LoadOutcome;
+  loaded?: { rowId: string; path: string; text: string };
+}
+
 /**
  * Plan P15: the call a request belongs to (its rows' columns). 2026-11-21 (build): it holds the call's `setup`, whose
  * lists the request is checked against, instead of P15's `model` and `commit` (`setup.model.name`, `setup.commit`).
@@ -89,7 +96,7 @@ export class ContextLoaderService {
     call: LoadContext,
     request: LoadRequest,
     budget: LoadBudget,
-  ): Promise<{ answer: string; outcome: LoadOutcome }> {
+  ): Promise<LoadResult> {
     const { setup } = call;
     const reads = await this.catalog.at(setup.commit);
     const skillMdBytes = new Map(
@@ -140,14 +147,18 @@ export class ContextLoaderService {
           "anyway, the repository's instructions on the base branch are trusted",
       );
     markLoaded(budget, file);
-    await this.record(call, request, 'loaded', file, undefined, {
+    const rowId = await this.record(call, request, 'loaded', file, undefined, {
       chars: text.length,
       injectionKinds,
     });
-    return { outcome: 'loaded', answer: loadedAnswer(file, text) };
+    return {
+      outcome: 'loaded',
+      answer: loadedAnswer(file, text),
+      loaded: { rowId, path: file.path, text },
+    };
   }
 
-  /** The request's row, then its log line (no content). */
+  /** The request's row, then its log line (no content); the row's id. */
   private async record(
     call: LoadContext,
     request: LoadRequest,
@@ -155,7 +166,7 @@ export class ContextLoaderService {
     file: RequestedFile | undefined,
     why?: string,
     loaded?: { chars: number; injectionKinds: string[] },
-  ): Promise<void> {
+  ): Promise<string> {
     const tool =
       request.tool === LOAD_SKILL || request.tool === LOAD_FILE
         ? request.tool
@@ -164,7 +175,7 @@ export class ContextLoaderService {
       request.tool === LOAD_SKILL
         ? request.name
         : (request.path ?? request.name);
-    await this.loads.insert({
+    const id = await this.loads.insert({
       task: call.task,
       runId: call.runId,
       step: call.step,
@@ -193,6 +204,7 @@ export class ContextLoaderService {
       `${this.prefix(call)}: ${cleanText(request.tool, 64)} ${cleanText(requested ?? '', 1024)} → ${outcome}` +
         (detail ? ` (${detail})` : ''),
     );
+    return id;
   }
 
   /** `context grill #12 turn 1`. */

@@ -69,6 +69,7 @@ describe('Grill Me with discovery (spec 11)', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    t.models.countWith = () => null;
     expect(t.models.remaining).toBe(0);
     // The shared fake repo goes back to spec 5's content for the next suite.
     removeDiscovery(t.repo);
@@ -82,6 +83,7 @@ describe('Grill Me with discovery (spec 11)', () => {
       labels: ['workflow: full-sdd'],
       description: 'Split a bill between three people.',
     });
+    t.models.countWith = (_model, text) => text.length;
     t.models
       .reply({ toolCalls: [LOAD_MONEY] })
       .replyJson(grillAnswer({ confidence: 60, questions: 2 }));
@@ -151,6 +153,12 @@ describe('Grill Me with discovery (spec 11)', () => {
         outcome: 'loaded',
       },
     ]);
+    // T21: each file's own count and its estimate from the request that carried it.
+    for (const loaded of rows)
+      expect(loaded).toMatchObject({
+        tokens: loaded.chars,
+        estimatedTokens: expect.any(Number) as number,
+      });
     expect(rows[2]).toMatchObject({
       runId: run.id,
       step: 'grill',

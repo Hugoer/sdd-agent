@@ -70,9 +70,12 @@ const ok = await runLlmSmoke(
     rowsOf: (id) =>
       prisma.executionLog.findMany({
         where: { runId: id },
-        orderBy: { createdAt: 'asc' },
+        // Plan P20: a call's rows can share a millisecond.
+        orderBy: [{ createdAt: 'asc' }, { turn: 'asc' }],
         select: {
           id: true,
+          callId: true,
+          turn: true,
           attempt: true,
           status: true,
           errorCode: true,
@@ -89,6 +92,36 @@ const ok = await runLlmSmoke(
           otherChars: true,
         },
       }),
+    loadsOf: async (callId) => {
+      const rows = await prisma.contextLoad.findMany({
+        where: { callId },
+        orderBy: [{ createdAt: 'asc' }, { turn: 'asc' }],
+      });
+      return Promise.all(
+        rows.map(async (row) => ({
+          turn: row.turn,
+          trigger: row.trigger,
+          path: row.path,
+          requested: row.requested,
+          reason: row.reason,
+          outcome: row.outcome,
+          tokens: row.tokens,
+          estimatedTokens: row.estimatedTokens,
+          // SDW17: `known` when an earlier row of the same path, commit and model already had a count.
+          earlierCount:
+            row.path !== null &&
+            (await prisma.contextLoad.count({
+              where: {
+                path: row.path,
+                commit: row.commit,
+                model: row.model,
+                tokens: { not: null },
+                createdAt: { lt: row.createdAt },
+              },
+            })) > 0,
+        })),
+      );
+    },
     targetRepo: config.get('TARGET_REPO', { infer: true }),
   },
   {

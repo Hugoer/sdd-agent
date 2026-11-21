@@ -78,6 +78,13 @@ const SUMMARY = 'The splitter rounds cents wrongly.';
 const OK_ANSWER: ScriptedReply = {
   answer: JSON.stringify({ summary: SUMMARY, wordCount: 5 }),
 };
+/** Spec 11: check 9's load turn. */
+const REASON = 'The smoke asks.';
+const LOAD_MONEY: ScriptedReply = {
+  toolCalls: [
+    { name: 'load_skill', args: { name: 'money-rules', reason: REASON } },
+  ],
+};
 
 interface World {
   workflow?: string;
@@ -128,6 +135,8 @@ function world(options: World = {}) {
       rows.push({
         id,
         runId: entry.runId,
+        callId: entry.callId ?? null,
+        turn: entry.turn ?? entry.attempt,
         attempt: entry.attempt,
         status: entry.error ? 'ERROR' : 'SUCCESS',
         errorCode: entry.error?.code ?? null,
@@ -162,6 +171,7 @@ function world(options: World = {}) {
     task,
     factory,
     rows,
+    loads,
     deps: {
       stepConfig,
       warnings,
@@ -176,6 +186,31 @@ function world(options: World = {}) {
       repo,
       rowsOf: (runId: string) =>
         Promise.resolve(rows.filter((row) => row.runId === runId)),
+      loadsOf: (callId: string) =>
+        Promise.resolve(
+          loads.rows
+            .map((row, index) => ({ row, index }))
+            .filter(({ row }) => row.callId === callId)
+            .map(({ row, index }) => ({
+              turn: row.turn,
+              trigger: row.trigger,
+              path: row.path ?? null,
+              requested: row.requested ?? null,
+              reason: row.reason ?? null,
+              outcome: row.outcome,
+              tokens: row.tokens,
+              estimatedTokens: row.estimatedTokens,
+              earlierCount: loads.rows
+                .slice(0, index)
+                .some(
+                  (earlier) =>
+                    earlier.path === row.path &&
+                    earlier.commit === row.commit &&
+                    earlier.model === row.model &&
+                    earlier.tokens !== null,
+                ),
+            })),
+        ),
       targetRepo: REPO,
     },
   };
@@ -213,14 +248,15 @@ function expectNothingSecret(output: string): void {
 }
 
 describe('runLlmSmoke: the whole chain', () => {
-  it('eight PASS lines; the comment reaches the port redacted, with the model line', async () => {
+  it('eight PASS lines and check 9 SKIP (no repo skill); the comment reaches the port redacted, with the model line', async () => {
     const w = world();
     const commit = await w.repo.resolveRef('main');
 
     const { ok, lines } = await run(w);
 
     expect(ok).toBe(true);
-    expect(lines).toHaveLength(8);
+    expect(lines).toHaveLength(9);
+    expect(lines[8]).toBe('SKIP 9 discovery: no repo skill in the catalog');
     expect(lines.slice(0, 5)).toEqual([
       `PASS 1 workflow: main @ ${commit}; skills grill=${SKILLS.grill}, spec=${SKILLS.spec}, ` +
         `plan=${SKILLS.plan}, code=${SKILLS.code}, qualityGate=${SKILLS.qualityGate}; repoSkills: (none); ` +
@@ -329,7 +365,11 @@ describe('runLlmSmoke: the whole chain', () => {
       extraFiles: DISCOVERY,
     });
 
-    const { ok, lines, output } = await run(w);
+    const { ok, lines, output } = await run(w, [
+      OK_ANSWER,
+      LOAD_MONEY,
+      OK_ANSWER,
+    ]);
 
     expect(ok).toBe(true);
     expect(lines[0]).toContain('; repoSkills: .claude/skills; models');
@@ -408,6 +448,80 @@ describe('runLlmSmoke: the whole chain', () => {
   });
 });
 
+describe('runLlmSmoke: check 6 and check 9 with discovery (spec 11)', () => {
+  const discovery = () =>
+    world({
+      workflow: JSON.stringify({ ...WORKFLOW, repoSkills: ['.claude/skills'] }),
+      extraFiles: {
+        ...DISCOVERY,
+        [`${SKILLS.spec}/references/template.md`]: '# Template',
+      },
+    });
+
+  it('check 6 offers no tools on SD9-like content and a step skill with a reference: one request, no lists', async () => {
+    const w = discovery();
+
+    const { lines } = await run(w, [OK_ANSWER, LOAD_MONEY, OK_ANSWER]);
+
+    expect(lines[2]).toContain('1 other file');
+    expect(w.factory.calls[0]).toMatchObject({ tools: [], schema: true });
+    expect(w.factory.calls[0].messages[0].text).toContain(
+      DISCOVERY['AGENTS.md'],
+    );
+    expect(w.factory.calls[0].messages[0].text).not.toContain('Loading:');
+    expect(w.factory.calls[0].messages[0].text).not.toContain('template.md');
+    expect(lines[6]).not.toContain('Read:');
+  });
+
+  it("check 9 PASS: the skill loaded, the call's requests, each row's tokens (counted), then (known) on a second run", async () => {
+    const w = discovery();
+    w.factory.countWith = (_model, text) => text.length;
+
+    const first = await run(w, [OK_ANSWER, LOAD_MONEY, OK_ANSWER]);
+
+    expect(first.ok).toBe(true);
+    const callId = w.rows.at(-1)?.callId;
+    expect(w.factory.calls[1]).toMatchObject({
+      tools: ['load_skill', 'load_file'],
+    });
+    expect(w.factory.calls[1].messages[0].text).toContain(
+      'Before you answer, load the repository skill money-rules with load_skill.',
+    );
+    const money = '.claude/skills/money-rules/SKILL.md';
+    const skillMdChars = DISCOVERY[money].length;
+    expect(first.lines[8]).toMatch(
+      new RegExp(
+        `^PASS 9 discovery: skill money-rules loaded, call ${callId}; ` +
+          'requests turn 1 attempt 1 SUCCESS, turn 2 attempt 1 SUCCESS; ' +
+          `${SKILLS.spec}/SKILL\\.md start turn 0 loaded, tokens \\d+ \\(known\\), estimated \\d+; ` +
+          'AGENTS\\.md start turn 0 loaded, tokens \\d+ \\(known\\), estimated \\d+; ' +
+          `\\.claude/skills/money-rules/SKILL\\.md tool turn 1 loaded, reason ${REASON.length} chars, tokens ${skillMdChars} ` +
+          '\\(counted\\), estimated \\d+; summary 34 chars$',
+      ),
+    );
+
+    const second = await run(w, [OK_ANSWER, LOAD_MONEY, OK_ANSWER], {
+      runId: 'smoke-second',
+    });
+    expect(second.lines[8]).toContain(
+      `.claude/skills/money-rules/SKILL.md tool turn 1 loaded, reason ${REASON.length} chars, tokens ${skillMdChars} (known)`,
+    );
+    expectNothingSecret(first.output + second.output);
+    expect(first.output).not.toContain(DISCOVERY[money]);
+  });
+
+  it('check 9 FAIL when the model loads nothing', async () => {
+    const w = discovery();
+
+    const { ok, lines } = await run(w, [OK_ANSWER, OK_ANSWER]);
+
+    expect(ok).toBe(false);
+    expect(lines.at(-1)).toMatch(
+      /^FAIL 9 discovery: Error: the model did not load skill money-rules: .*SKILL\.md start turn 0 loaded/,
+    );
+  });
+});
+
 describe('runLlmSmoke: --model and --reask', () => {
   it('--model: passes when the call fails as unknown-model, skips check 7 and reads the error row', async () => {
     const w = world();
@@ -431,6 +545,7 @@ describe('runLlmSmoke: --model and --reask', () => {
       'PASS 6 call: unknown-model as expected: Google has no model `no-such-model-xyz` (HTTP 404, NOT_FOUND)',
       'SKIP 7 comment: no summary to post (--model)',
       `PASS 8 row: run_id ${RUN_ID}: 1 row; newest ERROR unknown-model, attempt 1, no-such-model-xyz (standard)`,
+      'SKIP 9 discovery: no repo skill in the catalog',
     ]);
     expect(w.factory.created).toEqual(['no-such-model-xyz']);
     expect(w.fakeIssues.commentsOf(w.task)).toEqual([]);

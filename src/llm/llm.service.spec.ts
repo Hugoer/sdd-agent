@@ -871,4 +871,151 @@ describe('LlmService.call: load turns (spec 11)', () => {
       'error',
     ]);
   });
+
+  describe('token counts and estimates (T21)', () => {
+    const count = (ctx: { loads: InMemoryContextLoads }) =>
+      ctx.loads.rows.map(({ path, outcome, tokens, estimatedTokens }) => ({
+        path,
+        outcome,
+        tokens,
+        estimatedTokens,
+      }));
+
+    it('estimates from the request that carried each file: the start files from turn 1, a load from turn 2', async () => {
+      const ctx = await discovery();
+      ctx.factory
+        .reply({
+          toolCalls: [LOAD_SRC],
+          usage: { ...SCRIPTED_USAGE, input_tokens: 600 },
+        })
+        .replyJson(VALID, { usage: { ...SCRIPTED_USAGE, input_tokens: 900 } });
+
+      await ctx.service.call(ctx.call(schema));
+
+      const per = (turn: number) =>
+        [600, 900][turn - 1] / total(ctx.rows[turn - 1].sizes);
+      expect(
+        ctx.loads.rows.map(({ estimatedTokens }) => estimatedTokens),
+      ).toEqual([
+        Math.round((ctx.loads.rows[0].chars ?? 0) * per(1)),
+        Math.round((ctx.loads.rows[1].chars ?? 0) * per(1)),
+        Math.round((ctx.loads.rows[2].chars ?? 0) * per(2)),
+      ]);
+      expect(ctx.loads.rows[2].estimatedTokens).toBeGreaterThan(0);
+    });
+
+    it('a request that reported no input tokens leaves the estimates of what it carried empty', async () => {
+      const ctx = await discovery();
+      ctx.factory
+        .reply({ toolCalls: [LOAD_SRC] })
+        .replyJson(VALID, { usage: null });
+
+      await ctx.service.call(ctx.call(schema));
+
+      expect(count(ctx).map(({ estimatedTokens }) => estimatedTokens)).toEqual([
+        expect.any(Number),
+        expect.any(Number),
+        null,
+      ]);
+    });
+
+    it('every loaded file is counted at the end, in parallel; a second call reuses the counts, another model counts again', async () => {
+      const ctx = await discovery();
+      ctx.factory.countWith = (_model, text) => text.length;
+      ctx.factory.reply({ toolCalls: [LOAD_SRC] }).replyJson(VALID);
+
+      await ctx.service.call(ctx.call(schema));
+
+      expect(ctx.factory.counted.map(({ text }) => text)).toEqual([
+        'Placeholder skill.',
+        '# Conventions',
+        '# src rules',
+      ]);
+      expect(count(ctx).map(({ tokens }) => tokens)).toEqual([18, 13, 11]);
+      const logged = vi
+        .spyOn(Logger.prototype, 'log')
+        .mock.calls.map(([line]) => String(line));
+      expect(logged).toContain(
+        `context tokens src/AGENTS.md @${ctx.loads.rows[0].commit.slice(0, 7)} gemini-4-hydrogen: 11 (counted)`,
+      );
+
+      ctx.factory.reply({ toolCalls: [LOAD_SRC] }).replyJson(VALID);
+      await ctx.service.call(ctx.call(schema));
+      expect(ctx.factory.counted).toHaveLength(3);
+      expect(
+        count(ctx)
+          .slice(3)
+          .map(({ tokens }) => tokens),
+      ).toEqual([18, 13, 11]);
+      expect(
+        vi
+          .spyOn(Logger.prototype, 'log')
+          .mock.calls.map(([line]) => String(line)),
+      ).toContain(
+        `context tokens src/AGENTS.md @${ctx.loads.rows[0].commit.slice(0, 7)} gemini-4-hydrogen: 11 (known)`,
+      );
+
+      ctx.factory.replyJson(VALID);
+      const other = ctx.call(schema);
+      await ctx.service.call({
+        ...other,
+        setup: {
+          ...other.setup,
+          model: { ...other.setup.model, name: 'gemini-4-other' },
+        },
+      });
+      expect(ctx.factory.counted.slice(3).map(({ model }) => model)).toEqual([
+        'gemini-4-other',
+        'gemini-4-other',
+      ]);
+    });
+
+    it('a count that fails or throws leaves the row empty, and the call still succeeds', async () => {
+      const ctx = await discovery();
+      ctx.factory.countWith = (_model, text) => {
+        if (text === '# Conventions') throw new Error('boom');
+        return text === '# src rules' ? null : 5;
+      };
+      ctx.factory.reply({ toolCalls: [LOAD_SRC] }).replyJson(VALID);
+
+      const result = await ctx.service.call(ctx.call(schema));
+
+      expect(result.output).toEqual(VALID);
+      expect(count(ctx).map(({ tokens }) => tokens)).toEqual([5, null, null]);
+    });
+
+    it('a Google error after a load turn: its row is written and it is thrown, with no count (SD10)', async () => {
+      const ctx = await discovery();
+      ctx.factory.countWith = () => 1;
+      const down = new LlmError('down', 'transient', 'provider-unavailable');
+      ctx.factory.reply({ toolCalls: [LOAD_SRC] }, { error: down });
+
+      expect((await failureOf(ctx.service.call(ctx.call(schema)))).code).toBe(
+        'provider-unavailable',
+      );
+      expect(ctx.rows.map(({ error }) => error?.code)).toEqual([
+        undefined,
+        'provider-unavailable',
+      ]);
+      expect(ctx.factory.counted).toEqual([]);
+      expect(count(ctx).map(({ tokens }) => tokens)).toEqual([
+        null,
+        null,
+        null,
+      ]);
+    });
+
+    it('invalid-answer after loads still counts, then throws', async () => {
+      const ctx = await discovery();
+      ctx.factory.countWith = () => 1;
+      ctx.factory
+        .reply({ toolCalls: [LOAD_SRC] })
+        .reply({ answer: 'no' }, { answer: 'no' }, { answer: 'no' });
+
+      expect((await failureOf(ctx.service.call(ctx.call(schema)))).code).toBe(
+        'invalid-answer',
+      );
+      expect(count(ctx).map(({ tokens }) => tokens)).toEqual([1, 1, 1]);
+    });
+  });
 });

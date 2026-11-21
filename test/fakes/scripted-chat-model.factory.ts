@@ -66,6 +66,16 @@ export class ScriptedChatModelFactory implements ChatModelFactory {
   readonly created: string[] = [];
   /** Every model call, in order, with the messages it got. */
   readonly calls: ScriptedCall[] = [];
+  /** Spec 11: every `countTokens` request, in order. */
+  readonly counted: { model: string; text: string }[] = [];
+  /**
+   * Spec 11: what `countTokens` gives for a text: a number, null (no count, or the count failed) or a promise of
+   * either (a slow count). By default null, as a provider without counts.
+   */
+  countWith: (
+    model: string,
+    text: string,
+  ) => number | null | Promise<number | null> = () => null;
   private readonly script: ScriptedReply[] = [];
 
   reply(...replies: ScriptedReply[]): this {
@@ -99,6 +109,11 @@ export class ScriptedChatModelFactory implements ChatModelFactory {
         schema: schema !== undefined,
       },
     }) as Runnable<BaseMessage[], AIMessage>;
+  }
+
+  countTokens(model: string, text: string): Promise<number | null> {
+    this.counted.push({ model, text });
+    return Promise.resolve(this.countWith(model, text));
   }
 
   toLlmError(error: unknown, model: string): LlmError {

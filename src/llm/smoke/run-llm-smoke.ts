@@ -65,9 +65,12 @@ export interface LlmSmokeOptions {
   runId: string;
 }
 
-/** What checks 6 and 8 read back from ExecutionLog. */
+/** What checks 6, 8 and 9 read back from ExecutionLog. */
 export interface SmokeRow {
   id: string;
+  /** Spec 11: the call and the request within it. */
+  callId: string | null;
+  turn: number;
   attempt: number;
   status: string;
   errorCode: string | null;
@@ -84,6 +87,20 @@ export interface SmokeRow {
   otherChars: number;
 }
 
+/** Spec 11: what check 9 reads back from ContextLoad, one row per file the call got or asked for. */
+export interface SmokeLoadRow {
+  turn: number;
+  trigger: string;
+  path: string | null;
+  requested: string | null;
+  reason: string | null;
+  outcome: string;
+  tokens: number | null;
+  estimatedTokens: number | null;
+  /** An earlier row of the same path, commit and model already had a count: this one was reused (`known`). */
+  earlierCount: boolean;
+}
+
 export interface LlmSmokeDeps {
   stepConfig: StepConfigService;
   warnings: InjectionWarningService;
@@ -91,8 +108,10 @@ export interface LlmSmokeDeps {
   /** The port as every caller gets it: wrapped by the secret scanner. */
   issues: IssueProvider;
   repo: RepoProvider;
-  /** The rows of one run, oldest first. */
+  /** The rows of one run, oldest first (by time, then turn: plan P20). */
   rowsOf: (runId: string) => Promise<SmokeRow[]>;
+  /** Spec 11: the context_loads rows of one call, oldest first. */
+  loadsOf: (callId: string) => Promise<SmokeLoadRow[]>;
   targetRepo: string;
 }
 
@@ -190,6 +209,7 @@ export async function runLlmSmoke(
           : Promise.resolve({ skipped: 'no summary to post (--model)' }),
     ],
     ['8 row', () => rowCheck(deps, options)],
+    ['9 discovery', () => discoveryCheck(deps, options, task!, setup!)],
   ];
   for (const [name, run] of checks) {
     try {
@@ -348,9 +368,15 @@ async function callCheck(
   const model = options.model
     ? { ...setup.model, name: options.model }
     : setup.model;
+  // Spec 11 (plan P4): nothing to load, so no tools: one request (two with --reask). The root AGENTS.md stays.
   const call = deps.llm.call<Summary>({
     context: { task, step: options.step, runId: options.runId },
-    setup: { ...setup, model },
+    setup: {
+      ...setup,
+      model,
+      skill: { ...setup.skill, files: [] },
+      repo: { ...setup.repo, skills: [], agents: [] },
+    },
     frame: FRAME,
     turns: [
       {
@@ -439,6 +465,74 @@ async function rowCheck(
   return (
     `run_id ${options.runId}: ${rows.length} ${rows.length === 1 ? 'row' : 'rows'}; newest ${newest.status}` +
     `${newest.errorCode ? ` ${newest.errorCode}` : ''}, attempt ${newest.attempt}, ${newest.model} (${newest.modelLevel})`
+  );
+}
+
+/**
+ * Check 9 (spec 11 SDW20): one real call whose frame asks the model to load the first listed repo skill, then give
+ * check 6's summary. It passes when that skill's SKILL.md was `loaded` and the answer is valid, and prints the
+ * call's requests and, per context_loads row, its tokens `(counted)` or `(known)`. Never a file's text.
+ */
+async function discoveryCheck(
+  deps: LlmSmokeDeps,
+  options: LlmSmokeOptions,
+  task: UnifiedTask,
+  setup: StepSetup,
+): Promise<string | { skipped: string }> {
+  const first = setup.repo.skills[0];
+  if (!first) return { skipped: 'no repo skill in the catalog' };
+  const result = await deps.llm.call<Summary>({
+    context: { task, step: options.step, runId: options.runId },
+    setup,
+    frame: `${FRAME} Before you answer, load the repository skill ${first.name} with load_skill.`,
+    turns: [
+      {
+        role: 'user',
+        blocks: [{ kind: 'text', text: 'The issue:' }, ...issueBlocks(task)],
+      },
+    ],
+    output: summarySchema,
+  });
+  const rows = await deps.rowsOf(options.runId);
+  const callId = rows.find((row) => row.id === result.logId)?.callId;
+  if (!callId) throw new Error(`row ${result.logId} not found`);
+  const loads = await deps.loadsOf(callId);
+  const skillFile = `${first.path}/SKILL.md`;
+  if (
+    !loads.some(
+      (load) =>
+        load.trigger === 'tool' &&
+        load.outcome === 'loaded' &&
+        load.path === skillFile,
+    )
+  )
+    throw new Error(
+      `the model did not load skill ${first.name}: ${loads.map(describeLoad).join('; ')}`,
+    );
+  const requests = rows
+    .filter((row) => row.callId === callId)
+    .map(
+      (row) =>
+        `turn ${row.turn} attempt ${row.attempt} ${row.errorCode ?? row.status}`,
+    );
+  return [
+    `skill ${first.name} loaded, call ${callId}`,
+    `requests ${requests.join(', ')}`,
+    ...loads.map(describeLoad),
+    `summary ${result.output.summary.length} chars`,
+  ].join('; ');
+}
+
+/** One context_loads row: its path (or what was asked), trigger, outcome, reason length and token values. */
+function describeLoad(load: SmokeLoadRow): string {
+  const tokens =
+    load.tokens === null
+      ? 'tokens –'
+      : `tokens ${load.tokens} (${load.earlierCount ? 'known' : 'counted'})`;
+  return (
+    `${load.path ?? load.requested ?? '(nothing)'} ${load.trigger} turn ${load.turn} ${load.outcome}` +
+    `${load.reason === null ? '' : `, reason ${load.reason.length} chars`}, ${tokens}, estimated ` +
+    show(load.estimatedTokens)
   );
 }
 

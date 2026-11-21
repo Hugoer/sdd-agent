@@ -2,7 +2,7 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { AIMessage, BaseMessage } from '@langchain/core/messages';
 import type { Runnable } from '@langchain/core/runnables';
 import { ChatGoogle } from '@langchain/google/node';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
@@ -11,6 +11,10 @@ import type {
   RequestOptions,
 } from '../chat-model.factory.js';
 
+/** Gemini's API (AI Studio key), as ChatGoogle calls it. */
+const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta';
+/** Spec 11 SDW17: a count has 10 seconds at most. */
+export const COUNT_TIMEOUT_MS = 10_000;
 const UNAVAILABLE_STATUSES = new Set([408, 500, 502, 503, 504]);
 const KEY_INVALID_REASONS = new Set(['API_KEY_INVALID', 'API_KEY_EXPIRED']);
 const BLOCKED_FINISH_REASONS = new Set([
@@ -34,6 +38,7 @@ interface GoogleHttpError {
 @Injectable()
 export class GoogleChatModelFactory implements ChatModelFactory {
   readonly provider = 'google';
+  private readonly logger = new Logger(GoogleChatModelFactory.name);
   private readonly apiKey: string;
 
   constructor(config: ConfigService<Env, true>) {
@@ -62,6 +67,49 @@ export class GoogleChatModelFactory implements ChatModelFactory {
 
   private chat(model: string): ChatGoogle {
     return new ChatGoogle({ model, apiKey: this.apiKey, maxRetries: 0 });
+  }
+
+  /**
+   * Spec 11 "Token counts": Gemini's `models/<model>:countTokens` for the text alone, the key in the header (never
+   * the URL), 10 s. Its `totalTokens`, or null on any error, with one log line naming the code.
+   */
+  async countTokens(model: string, text: string): Promise<number | null> {
+    let failure: string;
+    try {
+      const response = await fetch(
+        `${GEMINI_API}/models/${encodeURIComponent(model)}:countTokens`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-api-key': this.apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text }] }],
+          }),
+          signal: AbortSignal.timeout(COUNT_TIMEOUT_MS),
+        },
+      );
+      if (response.ok) {
+        const { totalTokens } = (await response.json()) as {
+          totalTokens?: unknown;
+        };
+        if (typeof totalTokens === 'number') return totalTokens;
+        failure = 'no totalTokens';
+      } else {
+        failure = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      const name = error instanceof Error ? error.name : typeof error;
+      failure =
+        name === 'TimeoutError' || name === 'AbortError'
+          ? 'timeout'
+          : isNetworkFailure(error)
+            ? 'no response'
+            : name;
+    }
+    this.logger.warn(`countTokens ${model}: count failed (${failure})`);
+    return null;
   }
 
   /** The spec's error table ("LlmService.call()" → Errors). */

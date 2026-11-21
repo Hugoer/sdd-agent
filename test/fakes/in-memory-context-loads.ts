@@ -34,9 +34,9 @@ export class InMemoryContextLoads implements Pick<
     return Promise.resolve(id);
   }
 
-  setEstimates(ids: string[], perChar: number): Promise<void> {
+  setEstimates(callId: string, turn: number, perChar: number): Promise<void> {
     for (const row of this.rows)
-      if (ids.includes(row.id) && row.chars !== undefined)
+      if (row.callId === callId && row.turn === turn && row.chars !== undefined)
         row.estimatedTokens = Math.round(row.chars * perChar);
     return Promise.resolve();
   }
