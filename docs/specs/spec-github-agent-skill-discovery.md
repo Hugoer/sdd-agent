@@ -1339,6 +1339,9 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
 - **Following references inside a loaded file** to files that aren't listed.
 - **Custom agents and the outer loop:** idea doc "Future" (2026-11-19).
 - **A command or dashboard for `context_loads`:** the dashboard later (memory: no `db:` command per table).
+- **The invariant check without `gh`** (2026-11-21, after Task 24): `scripts/skill-discovery-invariants.mjs`
+  reads the target repo's comments with the developer's own `gh` login. That's accepted for now, since it's a
+  check run by hand and never by the bot. Reading them through the GitHub App instead waits for a later phase.
 
 ## Agreed for later specs
 
