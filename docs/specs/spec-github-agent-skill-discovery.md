@@ -595,7 +595,8 @@ Other files of this skill, to load with load_file when the skill points to one:
 
 - A path is matched after removing a leading `./` or `/`, with exact letter case.
 - A missing or empty `reason` doesn't block the load: the row stores `(none given)`.
-- A tool name the bot didn't offer → `not-found`.
+- A tool name the bot didn't offer → `not-found`, answered "No tool named `read_file`: use load_skill or load_file."
+  (2026-11-21, build); its row has no `tool`.
 
 One request, in this order:
 
@@ -759,9 +760,13 @@ export interface ChatModelFactory {
 class ContextLoaderService {
   /** the two tool definitions for a setup, or none when nothing can be loaded */
   tools(setup: StepSetup): StructuredToolInterface[];
-  /** runs one request: resolves, checks the budget, reads at setup.commit, writes its context_loads row */
-  load(call: LoadContext, request: { tool: 'load_skill' | 'load_file'; name?: string; path?: string;
-    reason?: string }, budget: LoadBudget): Promise<{ answer: string; outcome: LoadOutcome }>;
+  /** 2026-11-21 (build): the `.env` limits, and a new call's budget under them (the start files already given) */
+  readonly limits: { maxLoads: number; maxBytes: number };
+  budget(setup: StepSetup): LoadBudget;
+  /** runs one request: resolves, checks the budget, reads at setup.commit, writes its context_loads row.
+   *  2026-11-21 (build): `tool` is any name the model wrote; one the bot didn't offer is `not-found` */
+  load(call: LoadContext, request: { tool: string; name?: string; path?: string; reason?: string },
+    budget: LoadBudget): Promise<{ answer: string; outcome: LoadOutcome }>;
 }
 export type LoadOutcome = 'loaded' | 'already-loaded' | 'not-found' | 'too-large' | 'unreadable' | 'limit-reached'
   | 'error';                                   // the read failed on GitHub; the error is then thrown (plan P21)
@@ -771,8 +776,9 @@ export type LoadOutcome = 'loaded' | 'already-loaded' | 'not-found' | 'too-large
 P15):
 
 ```ts
-interface LoadContext { task: TaskRef; runId?: string; step: StepName; callId: string; turn: number; model: string;
-  commit: string }
+interface LoadContext { task: TaskRef; runId?: string; step: StepName; callId: string; turn: number;
+  setup: StepSetup }   // 2026-11-21 (build): the setup whose lists a request is checked against, in place of P15's
+                       // `model` and `commit` (its `setup.model.name` and `setup.commit`)
 interface LoadBudget { loadsLeft: number; bytesLeft: number; given: Set<string>;   // repo paths given in this call
   loadedSkills: Set<string>; limitHit: 'files' | 'bytes' | null }                  // repo skill names loaded
 ```
@@ -1173,22 +1179,22 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   call.
 
 **Grill Me on GitHub** (app running)
-- [ ] New issue `#A` "Split a bill between three people" (1000 cents does not divide by 3) + `workflow: full-sdd`
+- [x] New issue `#A` "Split a bill between three people" (1000 cents does not divide by 3) + `workflow: full-sdd`
   → the first Grill comment (questions or "no questions needed"):
   - has, under the model line, "Read: skill `money-rules` (`SKILL.md`…)";
   - `context_loads` has that `loaded` row with a reason about money;
   - the comment and the row agree.
-- [ ] `#A`'s first `execution_logs` row (turn 1): its `prompt` holds:
+- [x] `#A`'s first `execution_logs` row (turn 1): its `prompt` holds:
   - the root `AGENTS.md` text ("Amounts are integers in minor units (cents)"; the README's wording, moved by plan P2);
   - the line "- money-rules: …" and "- src/AGENTS.md (…bytes)";
   - NOT "PINEAPPLE", NOT "CLAUDE.md";
   - `agents_chars` and `lists_chars` > 0.
 
   Its turn 2 row holds only the tool call and the tool message.
-- [ ] New issue `#B` "Add a contributing section to the README" (no money) → the Grill comment has NO "Read:"
+- [x] New issue `#B` "Add a contributing section to the README" (no money) → the Grill comment has NO "Read:"
   line (or only an `AGENTS.md` it names); its turn 1 prompt still lists `money-rules` and holds the root
   `AGENTS.md`.
-- [ ] Answer `#A`'s questions → the next evaluation is a new call. Its rows have a new `call_id`, and it may load
+- [x] Answer `#A`'s questions → the next evaluation is a new call. Its rows have a new `call_id`, and it may load
   `money-rules` again (no carry-over). The reply follows spec 6 as before.
 - [ ] Restart with `SKILL_DISCOVERY_MAX_LOADS=1`, then a new issue like `#A` → if the model asks for more than one
   file:
@@ -1198,12 +1204,21 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
 
   If it asks for only one, run again with `TARGET_BASE_BRANCH=smoke/spec-11-two-loads` (its step-skill line asks
   for `money-rules` and its rounding reference).
-- [ ] Restart with `SKILL_DISCOVERY_MAX_BYTES=1024`, then a new issue like `#A` → the `money-rules` row is
+
+  2026-11-21 (Checkpoint 4): not observed. In three tries (`#36` on `main`, `#37` and `#38` on the two-loads branch)
+  Gemini asked for one file only (`money-rules`, `loaded`) and answered, keeping to "at most 1 time"; no request was
+  refused. The refusal is covered by `test/grill-discovery-limit.integration.spec.ts`.
+- [x] Restart with `SKILL_DISCOVERY_MAX_BYTES=1024`, then a new issue like `#A` → the `money-rules` row is
   `too-large`; NO "Read:" entry for it; the Grill comment is posted.
 - [ ] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-missing`, then a new issue + `workflow: full-sdd`:
   - the Grill comment has "The bot looked for skill `tax-rules`, which this repo doesn't have.";
   - `context_loads` has `not-found` rows for `tax-rules` and `CLAUDE.md`;
   - NO "PINEAPPLE" in the comment.
+
+  2026-11-21 (Checkpoint 4): not observed. On two issues (`#40`, `#41` "Add 21% VAT…") the prompt held the line,
+  but Gemini asked only for listed files (`money-rules`, `src/AGENTS.md`, `references/rounding.md`) and never for
+  `tax-rules` or `CLAUDE.md`; no PINEAPPLE. The `not-found` rows and the looked-for line are covered by
+  `test/grill-discovery.integration.spec.ts`.
 - [x] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then a new issue + `workflow: full-sdd` →
   `status: needs-human` and ONE comment naming "repoSkills folder not found: .claude/skill"; NO Grill question.
   Restore `main` afterwards.
@@ -1227,6 +1242,11 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
 **Spec 6 still works** (a sample of spec 6's matrix, on a new issue)
 - [ ] An answer → one reply; a partial answer → 👀 and no comment; `grill: skip` → the stopped comment;
   `/approve` while asking → the reply. All as in spec 6, with the "Read:" line where something was loaded.
+
+  2026-11-21 (Checkpoint 4, `#42`): an answer → one reply (round 3), `/approve` → spec 6's "nothing to approve yet"
+  reply, `grill: skip` → the stopped comment, each round with its "Read:" line. The partial answer ("Q1: yes" of
+  three) got round 2 instead of 👀: the model listed Q2 and Q3 as open and also proposed two new questions, and spec
+  6 waits only when it proposes none. Not a spec 11 change; 👀 not observed in this run.
 
 **Invariants** (checked over everything stored during these rows)
 - [ ] No prompt, tool message, bot comment or `context_loads` row contains "PINEAPPLE"; no row has a `path` ending

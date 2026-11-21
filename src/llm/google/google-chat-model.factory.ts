@@ -1,11 +1,15 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import type { AIMessage } from '@langchain/core/messages';
+import type { AIMessage, BaseMessage } from '@langchain/core/messages';
+import type { Runnable } from '@langchain/core/runnables';
 import { ChatGoogle } from '@langchain/google/node';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
-import type { ChatModelFactory } from '../chat-model.factory.js';
+import type {
+  ChatModelFactory,
+  RequestOptions,
+} from '../chat-model.factory.js';
 
 const UNAVAILABLE_STATUSES = new Set([408, 500, 502, 503, 504]);
 const KEY_INVALID_REASONS = new Set(['API_KEY_INVALID', 'API_KEY_EXPIRED']);
@@ -38,6 +42,25 @@ export class GoogleChatModelFactory implements ChatModelFactory {
 
   /** LW6: no `temperature`, `topP` or `topK`. LangChain's own retries are off: the worker retries. */
   create(model: string): BaseChatModel {
+    return this.chat(model);
+  }
+
+  /**
+   * Spec 11 (plan P7, the probe of 2026-11-20): the tools and Gemini's `responseSchema` as call options of one
+   * request, so both go in the same body; the raw message comes back (thought signatures on its tool calls).
+   * Without tools, none are declared (no function-calling mode is set: Gemini's default).
+   */
+  request(
+    model: string,
+    { tools, schema }: RequestOptions,
+  ): Runnable<BaseMessage[], AIMessage> {
+    return this.chat(model).withConfig({
+      ...(tools?.length ? { tools } : {}),
+      ...(schema ? { responseSchema: schema } : {}),
+    }) as Runnable<BaseMessage[], AIMessage>;
+  }
+
+  private chat(model: string): ChatGoogle {
     return new ChatGoogle({ model, apiKey: this.apiKey, maxRetries: 0 });
   }
 

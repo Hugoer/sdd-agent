@@ -72,7 +72,7 @@ order").
 | P12 | No difference. | **Test fixtures:** `test/router-helpers.ts` `seedWorkflow` (12 suites) gives every fake step skill a valid header and names the folders like the sandbox: `.github-agent/skills/quality-gate`, since SD12's name rule allows no capitals (`qualityGate` can never be valid). `test/run-start.integration.spec.ts`'s own map follows. A new `seedDiscovery(repo)` helper seeds SD9-like content (root and `src/` `AGENTS.md`, `money-rules` with a reference, the `CLAUDE.md` canary, `repoSkills`). Spec 6's suites keep their fake repo without discovery content (SDW7). | "Testing strategy" (one line) |
 | P13 | No difference. | **The limit suite** gets its own file with `process.env.SKILL_DISCOVERY_MAX_LOADS = '1'` set before boot, as spec 6's `grill-limit` suite does for `GRILL_MAX_ROUNDS`. | — |
 | P14 | No difference. | **The migration** is created against the test database; your dev database changes only when you run `npm run db:migrate`: one new table, five new `execution_logs` columns, and the old rows get `turn = attempt` (SQL in the migration) and an empty `call_id`. `test/db.ts` empties `context_loads` too. | — |
-| P15 | No difference. | **`LoadContext`** = `{ task, runId?, step, callId, turn, model, commit }`; **`LoadBudget`** = `{ loadsLeft, bytesLeft, given: Set<path>, loadedSkills: Set<name>, limitHit: 'files' \| 'bytes' \| null }` (the spec says "the plan names them"). | "Contracts" (one line) |
+| P15 | No difference. | **`LoadContext`** = `{ task, runId?, step, callId, turn, model, commit }`; **`LoadBudget`** = `{ loadsLeft, bytesLeft, given: Set<path>, loadedSkills: Set<name>, limitHit: 'files' \| 'bytes' \| null }` (the spec says "the plan names them"). (2026-11-21, build: `LoadContext` holds the call's `setup` in place of `model` and `commit`, since a request is checked against the setup's lists.) | "Contracts" (one line) |
 | P16 | No difference. | **`context_loads.chars`** is the file's own text (what `tokens` counts), not the tool message's wrapping; the wrapping and the one-line answers are in `execution_logs.loaded_chars`. | "Owned table" (`chars` note) |
 | P17 | No difference (follows from SD8's "in load order"). | **The "Read:" line** puts a repo skill's group where its first file was loaded; names and paths are shown in backticks with backticks removed (SDW18's cleaning, also for repo paths). | — |
 | P18 | No difference. | **The "Loading:" paragraph** says "at most 1 time" and "1 file" in the singular when a limit is 1, like the limit line. | — |
@@ -628,15 +628,15 @@ leading `./` or `/`, exact case; a tool name not offered → `not-found`; a miss
 texts of the spec's table. Once a limit is hit, every later request of that answer → `limit-reached`.
 
 **Acceptance criteria:**
-- [ ] One test per box of the request flowchart, in order; `not-found` and `already-loaded` count; only `loaded` adds
+- [x] One test per box of the request flowchart, in order; `not-found` and `already-loaded` count; only `loaded` adds
   bytes (unit)
-- [ ] Three requests with one load left → handled, `limit-reached`, `limit-reached`; a file over the byte limit alone
+- [x] Three requests with one load left → handled, `limit-reached`, `limit-reached`; a file over the byte limit alone
   → `too-large` and tools stay on; a file over what's left → `limit-reached` (unit)
-- [ ] `./src/AGENTS.md` matches, `src/agents.md` doesn't; a repo skill's file before and after its `SKILL.md`; a
+- [x] `./src/AGENTS.md` matches, `src/agents.md` doesn't; a repo skill's file before and after its `SKILL.md`; a
   missing reason (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T6 (the catalog types)
 **Files:** `src/llm/context-tools.ts` (+ `.spec.ts`)
@@ -652,14 +652,14 @@ name, args, id? }[]` (an `AIMessage` with tool calls and, unless given, no text)
 offered and whether a schema was sent.
 
 **Acceptance criteria:**
-- [ ] The Google adapter's request carries tools and the format together; without `tools`, none are declared (unit,
+- [x] The Google adapter's request carries tools and the format together; without `tools`, none are declared (unit,
   no network)
-- [ ] The fake answers with tool calls and records the options; the tests that asserted `structured` (`llm.service.spec.ts:115,
+- [x] The fake answers with tool calls and records the options; the tests that asserted `structured` (`llm.service.spec.ts:115,
   149`, `grill-output.spec.ts:187`, the fake's own spec) assert the request options instead
-- [ ] Every other suite passes unchanged
+- [x] Every other suite passes unchanged
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T1
 **Files:** `src/llm/chat-model.factory.ts`, `src/llm/google/google-chat-model.factory.ts` (+ spec),
@@ -679,15 +679,15 @@ the answer, and logs one line per request, no content: `context grill #12 turn 1
 (P21).
 
 **Acceptance criteria:**
-- [ ] `loaded` for each kind (`step-skill`, `repo-skill`, `agents`), with `kind`, `skill`, `path`, `bytes`, `chars`
+- [x] `loaded` for each kind (`step-skill`, `repo-skill`, `agents`), with `kind`, `skill`, `path`, `bytes`, `chars`
   (P16), `requested`, `reason`, `commit`, `model` on its row, and its log line (unit with fakes)
-- [ ] `unreadable` for a non-UTF-8 file; a `503` → a row with outcome `error` and no `chars`, then the same
+- [x] `unreadable` for a non-UTF-8 file; a `503` → a row with outcome `error` and no `chars`, then the same
   `ProviderError` thrown (P21); an injection-like file loads with its kinds on the row and one log line (unit)
-- [ ] A file loaded on demand is read from GitHub every time, in two calls at the same commit (unit; SDW15)
-- [ ] `tools()` is empty on a repo with nothing to load (unit)
+- [x] A file loaded on demand is read from GitHub every time, in two calls at the same commit (unit; SDW15)
+- [x] `tools()` is empty on a repo with nothing to load (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T12, T14, T15
 **Files:** `src/llm/context-loader.service.ts` (+ spec), `src/llm/llm.module.ts` (exported for specs 9 and 10)
@@ -706,23 +706,23 @@ LangChain messages throughout; `loaded` and `other` sizes grow with the turns. A
 `SKILL_DISCOVERY_MAX_LOADS + 4` requests.
 
 **Acceptance criteria:**
-- [ ] The system message in the spec's full order with both lists and the "Loading:" paragraph; skills sorted by
+- [x] The system message in the spec's full order with both lists and the "Loading:" paragraph; skills sorted by
   name, files by path, sizes with thousands separators; the seven sizes add up to every character sent, also on a
   later turn (unit, `prompt.spec.ts`)
-- [ ] Nothing to load → one request with no tools and no lists, as today (unit)
-- [ ] Load then answer → two rows, one `callId`, turn 2 storing only the tool call and the tool message; the second
+- [x] Nothing to load → one request with no tools and no lists, as today (unit)
+- [x] Load then answer → two rows, one `callId`, turn 2 storing only the tool call and the tool message; the second
   request holds the `AIMessage` as received and its `ToolMessage`; the load turn's `answerChars` = its text plus its
   calls' arguments as JSON (unit)
-- [ ] Text output (`output: 'text'`) with a load turn: the tools alone, then the text answer (unit; spec 7's case)
-- [ ] The limit → the next request has no tools (none declared, T15) and the same system message; a re-ask has no
+- [x] Text output (`output: 'text'`) with a load turn: the tools alone, then the text answer (unit; spec 7's case)
+- [x] The limit → the next request has no tools (none declared, T15) and the same system message; a re-ask has no
   tools; `invalid-answer` after loads; a tool call in an answer to a request without tools is judged as text (unit)
-- [ ] A model that asks for a file on every turn → at most `SKILL_DISCOVERY_MAX_LOADS + 4` requests (unit)
-- [ ] A `ProviderError` while loading → thrown, the rows already written stay (unit)
+- [x] A model that asks for a file on every turn → at most `SKILL_DISCOVERY_MAX_LOADS + 4` requests (unit)
+- [x] A `ProviderError` while loading → thrown, the rows already written stay (unit)
 - ~~If Task 1 called for fallback 1: the load turns carry no format and one last request carries the format and no
   tools (unit)~~ Not needed (probe, 2026-11-20).
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T13, T16
 **Files:** `src/llm/llm.service.ts` (+ spec), `src/llm/prompt.ts` (+ spec), `src/llm/llm-call.ts`, the `LlmService`
@@ -738,13 +738,13 @@ nothing was loaded on demand), "The bot looked for skill(s) …, which this repo
 names that ended `not-found`, cleaned), and "The bot reached its limit of N files/bytes for this answer." once.
 
 **Acceptance criteria:**
-- [ ] The lines' order; one, two and three names; model text with backticks, `@name` and over 64 characters; "of 1
+- [x] The lines' order; one, two and three names; model text with backticks, `@name` and over 64 characters; "of 1
   file"; the bytes limit (unit)
-- [ ] `LlmResult.notes` of a call that loaded, looked for an unknown skill and hit a limit holds all four lines
+- [x] `LlmResult.notes` of a call that loaded, looked for an unknown skill and hit a limit holds all four lines
   (unit)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** T17
 **Files:** `src/llm/prompt.ts` (+ spec), `src/llm/llm.service.ts` (+ spec)
@@ -756,17 +756,17 @@ names that ended `not-found`, cleaned), and "The bot reached its limit of N file
 and `call()`, no change in `src/grill`.
 
 **Acceptance criteria:**
-- [ ] A Grill run start whose model loads `money-rules` then asks → one round comment with the "Read:" line;
+- [x] A Grill run start whose model loads `money-rules` then asks → one round comment with the "Read:" line;
   `context_loads` holds the two start rows and one `loaded` row
-- [ ] An unknown skill → the looked-for line, a `not-found` row; `CLAUDE.md` → a `not-found` row, never read
-- [ ] `SKILL_DISCOVERY_MAX_LOADS=1` and two requests → `loaded`, `limit-reached`, the limit line, the round posted
+- [x] An unknown skill → the looked-for line, a `not-found` row; `CLAUDE.md` → a `not-found` row, never read
+- [x] `SKILL_DISCOVERY_MAX_LOADS=1` and two requests → `loaded`, `limit-reached`, the limit line, the round posted
   (its own suite, P13)
-- [ ] A `ProviderError` while loading `src/AGENTS.md` → an `error` row (P21), the event retried, then a `loaded`
+- [x] A `ProviderError` while loading `src/AGENTS.md` → an `error` row (P21), the event retried, then a `loaded`
   row and one round comment in the end
-- [ ] Spec 6's integration suites pass with only T5's change
+- [x] Spec 6's integration suites pass with only T5's change
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T18
 **Files:** `test/grill-discovery.integration.spec.ts`, `test/grill-discovery-limit.integration.spec.ts`,
@@ -778,7 +778,13 @@ and `call()`, no change in `src/grill`.
   `src/AGENTS.md`, `lists_chars` > 0; turn 2 holds only the tool call and the tool message), `#B`, the answer to `#A`
   (a new `call_id`), `SKILL_DISCOVERY_MAX_LOADS=1` (on `smoke/spec-11-two-loads` if the model asks for only one file
   on `main`), `SKILL_DISCOVERY_MAX_BYTES=1024`, `smoke/spec-11-missing`
+  2026-11-21: run on sandbox issues #34–#41 (all closed). `#A`, `#B`, the answer to `#A` and the 1,024-byte limit
+  passed. Not observed on real Gemini: a refused request at `SKILL_DISCOVERY_MAX_LOADS=1` (3 tries; the model kept
+  to one file) and the `smoke/spec-11-missing` requests (2 tries; it asked only for listed files). Both are covered
+  by T19's integration suites. The invariants held over everything stored (12 evaluations).
 - [ ] Matrix "Spec 6 still works" on a new issue
+  2026-11-21 (#42, closed): an answer → one reply, `/approve` → the reply, `grill: skip` → the stopped comment. The
+  partial answer got round 2 instead of 👀 (the model also proposed new questions; spec 6's rule, unchanged).
 - [ ] You review and commit
 
 ---

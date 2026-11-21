@@ -1,9 +1,15 @@
 // Spec 11: an in-memory ContextLoadService for unit tests (the real one is tested against PostgreSQL in
 // test/context-load.integration.spec.ts). Same contract: insert returns an id; only the two token columns change.
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../../src/config/env.schema.js';
 import type {
   ContextLoadEntry,
   ContextLoadService,
 } from '../../src/llm/context-load.service.js';
+import { ContextLoaderService } from '../../src/llm/context-loader.service.js';
+import type { LoadLimits } from '../../src/llm/context-tools.js';
+import { RepoCatalogService } from '../../src/llm/repo-catalog.service.js';
+import { InMemoryRepoProvider } from './in-memory-repo-provider.js';
 
 export interface FakeContextLoad extends ContextLoadEntry {
   id: string;
@@ -55,4 +61,25 @@ export class InMemoryContextLoads implements Pick<
     );
     return Promise.resolve(row?.tokens ?? null);
   }
+}
+
+/**
+ * A real ContextLoaderService over in-memory fakes, for unit tests that build LlmService by hand. The defaults:
+ * an empty repo (nothing to load) and the `.env` defaults (10 files, 204,800 bytes).
+ */
+export function contextLoaderOver(
+  repo = new InMemoryRepoProvider(),
+  loads = new InMemoryContextLoads(),
+  limits: LoadLimits = { maxLoads: 10, maxBytes: 204_800 },
+  catalog = new RepoCatalogService(repo),
+): ContextLoaderService {
+  return new ContextLoaderService(
+    repo,
+    catalog,
+    loads.asService(),
+    new ConfigService<Env, true>({
+      SKILL_DISCOVERY_MAX_LOADS: limits.maxLoads,
+      SKILL_DISCOVERY_MAX_BYTES: limits.maxBytes,
+    }),
+  );
 }

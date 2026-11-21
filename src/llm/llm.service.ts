@@ -1,25 +1,29 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   AIMessage,
   HumanMessage,
   SystemMessage,
+  ToolMessage,
   mapChatMessagesToStoredMessages,
   type BaseMessage,
+  type ToolCall,
 } from '@langchain/core/messages';
-import type { z } from 'zod';
+import type { StructuredToolInterface } from '@langchain/core/tools';
 import { LlmError } from '../contracts/llm-error.js';
 import {
   CHAT_MODEL_FACTORY,
   type ChatModelFactory,
 } from './chat-model.factory.js';
 import { ContextLoadService } from './context-load.service.js';
+import { ContextLoaderService } from './context-loader.service.js';
+import { LOAD_SKILL, requestOf, stepSkillFile } from './context-tools.js';
 import { ExecutionLogService } from './execution-log.service.js';
 import { findInjectionKinds } from './injection-patterns.js';
 import { InjectionWarningService } from './injection-warning.service.js';
 import type { LlmCall, LlmResult } from './llm-call.js';
 import {
+  answerChars,
   buildPrompt,
   notesFor,
   type PromptMessage,
@@ -31,9 +35,11 @@ export const CALL_TIMEOUT_MS = 300_000;
 /** The first ask and at most 2 re-asks (step 6). */
 export const MAX_ATTEMPTS = 3;
 
-/** What one model call gave: a valid output, or an error and whether it was a mismatch (re-asked). */
+/** What one model request gave: a valid output, (spec 11) files to load, or an error and whether it was a mismatch. */
 type Attempt<T> =
   | { ok: true; output: T; raw: AIMessage; durationMs: number }
+  /** Spec 11: the answer to a request that offered the tools asks for files (a load turn). */
+  | { ok: true; loads: ToolCall[]; raw: AIMessage; durationMs: number }
   | {
       ok: false;
       error: LlmError;
@@ -44,8 +50,9 @@ type Attempt<T> =
     };
 
 /**
- * Spec 4 "LlmService.call()" (L10, LW6, LW9): guard → warnings → prompt → model → one ExecutionLog row per
- * attempt → re-ask on a mismatch. Every failure is an LlmError (or a ProviderError from posting a warning).
+ * Spec 4 "LlmService.call()" (L10, LW6, LW9) with spec 11's load turns (SDW12, SDW13): guard → warnings → prompt
+ * → model → one ExecutionLog row per request → files loaded on demand → re-ask on a mismatch. Every failure is an
+ * LlmError, or a ProviderError from posting a warning or (spec 11, plan P21) from reading a file on demand.
  */
 @Injectable()
 export class LlmService {
@@ -56,36 +63,51 @@ export class LlmService {
     private readonly warnings: InjectionWarningService,
     private readonly logs: ExecutionLogService,
     private readonly loads: ContextLoadService,
+    private readonly loader: ContextLoaderService,
   ) {}
 
   async call<T>(input: LlmCall<T>): Promise<LlmResult<T>> {
     const { context, setup } = input;
     // Spec 11 (SDW13): every request of this call is a row with this id and its turn number.
     const callId = randomUUID();
+    // Spec 11 (SDW7): the two tools when something can be loaded; only then the lists and "Loading:".
+    const tools = this.loader.tools(setup);
     // 1–2. Guard every untrusted block and build the messages; warnings are posted before the model is called.
-    const prompt = buildPrompt(input.frame, setup, input.turns);
+    const prompt = buildPrompt(
+      input.frame,
+      {
+        skill: setup.skill,
+        repo: setup.repo,
+        loading: tools.length > 0 ? this.loader.limits : undefined,
+      },
+      input.turns,
+    );
     for (const { source, kinds } of prompt.injections) {
       await this.warnings.warn(context.task, source, kinds);
     }
-    const notes = notesFor(setup.model, prompt.cuts);
     const injectionKinds = [
       ...new Set(prompt.injections.flatMap(({ kinds }) => kinds)),
     ];
     const cutSources = prompt.cuts.map(({ source }) => source.key);
-    const model = this.factory.create(setup.model.name);
     await this.recordStartFiles(input, callId);
 
-    const messages: PromptMessage[] = [...prompt.messages];
+    const budget = this.loader.budget(setup);
+    /** SD7: the names of the `load_skill` requests that ended `not-found`. */
+    const lookedFor: string[] = [];
+    /** The tools the next request offers: none once a request was refused for a limit, and none on a re-ask. */
+    let offered = tools.length > 0 ? tools : undefined;
+    // Kept as LangChain messages: a load turn's message goes back as received (Risk 2).
+    const messages: BaseMessage[] = toMessages(prompt.messages);
     const sizes: PromptSizes = { ...prompt.sizes };
-    /** Messages already stored on an earlier row: a later turn stores only the ones added since (L18). */
+    /** Messages already stored on an earlier row: a later turn stores only the ones added since (L18, SDW9). */
     let stored = 0;
-    for (let attempt = 1, turn = 1; ; attempt++, turn++) {
-      const sent = toMessages(messages);
+    for (let attempt = 1, turn = 1; ; turn++) {
+      const sent = [...messages];
       const result = await this.ask(
-        model,
         setup.model.name,
         input.output,
         sent,
+        offered,
       );
       const raw = result.raw;
       const logId = await this.logs.record({
@@ -103,7 +125,7 @@ export class LlmService {
           : { code: result.error.code, message: result.error.message },
         durationMs: result.durationMs,
         sizes: { ...sizes },
-        answerChars: raw?.text.length,
+        answerChars: raw ? answerChars(raw) : undefined,
         injectionKinds,
         cutSources,
         prompt: mapChatMessagesToStoredMessages(sent.slice(stored)),
@@ -113,23 +135,66 @@ export class LlmService {
       });
       stored = sent.length;
       this.logger.log(
-        `llm ${context.step} ${context.task.externalRef} ${setup.model.name} (${setup.model.level}) attempt ${attempt}: ` +
-          `${result.ok ? 'SUCCESS' : `ERROR ${result.error.code}`} in ${Math.round(result.durationMs)} ms`,
+        `llm ${context.step} ${context.task.externalRef} ${setup.model.name} (${setup.model.level}) turn ${turn} ` +
+          `attempt ${attempt}: ${result.ok ? 'SUCCESS' : `ERROR ${result.error.code}`}` +
+          `${result.ok && 'loads' in result ? ` (${result.loads.length} to load)` : ''} in ${Math.round(result.durationMs)} ms`,
       );
+      if (result.ok && 'loads' in result) {
+        // 5. Each request in order (one context_loads row each), then the model's message as received and one
+        // tool message per request; the model's text next to the calls is ignored.
+        messages.push(result.raw);
+        sizes.other += answerChars(result.raw);
+        for (const call of result.loads) {
+          const request = requestOf(call);
+          const { answer, outcome } = await this.loader.load(
+            {
+              task: context.task,
+              runId: context.runId,
+              step: context.step,
+              callId,
+              turn,
+              setup,
+            },
+            request,
+            budget,
+          );
+          if (outcome === 'not-found' && request.tool === LOAD_SKILL)
+            lookedFor.push(request.name ?? '');
+          messages.push(
+            new ToolMessage({
+              content: answer,
+              tool_call_id: call.id ?? '',
+              name: call.name,
+            }),
+          );
+          sizes.loaded += answer.length;
+        }
+        if (budget.limitHit !== null) offered = undefined;
+        continue;
+      }
       if (result.ok) {
+        const notes = notesFor(setup.model, prompt.cuts, {
+          skill: setup.skill,
+          repo: setup.repo,
+          budget,
+          limits: this.loader.limits,
+          lookedFor,
+        });
         return { output: result.output, model: setup.model, notes, logId };
       }
       if (result.mismatch === undefined || attempt === MAX_ATTEMPTS) {
         throw result.error;
       }
-      // 6. Re-ask: the model's answer and the format problem, as two more turns. With no answer at all there
-      // is nothing to repeat, so only the message is added (an empty turn can be refused by the provider).
+      // 6. Re-ask, without tools (SDW12): the model's answer and the format problem, as two more turns. With no
+      // answer at all there is nothing to repeat, so only the message is added (an empty turn can be refused).
+      attempt++;
+      offered = undefined;
       const answer = raw?.text ?? '';
       const reask =
         `Your answer did not match the required format: ${result.mismatch}. ` +
         'Answer again with only the corrected output.';
-      if (answer !== '') messages.push({ role: 'assistant', content: answer });
-      messages.push({ role: 'user', content: reask });
+      if (answer !== '') messages.push(new AIMessage(answer));
+      messages.push(new HumanMessage(reask));
       sizes.other += answer.length + reask.length;
     }
   }
@@ -148,7 +213,7 @@ export class LlmService {
       {
         kind: 'step-skill' as const,
         skill: skill.step,
-        path: `${skill.path.replace(/\/+$/, '')}/SKILL.md`,
+        path: stepSkillFile(skill),
         text: skill.instructions,
       },
       ...(repo.rootAgents
@@ -188,26 +253,25 @@ export class LlmService {
     }
   }
 
-  /** Steps 3–4 for one attempt: the model call (300 s, no hidden retry), the provider's checks, the judge. */
+  /**
+   * Steps 3–4 for one request: the model call (300 s, no hidden retry) through the provider seam (spec 11, plan
+   * P7: the format as a request option), the provider's checks, the judge on the raw text.
+   */
   private async ask<T>(
-    model: BaseChatModel,
     modelName: string,
     output: LlmCall<T>['output'],
     messages: BaseMessage[],
+    tools: StructuredToolInterface[] | undefined,
   ): Promise<Attempt<T>> {
     const started = performance.now();
     let raw: unknown;
     try {
-      if (output === 'text') {
-        raw = await model.invoke(messages, { timeout: CALL_TIMEOUT_MS });
-      } else {
-        ({ raw } = await model
-          .withStructuredOutput(output as z.ZodType<Record<string, unknown>>, {
-            method: 'jsonSchema',
-            includeRaw: true,
-          })
-          .invoke(messages, { timeout: CALL_TIMEOUT_MS }));
-      }
+      raw = await this.factory
+        .request(modelName, {
+          tools,
+          schema: output === 'text' ? undefined : output,
+        })
+        .invoke(messages, { timeout: CALL_TIMEOUT_MS });
     } catch (error) {
       const durationMs = performance.now() - started;
       const failed = this.toLlmError(error, modelName);
@@ -226,6 +290,9 @@ export class LlmService {
     }
     const refused = this.factory.checkAnswer(raw, modelName);
     if (refused) return { ok: false, error: refused, raw, durationMs };
+    // Spec 11: tool calls answer a request only when it offered the tools; otherwise the text is judged.
+    if (tools && raw.tool_calls?.length)
+      return { ok: true, loads: raw.tool_calls, raw, durationMs };
 
     const judged = judge(raw.text, output);
     return judged.ok

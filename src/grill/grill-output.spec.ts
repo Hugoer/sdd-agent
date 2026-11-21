@@ -2,7 +2,10 @@ import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryIssueProvider } from '../../test/fakes/in-memory-issue-provider.js';
-import { InMemoryContextLoads } from '../../test/fakes/in-memory-context-loads.js';
+import {
+  InMemoryContextLoads,
+  contextLoaderOver,
+} from '../../test/fakes/in-memory-context-loads.js';
 import { ScriptedChatModelFactory } from '../../test/fakes/scripted-chat-model.factory.js';
 import type { StepSetup } from '../contracts/step.js';
 import type {
@@ -158,7 +161,7 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
     repo: { rootAgents: null, skills: [], agents: [] },
   };
 
-  it('goes through withStructuredOutput; Zod judges the answer, and a mismatch is re-asked with the rule’s message', async () => {
+  it('the request carries the format; Zod judges the answer, and a mismatch is re-asked with the rule’s message', async () => {
     vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     const factory = new ScriptedChatModelFactory()
       .replyJson({ ...VALID, open: [7] })
@@ -172,11 +175,13 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
         return Promise.resolve(`log-${rows.length}`);
       }),
     } as unknown as ExecutionLogService;
+    const loads = new InMemoryContextLoads();
     const service = new LlmService(
       factory,
       new InjectionWarningService(issues),
       logs,
-      new InMemoryContextLoads().asService(),
+      loads.asService(),
+      contextLoaderOver(undefined, loads),
     );
 
     const result = await service.call({
@@ -188,9 +193,11 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
     });
 
     expect(result.output).toEqual(VALID);
-    expect(factory.calls.map(({ structured }) => structured)).toEqual([
-      { method: 'jsonSchema', includeRaw: true },
-      { method: 'jsonSchema', includeRaw: true },
+    expect(
+      factory.calls.map(({ tools, schema }) => ({ tools, schema })),
+    ).toEqual([
+      { tools: [], schema: true },
+      { tools: [], schema: true },
     ]);
     expect(factory.calls[1].messages.at(-1)?.text).toContain(
       'open lists Q7, but only Q1–Q5 were asked',

@@ -1,13 +1,21 @@
 // Spec 4 "Prompt assembly" and "Notes": the system message in a fixed order, the turns with every untrusted text
 // guarded, the four sizes, and the lines a step adds to what it posts. Pure functions.
+import type { AIMessage } from '@langchain/core/messages';
 import type {
   LoadedSkill,
   RepoContext,
   ResolvedModel,
 } from '../contracts/step.js';
+import {
+  stepSkillFile,
+  type LoadBudget,
+  type LoadLimits,
+} from './context-tools.js';
 import { MAX_UNTRUSTED_CHARS, guardText, newDataTag } from './input-guard.js';
 import type { InjectionKind } from './injection-patterns.js';
 import type { Turn, UntrustedSource } from './llm-call.js';
+import { AGENTS_FILE } from './repo-catalog.js';
+import { shown } from './skill-header.js';
 
 export interface PromptMessage {
   role: 'system' | 'user' | 'assistant';
@@ -50,15 +58,18 @@ const BLOCK_SEPARATOR = '\n\n';
 export interface PromptContext {
   skill: LoadedSkill;
   repo: RepoContext;
+  /** Spec 11 (SDW7): the call's limits when it offers the two tools; the lists and "Loading:" appear only then. */
+  loading?: LoadLimits;
 }
 
 /**
  * Guards every untrusted block (detect → cut → wrap) and builds the messages in the spec's order: the frame, the
- * step skill, (spec 11) the root AGENTS.md, the fixed paragraphs; a section with nothing in it is left out.
+ * step skill, (spec 11) the root AGENTS.md, the skills list, the AGENTS.md list, the "Loading:" paragraph, the
+ * fixed paragraphs; a section with nothing in it is left out. The system message never changes within a call.
  */
 export function buildPrompt(
   frame: string,
-  { skill, repo }: PromptContext,
+  { skill, repo, loading }: PromptContext,
   turns: Turn[],
   tag: string = newDataTag(),
 ): BuiltPrompt {
@@ -66,15 +77,24 @@ export function buildPrompt(
   const agentsBlock = repo.rootAgents
     ? agentsSection(repo.rootAgents.text, skill.commit)
     : '';
+  const lists = loading ? listSections(repo) : [];
+  const listChars = lists.reduce((sum, list) => sum + list.length, 0);
   const fixed = fixedParagraphs(tag);
-  const system = [frame, skillBlock, agentsBlock, fixed]
+  const system = [
+    frame,
+    skillBlock,
+    agentsBlock,
+    ...lists,
+    loading ? loadingParagraph(loading) : '',
+    fixed,
+  ]
     .filter((part) => part !== '')
     .join(BLOCK_SEPARATOR);
   const sizes: PromptSizes = {
-    frame: system.length - skillBlock.length - agentsBlock.length,
+    frame: system.length - skillBlock.length - agentsBlock.length - listChars,
     skill: skillBlock.length,
     agents: agentsBlock.length,
-    lists: 0,
+    lists: listChars,
     untrusted: 0,
     loaded: 0,
     other: 0,
@@ -103,10 +123,33 @@ export function buildPrompt(
   return { tag, messages, sizes, injections, cuts };
 }
 
-/** The lines a step adds to what it posts: the model line always (L5), one line per cut text. */
+/** Spec 11 (SDW9): the characters of a model message: its text, plus each tool call's arguments as JSON. */
+export function answerChars(message: AIMessage): number {
+  return (message.tool_calls ?? []).reduce(
+    (sum, call) => sum + JSON.stringify(call.args).length,
+    message.text.length,
+  );
+}
+
+/** Spec 11: what a call loaded on demand, for its notes (SD7, SD8, SDW1). */
+export interface LoadNotes {
+  skill: LoadedSkill;
+  repo: RepoContext;
+  /** The call's budget: `given` holds the start files, then each file loaded on demand, in load order. */
+  budget: LoadBudget;
+  limits: LoadLimits;
+  /** The names of the `load_skill` requests that ended `not-found`, as the model wrote them. */
+  lookedFor: string[];
+}
+
+/**
+ * The lines a step adds to what it posts: the model line always (L5), one line per cut text; spec 11: "Read:"
+ * (left out when nothing was loaded on demand), the skills the model looked for, the limit it reached.
+ */
 export function notesFor(
   model: ResolvedModel,
   cuts: BuiltPrompt['cuts'],
+  loads?: LoadNotes,
 ): string[] {
   return [
     `Model: \`${model.name}\` (${model.level})`,
@@ -115,6 +158,7 @@ export function notesFor(
         `The bot read only the first ${MAX_UNTRUSTED_CHARS.toLocaleString('en-US')} characters of ` +
         `${source.label} (it had ${from.toLocaleString('en-US')}).`,
     ),
+    ...(loads ? loadLines(loads) : []),
   ];
 }
 
@@ -122,6 +166,82 @@ export function notesFor(
 export function withNotes(body: string, notes: string[]): string {
   if (notes.length === 0) return body;
   return `${body}\n\n---\n${notes.map((note) => `<sub>${note}</sub>`).join('\n')}`;
+}
+
+/** SD8 (plan P17): files grouped by skill, where its first file was loaded; SD7 and SDW18; SDW1. */
+function loadLines({
+  skill,
+  repo,
+  budget,
+  limits,
+  lookedFor,
+}: LoadNotes): string[] {
+  const lines: string[] = [];
+  const start = new Set([stepSkillFile(skill), AGENTS_FILE]);
+  const stepDir = `${skill.path.replace(/\/+$/, '')}/`;
+  const groups: { label: string; files: string[] }[] = [];
+  const group = (label: string) => {
+    const found = groups.find((candidate) => candidate.label === label);
+    if (found) return found;
+    const added = { label, files: [] };
+    groups.push(added);
+    return added;
+  };
+  for (const path of budget.given) {
+    if (start.has(path)) continue;
+    const repoSkill = repo.skills.find((candidate) =>
+      path.startsWith(`${candidate.path}/`),
+    );
+    if (path.startsWith(stepDir))
+      group(`the ${code(skill.step)} step skill`).files.push(
+        path.slice(stepDir.length),
+      );
+    else if (repoSkill)
+      group(`skill ${code(repoSkill.name)}`).files.push(
+        path.slice(repoSkill.path.length + 1),
+      );
+    else groups.push({ label: code(path), files: [] });
+  }
+  if (groups.length > 0)
+    lines.push(
+      `Read: ${groups
+        .map(({ label, files }) =>
+          files.length === 0
+            ? label
+            : `${label} (${files.map(code).join(', ')})`,
+        )
+        .join(', ')}`,
+    );
+
+  const names = [
+    ...new Set(lookedFor.map(shown).filter((name) => name !== '')),
+  ].map((name) => `\`${name}\``);
+  if (names.length > 0)
+    lines.push(
+      `The bot looked for ${names.length === 1 ? 'skill' : 'skills'} ${listed(names)}, which this repo doesn't have.`,
+    );
+
+  if (budget.limitHit === 'files')
+    lines.push(
+      `The bot reached its limit of ${limits.maxLoads === 1 ? '1 file' : `${limits.maxLoads.toLocaleString('en-US')} files`} for this answer.`,
+    );
+  if (budget.limitHit === 'bytes')
+    lines.push(
+      `The bot reached its limit of ${limits.maxBytes.toLocaleString('en-US')} bytes for this answer.`,
+    );
+  return lines;
+}
+
+/** SDW18: in backticks, with backticks removed, so an `@name` can't notify anyone. */
+function code(text: string): string {
+  return `\`${text.replace(/`/g, '')}\``;
+}
+
+/** "a", "a and b", "a, b and c". */
+function listed(items: string[]): string {
+  return items.length === 1
+    ? items[0]
+    : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
 /** Spec 11 (SD4): SKILL.md whole; the other files by repo path and size, only when there are some. */
@@ -148,6 +268,45 @@ function agentsSection(text: string, commit: string): string {
   return (
     "This repository's general instructions for anyone working in it (its root AGENTS.md):\n" +
     `<agents path="AGENTS.md" commit="${commit}">\n${text}\n</agents>`
+  );
+}
+
+/** Spec 11 (SD1, SD2): the repo skills by name and description, the folder AGENTS.md files by path and size. */
+function listSections(repo: RepoContext): string[] {
+  const skills =
+    repo.skills.length === 0
+      ? ''
+      : 'Skills this repository keeps for its developers. Load one with load_skill when it applies to this ' +
+        'issue:\n' +
+        repo.skills
+          .map(
+            (skill) =>
+              `- ${skill.name}: ${skill.description.replace(/\s*\n\s*/g, ' ')}`,
+          )
+          .join('\n');
+  const agents =
+    repo.agents.length === 0
+      ? ''
+      : 'Instructions for parts of this repository. Each applies to the files under its folder, and the closest ' +
+        'one wins. Load one with load_file when the issue touches that folder:\n' +
+        repo.agents
+          .map(
+            (file) =>
+              `- ${file.path} (${file.bytes.toLocaleString('en-US')} bytes)`,
+          )
+          .join('\n');
+  return [skills, agents].filter((part) => part !== '');
+}
+
+/** Spec 11 (SD6, SDW4; plan P18: "1 time" in the singular). */
+function loadingParagraph({ maxLoads, maxBytes }: LoadLimits): string {
+  return (
+    `Loading: before you answer, you may call load_skill and load_file, at most ${maxLoads} ` +
+    `${maxLoads === 1 ? 'time' : 'times'} and ${maxBytes.toLocaleString('en-US')} bytes in all for this answer. ` +
+    'Every call counts, even one that finds nothing. Give a one-line reason with each call, load only what this ' +
+    'issue needs, and use paths exactly as listed. The bot runs nothing: a script in a skill is text you can ' +
+    'read, never a command. When you have what you need, or the bot says the limit is reached, give your answer ' +
+    'in the required format.'
   );
 }
 

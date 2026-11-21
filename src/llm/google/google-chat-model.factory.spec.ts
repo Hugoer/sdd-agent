@@ -1,8 +1,10 @@
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { ConfigService } from '@nestjs/config';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
+import { CONTEXT_TOOLS } from '../context-tools.js';
 import { GoogleChatModelFactory } from './google-chat-model.factory.js';
 
 // Built at run time and not key-shaped: no real key is ever written into the repo.
@@ -118,6 +120,97 @@ describe('GoogleChatModelFactory.create', () => {
 
   it('names its provider', () => {
     expect(factory.provider).toBe('google');
+  });
+});
+
+describe('GoogleChatModelFactory.request (spec 11, plan P7)', () => {
+  const schema = z.object({ summary: z.string() });
+  interface Body {
+    tools?: { functionDeclarations?: { name: string }[] }[];
+    toolConfig?: unknown;
+    generationConfig?: Record<string, unknown>;
+  }
+  async function sent(
+    options: Parameters<typeof factory.request>[1],
+  ): Promise<{ body: Body; raw: AIMessage }> {
+    const raw = await factory
+      .request(MODEL, options)
+      .invoke([new HumanMessage(PROMPT)]);
+    return { body: (await fetchStub.mock.calls[0][0].json()) as Body, raw };
+  }
+  const declared = (body: Body) =>
+    (body.tools ?? []).flatMap((tool) =>
+      (tool.functionDeclarations ?? []).map(({ name }) => name),
+    );
+
+  it('the tools and the answer format go in the same request; the raw message comes back', async () => {
+    fetchStub.mockResolvedValue(json(200, answer('STOP')));
+
+    const { body, raw } = await sent({ tools: CONTEXT_TOOLS, schema });
+
+    expect(declared(body)).toEqual(['load_skill', 'load_file']);
+    expect(body.toolConfig).toBeUndefined();
+    expect(body.generationConfig).toMatchObject({
+      responseMimeType: 'application/json',
+    });
+    expect(body.generationConfig).toHaveProperty('responseJsonSchema');
+    expect(AIMessage.isInstance(raw)).toBe(true);
+    expect(raw.text).toBe(ANSWER);
+  });
+
+  it('without tools, none are declared; without a schema, no format', async () => {
+    fetchStub.mockResolvedValue(json(200, answer('STOP')));
+    const { body } = await sent({ schema });
+    expect(declared(body)).toEqual([]);
+    expect(body.generationConfig).toHaveProperty('responseJsonSchema');
+
+    fetchStub.mockClear();
+    fetchStub.mockResolvedValue(json(200, answer('STOP')));
+    const text = await sent({ tools: CONTEXT_TOOLS });
+    expect(declared(text.body)).toEqual(['load_skill', 'load_file']);
+    expect(text.body.generationConfig ?? {}).not.toHaveProperty(
+      'responseMimeType',
+    );
+
+    fetchStub.mockClear();
+    fetchStub.mockResolvedValue(json(200, answer('STOP')));
+    const neither = await sent({ tools: [] });
+    expect(declared(neither.body)).toEqual([]);
+  });
+
+  it("a function call comes back as the message's tool call", async () => {
+    fetchStub.mockResolvedValue(
+      json(200, {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  functionCall: {
+                    id: 'fc-1',
+                    name: 'load_skill',
+                    args: { name: 'money-rules', reason: 'r' },
+                  },
+                  thoughtSignature: 'c2ln',
+                },
+              ],
+            },
+            finishReason: 'STOP',
+            index: 0,
+          },
+        ],
+        usageMetadata: { promptTokenCount: 5, totalTokenCount: 7 },
+        modelVersion: MODEL,
+      }),
+    );
+
+    const { raw } = await sent({ tools: CONTEXT_TOOLS, schema });
+
+    expect(raw.tool_calls).toMatchObject([
+      { name: 'load_skill', args: { name: 'money-rules', reason: 'r' } },
+    ]);
+    expect(raw.text).toBe('');
   });
 });
 

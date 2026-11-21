@@ -2,6 +2,7 @@ import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { LlmError } from '../../src/contracts/llm-error.js';
+import { CONTEXT_TOOLS } from '../../src/llm/context-tools.js';
 import {
   SCRIPTED_USAGE,
   ScriptedChatModelFactory,
@@ -9,44 +10,88 @@ import {
 
 const schema = z.object({ summary: z.string() });
 
-function structured(factory: ScriptedChatModelFactory) {
-  return factory
-    .create('model-a')
-    .withStructuredOutput(schema, { method: 'jsonSchema', includeRaw: true });
-}
-
 describe('ScriptedChatModelFactory', () => {
-  it('answers from the script and records the call', async () => {
+  it('answers a request from the script and records the call: its messages, no tools, the format', async () => {
     const factory = new ScriptedChatModelFactory().replyJson({ summary: 'ok' });
 
-    const { raw, parsed } = await structured(factory).invoke([
-      new HumanMessage('hello'),
-    ]);
+    const raw = await factory
+      .request('model-a', { schema })
+      .invoke([new HumanMessage('hello')]);
 
-    expect(parsed).toEqual({ summary: 'ok' });
+    expect(AIMessage.isInstance(raw)).toBe(true);
     expect(raw.text).toBe('{"summary":"ok"}');
-    expect((raw as AIMessage).usage_metadata).toEqual(SCRIPTED_USAGE);
+    expect(raw.tool_calls).toEqual([]);
+    expect(raw.usage_metadata).toEqual(SCRIPTED_USAGE);
     expect(raw.response_metadata).toMatchObject({ finish_reason: 'STOP' });
     expect(factory.created).toEqual(['model-a']);
-    expect(factory.calls).toHaveLength(1);
-    expect(factory.calls[0].model).toBe('model-a');
+    expect(factory.calls).toEqual([
+      {
+        model: 'model-a',
+        messages: [expect.any(HumanMessage) as HumanMessage],
+        tools: [],
+        schema: true,
+      },
+    ]);
     expect(factory.calls[0].messages.map((m) => m.text)).toEqual(['hello']);
-    expect(factory.calls[0].structured).toEqual({
-      method: 'jsonSchema',
-      includeRaw: true,
-    });
     expect(factory.remaining).toBe(0);
   });
 
-  it('gives a malformed answer as it is, with nothing parsed', async () => {
+  it('spec 11: answers with tool calls and no text; records the tools offered', async () => {
+    const factory = new ScriptedChatModelFactory().reply({
+      toolCalls: [
+        { name: 'load_skill', args: { name: 'money-rules', reason: 'r' } },
+        { name: 'load_file', args: { path: 'src/AGENTS.md' }, id: 'own-id' },
+      ],
+    });
+
+    const raw = await factory
+      .request('model-a', { tools: CONTEXT_TOOLS, schema })
+      .invoke([new HumanMessage('hi')]);
+
+    expect(raw.text).toBe('');
+    expect(raw.tool_calls).toEqual([
+      {
+        type: 'tool_call',
+        name: 'load_skill',
+        args: { name: 'money-rules', reason: 'r' },
+        id: 'call-1',
+      },
+      {
+        type: 'tool_call',
+        name: 'load_file',
+        args: { path: 'src/AGENTS.md' },
+        id: 'own-id',
+      },
+    ]);
+    expect(factory.calls[0]).toMatchObject({
+      tools: ['load_skill', 'load_file'],
+      schema: true,
+    });
+  });
+
+  it('a request with tools and no format (text output)', async () => {
+    const factory = new ScriptedChatModelFactory().reply({ answer: 'text' });
+
+    await factory
+      .request('model-a', { tools: CONTEXT_TOOLS })
+      .invoke([new HumanMessage('hi')]);
+
+    expect(factory.calls[0]).toMatchObject({
+      tools: ['load_skill', 'load_file'],
+      schema: false,
+    });
+  });
+
+  it('gives a malformed answer as it is', async () => {
     const factory = new ScriptedChatModelFactory().reply({
       answer: 'not json',
     });
 
-    const { raw, parsed } = await structured(factory).invoke('hi');
+    const raw = await factory
+      .request('model-a', { schema })
+      .invoke([new HumanMessage('hi')]);
 
     expect(raw.text).toBe('not json');
-    expect(parsed).toBeNull();
   });
 
   it('answers in plain text without a schema, with no usage when told so', async () => {
@@ -59,7 +104,7 @@ describe('ScriptedChatModelFactory', () => {
 
     expect(answer.text).toBe('text');
     expect(answer.usage_metadata).toBeUndefined();
-    expect(factory.calls[0].structured).toBeUndefined();
+    expect(factory.calls[0]).toMatchObject({ tools: [], schema: false });
   });
 
   it('throws a scripted error from the call', async () => {

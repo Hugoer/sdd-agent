@@ -7,7 +7,10 @@ import {
   ScriptedChatModelFactory,
   type ScriptedReply,
 } from '../../../test/fakes/scripted-chat-model.factory.js';
-import { InMemoryContextLoads } from '../../../test/fakes/in-memory-context-loads.js';
+import {
+  InMemoryContextLoads,
+  contextLoaderOver,
+} from '../../../test/fakes/in-memory-context-loads.js';
 import { skillMd } from '../../../test/fixtures/skills.js';
 import type { Env } from '../../config/env.schema.js';
 import { LlmError } from '../../contracts/llm-error.js';
@@ -144,13 +147,15 @@ function world(options: World = {}) {
     },
   } as unknown as ExecutionLogService;
   const warnings = new InjectionWarningService(issues);
+  const catalog = new RepoCatalogService(repo);
   const stepConfig = new StepConfigService(
     repo,
     issues,
     factory,
     config,
-    new RepoCatalogService(repo),
+    catalog,
   );
+  const loads = new InMemoryContextLoads();
   return {
     repo,
     fakeIssues,
@@ -164,7 +169,8 @@ function world(options: World = {}) {
         factory,
         warnings,
         logs,
-        new InMemoryContextLoads().asService(),
+        loads.asService(),
+        contextLoaderOver(repo, loads, undefined, catalog),
       ),
       issues,
       repo,

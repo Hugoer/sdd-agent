@@ -1,18 +1,10 @@
 // Scripted ChatModelFactory for specs 4 and later (plan P8). No network: every answer comes from a script,
-// in the shape ChatGoogle gives (text content, `finish_reason`, `usage_metadata`). A call with no script
-// left throws, so a call nobody planned fails the test.
-import type {
-  BaseLanguageModelInput,
-  StructuredOutputMethodOptions,
-} from '@langchain/core/language_models/base';
+// in the shape ChatGoogle gives (text content, `finish_reason`, `usage_metadata`; spec 11: tool calls). A call
+// with no script left throws, so a call nobody planned fails the test.
 import {
   BaseChatModel,
   type BaseChatModelCallOptions,
 } from '@langchain/core/language_models/chat_models';
-import {
-  assembleStructuredOutputPipeline,
-  createContentParser,
-} from '@langchain/core/language_models/structured_output';
 import {
   AIMessage,
   type BaseMessage,
@@ -20,12 +12,24 @@ import {
 } from '@langchain/core/messages';
 import type { ChatResult } from '@langchain/core/outputs';
 import type { Runnable } from '@langchain/core/runnables';
-import type { ChatModelFactory } from '../../src/llm/chat-model.factory.js';
+import type {
+  ChatModelFactory,
+  RequestOptions,
+} from '../../src/llm/chat-model.factory.js';
 import { LlmError } from '../../src/contracts/llm-error.js';
 
-/** The model's text as sent (JSON for a schema call, or malformed on purpose). */
+/** A tool call in a scripted answer; its id is `call-<n>` unless given. */
+export interface ScriptedToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  id?: string;
+}
+
+/** The model's text as sent (JSON for a schema call, or malformed on purpose), and (spec 11) its tool calls. */
 export interface ScriptedAnswer {
-  answer: string;
+  /** Empty when left out (an answer with tool calls only). */
+  answer?: string;
+  toolCalls?: ScriptedToolCall[];
   finishReason?: string;
   usage?: UsageMetadata | null;
   /** Spec 6 (plan T12): runs while the model "thinks", before the answer comes back (e.g. a comment arrives). */
@@ -40,8 +44,10 @@ export type ScriptedReply =
 export interface ScriptedCall {
   model: string;
   messages: BaseMessage[];
-  /** Set when the call went through withStructuredOutput. */
-  structured?: { method: string | undefined; includeRaw: boolean };
+  /** Spec 11: the names of the tools the request offered (none for a `create()` model). */
+  tools: string[];
+  /** Spec 11: whether the request carried the answer format. */
+  schema: boolean;
 }
 
 export const SCRIPTED_USAGE: UsageMetadata = {
@@ -52,15 +58,11 @@ export const SCRIPTED_USAGE: UsageMetadata = {
   output_token_details: { reasoning: 12 },
 };
 
-type StructuredSchema<RunOutput extends Record<string, unknown>> = Parameters<
-  typeof createContentParser<RunOutput>
->[0];
-
 const BLOCKED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST']);
 
 export class ScriptedChatModelFactory implements ChatModelFactory {
   readonly provider = 'scripted';
-  /** Every model name passed to `create`, in order. */
+  /** Every model name passed to `create` or `request`, in order. */
   readonly created: string[] = [];
   /** Every model call, in order, with the messages it got. */
   readonly calls: ScriptedCall[] = [];
@@ -83,6 +85,20 @@ export class ScriptedChatModelFactory implements ChatModelFactory {
   create(model: string): BaseChatModel {
     this.created.push(model);
     return new ScriptedChatModel(model, this);
+  }
+
+  /** As the Google adapter: the options as call options of one request; the raw message comes back. */
+  request(
+    model: string,
+    { tools, schema }: RequestOptions,
+  ): Runnable<BaseMessage[], AIMessage> {
+    this.created.push(model);
+    return new ScriptedChatModel(model, this).withConfig({
+      scriptedRequest: {
+        tools: (tools ?? []).map((tool) => tool.name),
+        schema: schema !== undefined,
+      },
+    }) as Runnable<BaseMessage[], AIMessage>;
   }
 
   toLlmError(error: unknown, model: string): LlmError {
@@ -128,8 +144,8 @@ export class ScriptedChatModelFactory implements ChatModelFactory {
 }
 
 interface ScriptedCallOptions extends BaseChatModelCallOptions {
-  /** Set by withStructuredOutput, as ChatGoogle's own `responseSchema` option. */
-  scriptedStructured?: ScriptedCall['structured'];
+  /** Set by `request()`, as ChatGoogle's own `tools` and `responseSchema` options. */
+  scriptedRequest?: Pick<ScriptedCall, 'tools' | 'schema'>;
 }
 
 class ScriptedChatModel extends BaseChatModel<ScriptedCallOptions> {
@@ -152,7 +168,8 @@ class ScriptedChatModel extends BaseChatModel<ScriptedCallOptions> {
     const reply = this.factory.next({
       model: this.model,
       messages,
-      structured: options.scriptedStructured,
+      tools: options.scriptedRequest?.tools ?? [],
+      schema: options.scriptedRequest?.schema ?? false,
     });
     if ('error' in reply) throw reply.error;
     await reply.during?.();
@@ -160,8 +177,15 @@ class ScriptedChatModel extends BaseChatModel<ScriptedCallOptions> {
   }
 
   private answer(reply: ScriptedAnswer): ChatResult {
+    const text = reply.answer ?? '';
     const message = new AIMessage({
-      content: reply.answer,
+      content: text,
+      tool_calls: (reply.toolCalls ?? []).map((call, index) => ({
+        type: 'tool_call' as const,
+        name: call.name,
+        args: call.args,
+        id: call.id ?? `call-${index + 1}`,
+      })),
       response_metadata: {
         model_provider: 'scripted',
         finish_reason: reply.finishReason ?? 'STOP',
@@ -169,41 +193,6 @@ class ScriptedChatModel extends BaseChatModel<ScriptedCallOptions> {
       usage_metadata:
         reply.usage === null ? undefined : (reply.usage ?? SCRIPTED_USAGE),
     });
-    return { generations: [{ text: reply.answer, message }] };
-  }
-
-  /** As ChatGoogle's `jsonSchema` method: the same model with the schema as a call option, then a JSON parser. */
-  override withStructuredOutput<
-    RunOutput extends Record<string, unknown> = Record<string, unknown>,
-  >(
-    outputSchema: StructuredSchema<RunOutput>,
-    config?: StructuredOutputMethodOptions<false>,
-  ): Runnable<BaseLanguageModelInput, RunOutput>;
-  override withStructuredOutput<
-    RunOutput extends Record<string, unknown> = Record<string, unknown>,
-  >(
-    outputSchema: StructuredSchema<RunOutput>,
-    config?: StructuredOutputMethodOptions<true>,
-  ): Runnable<BaseLanguageModelInput, { raw: BaseMessage; parsed: RunOutput }>;
-  override withStructuredOutput<
-    RunOutput extends Record<string, unknown> = Record<string, unknown>,
-  >(
-    outputSchema: StructuredSchema<RunOutput>,
-    config?: StructuredOutputMethodOptions<boolean>,
-  ):
-    | Runnable<BaseLanguageModelInput, RunOutput>
-    | Runnable<
-        BaseLanguageModelInput,
-        { raw: BaseMessage; parsed: RunOutput }
-      > {
-    const structured = {
-      method: config?.method,
-      includeRaw: config?.includeRaw === true,
-    };
-    return assembleStructuredOutputPipeline(
-      this.withConfig({ scriptedStructured: structured }),
-      createContentParser(outputSchema),
-      structured.includeRaw,
-    );
+    return { generations: [{ text, message }] };
   }
 }

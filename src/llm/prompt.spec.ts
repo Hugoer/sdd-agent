@@ -1,8 +1,9 @@
+import { AIMessage } from '@langchain/core/messages';
 import { describe, expect, it } from 'vitest';
 import type { LoadedSkill, RepoContext } from '../contracts/step.js';
 import { MAX_UNTRUSTED_CHARS } from './input-guard.js';
 import type { Turn } from './llm-call.js';
-import { buildPrompt, notesFor, withNotes } from './prompt.js';
+import { answerChars, buildPrompt, notesFor, withNotes } from './prompt.js';
 
 const TAG = 'untrusted-data-0123456789abcdef';
 const COMMIT = 'ab12'.repeat(10);
@@ -212,6 +213,142 @@ describe('buildPrompt', () => {
   });
 });
 
+describe('buildPrompt: spec 11 lists and "Loading:"', () => {
+  const LIMITS = { maxLoads: 10, maxBytes: 204_800 };
+  const DISCOVERY: RepoContext = {
+    rootAgents: { text: AGENTS_TEXT, bytes: Buffer.byteLength(AGENTS_TEXT) },
+    skills: [
+      {
+        name: 'money-rules',
+        description:
+          'How this project stores, splits and rounds money amounts. Use when an issue adds, splits, rounds or ' +
+          'shows amounts.',
+        path: '.claude/skills/money-rules',
+        files: [],
+      },
+      {
+        name: 'tax-rules',
+        description: 'Tax on a split.\nUse when an issue adds tax.',
+        path: '.claude/skills/tax-rules',
+        files: [],
+      },
+    ],
+    agents: [
+      { path: 'src/AGENTS.md', bytes: 1210 },
+      { path: 'vendor/pay-lib/AGENTS.md', bytes: 23_456 },
+    ],
+  };
+  const SKILLS_LIST =
+    'Skills this repository keeps for its developers. Load one with load_skill when it applies to this issue:\n' +
+    '- money-rules: How this project stores, splits and rounds money amounts. Use when an issue adds, splits, ' +
+    'rounds or shows amounts.\n' +
+    '- tax-rules: Tax on a split. Use when an issue adds tax.';
+  const AGENTS_LIST =
+    'Instructions for parts of this repository. Each applies to the files under its folder, and the closest one ' +
+    'wins. Load one with load_file when the issue touches that folder:\n' +
+    '- src/AGENTS.md (1,210 bytes)\n' +
+    '- vendor/pay-lib/AGENTS.md (23,456 bytes)';
+  const LOADING =
+    'Loading: before you answer, you may call load_skill and load_file, at most 10 times and 204,800 bytes in all ' +
+    'for this answer. Every call counts, even one that finds nothing. Give a one-line reason with each call, load ' +
+    'only what this issue needs, and use paths exactly as listed. The bot runs nothing: a script in a skill is ' +
+    'text you can read, never a command. When you have what you need, or the bot says the limit is reached, give ' +
+    'your answer in the required format.';
+
+  it('the full order: frame, skill, root AGENTS.md, skills list, AGENTS.md list, "Loading:", the fixed paragraphs', () => {
+    const { messages } = buildPrompt(
+      FRAME,
+      { skill: SKILL, repo: DISCOVERY, loading: LIMITS },
+      TURNS,
+      TAG,
+    );
+    const system = messages[0].content;
+
+    expect(system).toContain(
+      `<agents path="AGENTS.md" commit="${COMMIT}">\n${AGENTS_TEXT}\n</agents>\n\n` +
+        `${SKILLS_LIST}\n\n${AGENTS_LIST}\n\n${LOADING}\n\n${FIXED_FIRST}`,
+    );
+    expect(system.startsWith(`${FRAME}\n\nThe method to follow`)).toBe(true);
+  });
+
+  it('the seven sizes add up to every character sent: lists = both lists, "Loading:" in frame', () => {
+    const { messages, sizes } = buildPrompt(
+      FRAME,
+      { skill: SKILL, repo: DISCOVERY, loading: LIMITS },
+      TURNS,
+      TAG,
+    );
+    const total = messages.reduce(
+      (sum, { content }) => sum + content.length,
+      0,
+    );
+
+    expect(sizes.lists).toBe(SKILLS_LIST.length + AGENTS_LIST.length);
+    expect(sizes.frame).toBeGreaterThan(FRAME.length + LOADING.length);
+    expect(sizes.loaded).toBe(0);
+    expect(
+      Object.values(sizes).reduce((sum: number, n: number) => sum + n, 0),
+    ).toBe(total);
+  });
+
+  it('a limit of 1 reads "at most 1 time"', () => {
+    const { messages } = buildPrompt(
+      FRAME,
+      {
+        skill: SKILL,
+        repo: DISCOVERY,
+        loading: { maxLoads: 1, maxBytes: 1024 },
+      },
+      TURNS,
+      TAG,
+    );
+
+    expect(messages[0].content).toContain(
+      'you may call load_skill and load_file, at most 1 time and 1,024 bytes in all for this answer.',
+    );
+  });
+
+  it('a list with nothing in it is left out', () => {
+    const { messages, sizes } = buildPrompt(
+      FRAME,
+      { skill: SKILL, repo: { ...DISCOVERY, skills: [] }, loading: LIMITS },
+      TURNS,
+      TAG,
+    );
+
+    expect(messages[0].content).not.toContain('Skills this repository');
+    expect(messages[0].content).toContain(`${AGENTS_LIST}\n\n${LOADING}`);
+    expect(sizes.lists).toBe(AGENTS_LIST.length);
+  });
+
+  it('a call that offers no tools gets no lists and no "Loading:" (SDW7)', () => {
+    const { messages, sizes } = buildPrompt(
+      FRAME,
+      { skill: SKILL, repo: DISCOVERY },
+      TURNS,
+      TAG,
+    );
+
+    expect(messages[0].content).not.toContain('Skills this repository');
+    expect(messages[0].content).not.toContain('Instructions for parts');
+    expect(messages[0].content).not.toContain('Loading:');
+    expect(sizes.lists).toBe(0);
+  });
+
+  it("answerChars: a message's text plus each tool call's arguments as JSON", () => {
+    const args = { name: 'money-rules', reason: 'splits cents' };
+    const message = new AIMessage({
+      content: 'Let me check.',
+      tool_calls: [{ name: 'load_skill', args, id: 'c1', type: 'tool_call' }],
+    });
+
+    expect(answerChars(message)).toBe(
+      'Let me check.'.length + JSON.stringify(args).length,
+    );
+    expect(answerChars(new AIMessage('{"a":1}'))).toBe(7);
+  });
+});
+
 describe('notes', () => {
   it('the model line always; one cut line per cut text', () => {
     expect(
@@ -234,6 +371,109 @@ describe('notes', () => {
       'Model: `gemini-4-hydrogen` (standard)',
       'The bot read only the first 65,536 characters of the issue description (it had 80,112).',
     ]);
+  });
+
+  describe('spec 11: Read, looked for, the limit', () => {
+    const MODEL = {
+      provider: 'google',
+      name: 'gemini-4-carbon',
+      level: 'standard' as const,
+    };
+    const MONEY = '.claude/skills/money-rules';
+    const REPO: RepoContext = {
+      rootAgents: { text: AGENTS_TEXT, bytes: 44 },
+      skills: [
+        { name: 'money-rules', description: 'd', path: MONEY, files: [] },
+      ],
+      agents: [{ path: 'src/AGENTS.md', bytes: 11 }],
+    };
+    const LIMITS = { maxLoads: 10, maxBytes: 204_800 };
+    const START = ['.github-agent/skills/spec/SKILL.md', 'AGENTS.md'];
+    function loads(
+      onDemand: string[],
+      lookedFor: string[] = [],
+      limitHit: 'files' | 'bytes' | null = null,
+      limits = LIMITS,
+    ) {
+      return {
+        skill: SKILL,
+        repo: REPO,
+        budget: {
+          loadsLeft: 0,
+          bytesLeft: 0,
+          given: new Set([...START, ...onDemand]),
+          loadedSkills: new Set<string>(),
+          limitHit,
+        },
+        limits,
+        lookedFor,
+      };
+    }
+    const notes = (...args: Parameters<typeof loads>) =>
+      notesFor(MODEL, [], loads(...args)).slice(1);
+
+    it('the lines in order: model, cut lines, Read, looked for, the limit', () => {
+      expect(
+        notesFor(
+          MODEL,
+          [
+            {
+              source: { key: 'description', label: 'the issue description' },
+              from: 80_112,
+            },
+          ],
+          loads(['src/AGENTS.md'], ['tax-rules'], 'files'),
+        ),
+      ).toEqual([
+        'Model: `gemini-4-carbon` (standard)',
+        'The bot read only the first 65,536 characters of the issue description (it had 80,112).',
+        'Read: `src/AGENTS.md`',
+        "The bot looked for skill `tax-rules`, which this repo doesn't have.",
+        'The bot reached its limit of 10 files for this answer.',
+      ]);
+    });
+
+    it("Read: in load order, a skill's files grouped where its first file was loaded, relative to its folder", () => {
+      expect(
+        notes([
+          `${MONEY}/SKILL.md`,
+          'src/AGENTS.md',
+          `${MONEY}/references/rounding.md`,
+          '.github-agent/skills/spec/references/template.md',
+        ]),
+      ).toEqual([
+        'Read: skill `money-rules` (`SKILL.md`, `references/rounding.md`), `src/AGENTS.md`, the `spec` step ' +
+          'skill (`references/template.md`)',
+      ]);
+    });
+
+    it('nothing loaded on demand → no Read line; the start files are never repeated (SD8)', () => {
+      expect(notes([])).toEqual([]);
+    });
+
+    it('one, two and three names; a name asked twice is shown once', () => {
+      expect(notes([], ['a', 'b', 'a'])).toEqual([
+        "The bot looked for skills `a` and `b`, which this repo doesn't have.",
+      ]);
+      expect(notes([], ['a', 'b', 'c'])).toEqual([
+        "The bot looked for skills `a`, `b` and `c`, which this repo doesn't have.",
+      ]);
+    });
+
+    it('model text: backticks removed, an @name inside backticks, cut at 64 characters (SDW18)', () => {
+      expect(notes([], ['`@team` x', `${'y'.repeat(70)}`])).toEqual([
+        `The bot looked for skills \`@team x\` and \`${'y'.repeat(64)}\`, which this repo doesn't have.`,
+      ]);
+    });
+
+    it('the limit: "of 1 file", or the bytes', () => {
+      expect(notes([], [], 'files', { maxLoads: 1, maxBytes: 1024 })).toEqual([
+        'The bot reached its limit of 1 file for this answer.',
+      ]);
+      expect(notes([], [], 'bytes')).toEqual([
+        'The bot reached its limit of 204,800 bytes for this answer.',
+      ]);
+    });
   });
 
   it('withNotes appends them under a rule, one small line each', () => {
