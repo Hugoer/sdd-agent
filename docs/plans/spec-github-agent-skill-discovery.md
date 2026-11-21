@@ -914,7 +914,8 @@ rows that need sandbox commits ("Your part", item 5) wait for you. The row that 
   closed: every row ticked but `smoke/spec-11-missing`, not observed in 3 tries; the real model asks only for
   listed files, and T19's suite covers the behavior)
 - [x] Every invariant passes, scoped to the rows stored since the build went live (2026-11-21: all seven, over 97
-  `context_loads` rows, 59 `execution_logs` rows, 20 evaluations and 32 bot comments on #30–#47)
+  `context_loads` rows, 59 `execution_logs` rows, 20 evaluations and 32 bot comments on #30–#47;
+  `scripts/skill-discovery-invariants.mjs`, the command in the spec)
 - [x] The success criteria hold; the spec and this plan say "built and verified <date>" (2026-11-21: `src/llm`
   names steps only in the five-step list, so specs 7, 9 and 10 call it unchanged; the overview, the idea doc,
   the guide, `.env.example`, `AGENTS.md` and the README reflect the spec; the sandbox's `main` has the SD9 content)

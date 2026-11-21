@@ -258,7 +258,8 @@ export class GitHubWebhookGuard implements CanActivate {
 - Prettier `singleQuote`, 2-space indent (`.editorconfig`), ESLint flat config with `typescript-eslint`
   recommended-type-checked.
 - Config is read only through `ConfigService<Env, true>` (`Env = z.infer<typeof envSchema>`), never
-  `process.env` (exceptions: `prisma.config.ts`, `scripts/tunnel.mjs`).
+  `process.env` (exceptions: `prisma.config.ts`, `scripts/tunnel.mjs`, and since 2026-11-21 (spec 11)
+  `scripts/skill-discovery-invariants.mjs`).
 
 ## Testing strategy
 

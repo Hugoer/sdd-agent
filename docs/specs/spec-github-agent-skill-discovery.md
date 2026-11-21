@@ -928,6 +928,8 @@ src/llm/
 src/config/env.schema.ts               + the two variables
 prisma/migrations/<ts>_skill_discovery context_loads; execution_logs columns
 test/fakes/scripted-chat-model.factory.ts   + tool calls in an answer, bindTools, a scripted countTokens
+scripts/skill-discovery-invariants.mjs the matrix's invariants: a read-only developer check outside the app
+                                       (added 2026-11-21, plan Task 24)
 ```
 
 `src/grill` changes no code (Grill Me gets discovery through `prepare` and `call`); only its tests are added to.
@@ -1294,10 +1296,16 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
 - [x] No Grill comment was posted from a commit where a skill the run uses, or any repo skill, broke the header
   rule (SD12).
 
-  2026-11-21 (Task 24): all seven pass, checked by a read-only script (SELECTs and `gh api` GETs, not in the repo)
-  over everything stored since the first `context_loads` row: 97 `context_loads` rows, 59 `execution_logs` rows,
-  20 Grill evaluations, 32 bot comments on `#30`–`#47`. The broken commits were 877c3f9 (bad-skills) and c3ff136
-  (no description). CLAUDE.md was never asked for.
+  2026-11-21 (Task 24): all seven pass over everything stored since the first `context_loads` row: 97
+  `context_loads` rows, 59 `execution_logs` rows, 20 Grill evaluations, 32 bot comments on `#30`–`#47`. The broken
+  commits were 877c3f9 (bad-skills) and c3ff136 (no description). CLAUDE.md was never asked for. Checked by
+  `scripts/skill-discovery-invariants.mjs`, read-only: SELECTs on the dev database, and `gh api` GETs with the
+  developer's login. It exits 1 if any invariant fails. The run:
+
+  ```sh
+  node --env-file-if-exists=.env scripts/skill-discovery-invariants.mjs --from 30 --max1 36,37,38,45 \
+    --broken 877c3f98a9e22882ca05d58749bc17206eae5922,c3ff13693bda1a9f29727719c781c9d46773d305
+  ```
 
 **Not checked by hand, covered by automated tests:**
 - a `ProviderError` while loading;
