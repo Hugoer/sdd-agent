@@ -1,6 +1,8 @@
 # Spec #11 — GitHub AI Agent: Skill Discovery
 
-> **Created:** 2026-11-20 · **Status:** approved 2026-11-20, not built. SD1–SD9 come from the interview of 2026-11-19
+> **Created:** 2026-11-20 · **Status:** built and verified 2026-11-21 (plan Tasks 0–24; the matrix was checked on
+> the sandbox at Checkpoints 2–5 and Task 24; one row, `smoke/spec-11-missing`, not observed on the real model and
+> covered by the integration tests) · approved 2026-11-20. SD1–SD9 come from the interview of 2026-11-19
 > and were confirmed by the developer; SD10–SD13 were answered after the review (2026-11-20). SDW1–SDW10 were
 > listed to the developer before the draft (2026-11-20) with no correction. SDW11–SDW20 were decided while
 > writing; in a follow-up interview the same day the developer confirmed SDW11, SDW12, SDW15 (simplified) and
@@ -1201,7 +1203,7 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   `AGENTS.md`.
 - [x] Answer `#A`'s questions → the next evaluation is a new call. Its rows have a new `call_id`, and it may load
   `money-rules` again (no carry-over). The reply follows spec 6 as before.
-- [ ] Restart with `SKILL_DISCOVERY_MAX_LOADS=1`, then a new issue like `#A` → if the model asks for more than one
+- [x] Restart with `SKILL_DISCOVERY_MAX_LOADS=1`, then a new issue like `#A` → if the model asks for more than one
   file:
   - one `loaded` row and `limit-reached` rows;
   - the comment ends with "The bot reached its limit of 1 file for this answer."; the questions are posted
@@ -1213,6 +1215,10 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   2026-11-21 (Checkpoint 4): not observed. In three tries (`#36` on `main`, `#37` and `#38` on the two-loads branch)
   Gemini asked for one file only (`money-rules`, `loaded`) and answered, keeping to "at most 1 time"; no request was
   refused. The refusal is covered by `test/grill-discovery-limit.integration.spec.ts`.
+
+  2026-11-21 (Task 24, `#45` on the two-loads branch, 17caae2): passes. Turn 1 loaded `money-rules`; turn 2 asked
+  for `references/rounding.md` → `limit-reached`; turn 3 answered with no tool call. The round 1 comment has
+  "Read: skill `money-rules` (`SKILL.md`)", ends with the limit line, and holds the questions.
 - [x] Restart with `SKILL_DISCOVERY_MAX_BYTES=1024`, then a new issue like `#A` → the `money-rules` row is
   `too-large`; NO "Read:" entry for it; the Grill comment is posted.
 - [ ] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-missing`, then a new issue + `workflow: full-sdd`:
@@ -1224,6 +1230,11 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   but Gemini asked only for listed files (`money-rules`, `src/AGENTS.md`, `references/rounding.md`) and never for
   `tax-rules` or `CLAUDE.md`; no PINEAPPLE. The `not-found` rows and the looked-for line are covered by
   `test/grill-discovery.integration.spec.ts`.
+
+  2026-11-21 (Task 24, `#46`, 9752b83, the third try): still not observed. Gemini loaded `money-rules`,
+  `src/AGENTS.md` and `references/rounding.md`, then asked for the grill `SKILL.md` again (`already-loaded`, its
+  first real occurrence); never `tax-rules` or `CLAUDE.md`; no PINEAPPLE. The row stays open: the real model
+  doesn't follow the line, and the tests cover the behavior.
 - [x] Restart with `TARGET_BASE_BRANCH=smoke/spec-11-bad-folder`, then a new issue + `workflow: full-sdd` →
   `status: needs-human` and ONE comment naming "repoSkills folder not found: .claude/skill"; NO Grill question.
   Restore `main` afterwards.
@@ -1231,21 +1242,35 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   `status: needs-human` and ONE comment "Run 1 stopped before its first step: invalid skills: …" naming all three
   problems, with `/retry` and the restart; NO Grill question. Restart the app on `main`, then `/retry` → Grill Me
   starts.
-- [ ] On `main`, while `#A` (or a new issue like `#A`, if `#A` has left Grill Me) waits for answers, merge a change
+- [x] On `main`, while `#A` (or a new issue like `#A`, if `#A` has left Grill Me) waits for answers, merge a change
   that removes `money-rules`' `description`, then answer it (SD12) → `status: needs-human` and ONE comment "Run 1 stopped at step `grill`: invalid skills:
   .claude/skills/money-rules/SKILL.md: no description"; NO new round. The merge itself posted nothing. Revert
   the change, `/retry` → the evaluation runs.
+
+  2026-11-21 (Task 24, `#47`): passes. The removal (c3ff136, pushed to `main`) reached the bot only as a
+  `check_suite` event, ignored as unsupported, and posted nothing. The next answer ("Q2: yes / Q3: yes") →
+  `status: needs-human` and that one comment, no new round, no request or load at c3ff136. After the revert
+  (86cf3e3), `/retry` → the evaluation ran at 86cf3e3, read that answer, judged the issue clear (96), and the run
+  stopped at `spec` (`step-not-built`).
 - [x] Add `model: max-grill` to `#A` (or to a new issue like `#A`, if `#A` has left Grill Me) and answer → the new rows' `model` is the `max` model; the token counts are
   asked again for that model, or reused if it's the same model name.
 
 **Base branch only**
-- [ ] On a branch (not merged), change `src/AGENTS.md` and `money-rules/SKILL.md`, then trigger a Grill evaluation
+- [x] On a branch (not merged), change `src/AGENTS.md` and `money-rules/SKILL.md`, then trigger a Grill evaluation
   → the prompt and the loaded text are `main`'s; `context_loads.commit` = `main`'s commit.
-- [ ] Merge a change to the root `AGENTS.md` into `main` while `#A` is asking, then answer → the next evaluation's
+
+  2026-11-21 (Task 24, `#47`): passes. `smoke/spec-11-unmerged` (568fb83) adds an `UNMERGED-MARKER` line to both
+  files. The next evaluation loaded them at `main`'s 96d8419. No request, answer or `context_loads` row in the
+  database holds the marker or the branch's commit.
+- [x] Merge a change to the root `AGENTS.md` into `main` while `#A` is asking, then answer → the next evaluation's
   prompt has the new text and the new commit. The call before it shows the old one.
 
+  2026-11-21 (Task 24, `#47`): passes. The line "- Examples name people Alice, Bob and Carol, in that order." was
+  pushed to `main` (96d8419). The next evaluation's turn 1 prompt holds it at 96d8419 (`agents_chars` 832 → 892,
+  the line's 60). Round 1's call shows 4c93fa5, without it.
+
 **Spec 6 still works** (a sample of spec 6's matrix, on a new issue)
-- [ ] An answer → one reply; a partial answer → 👀 and no comment; `grill: skip` → the stopped comment;
+- [x] An answer → one reply; a partial answer → 👀 and no comment; `grill: skip` → the stopped comment;
   `/approve` while asking → the reply. All as in spec 6, with the "Read:" line where something was loaded.
 
   2026-11-21 (Checkpoint 4, `#42`): an answer → one reply (round 3), `/approve` → spec 6's "nothing to approve yet"
@@ -1253,18 +1278,26 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT create
   three) got round 2 instead of 👀: the model listed Q2 and Q3 as open and also proposed two new questions, and spec
   6 waits only when it proposes none. Not a spec 11 change; 👀 not observed in this run.
 
+  2026-11-21 (Task 24, `#47`): a partial answer (Q1 of three, saying Q2 and Q3 would follow) → 👀 and no comment;
+  the evaluation waited with Q2 and Q3 open. With `#42`, every part of the row is now observed.
+
 **Invariants** (checked over everything stored during these rows)
-- [ ] No prompt, tool message, bot comment or `context_loads` row contains "PINEAPPLE"; no row has a `path` ending
+- [x] No prompt, tool message, bot comment or `context_loads` row contains "PINEAPPLE"; no row has a `path` ending
   in `CLAUDE.md`.
-- [ ] Every "Read:" line lists exactly the call's `loaded` rows with trigger `tool`: no more, no fewer.
-- [ ] No call has more `tool` rows with an outcome other than `limit-reached` than `SKILL_DISCOVERY_MAX_LOADS`.
+- [x] Every "Read:" line lists exactly the call's `loaded` rows with trigger `tool`: no more, no fewer.
+- [x] No call has more `tool` rows with an outcome other than `limit-reached` than `SKILL_DISCOVERY_MAX_LOADS`.
   After a `limit-reached`, no later request of that call offered tools.
-- [ ] Every `context_loads.commit` equals its call's `execution_logs.skill_commit`.
-- [ ] Every `execution_logs` row written since the build has a `call_id`. Turn 1 holds a system message; no later
+- [x] Every `context_loads.commit` equals its call's `execution_logs.skill_commit`.
+- [x] Every `execution_logs` row written since the build has a `call_id`. Turn 1 holds a system message; no later
   turn does.
-- [ ] No step stopped because of a limit, an unknown skill or a token count.
-- [ ] No Grill comment was posted from a commit where a skill the run uses, or any repo skill, broke the header
+- [x] No step stopped because of a limit, an unknown skill or a token count.
+- [x] No Grill comment was posted from a commit where a skill the run uses, or any repo skill, broke the header
   rule (SD12).
+
+  2026-11-21 (Task 24): all seven pass, checked by a read-only script (SELECTs and `gh api` GETs, not in the repo)
+  over everything stored since the first `context_loads` row: 97 `context_loads` rows, 59 `execution_logs` rows,
+  20 Grill evaluations, 32 bot comments on `#30`–`#47`. The broken commits were 877c3f9 (bad-skills) and c3ff136
+  (no description). CLAUDE.md was never asked for.
 
 **Not checked by hand, covered by automated tests:**
 - a `ProviderError` while loading;

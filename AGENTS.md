@@ -37,8 +37,18 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   written during a call or while stopped, read together; 👀 while it waits for open questions); `/approve` and
   `grill: skip` while asking; the round-limit stop; the answers block in the run-ended comment; four tables
   (`grill_sessions`, `grill_evaluations`, `grill_rounds`, `grill_answers`) and `GrillService.transcript()` for
-  spec 7. The steps after Grill Me aren't built yet, so a run then stops at `spec` (`step-not-built`). Next in
-  the build order: spec 11 (`skill-discovery`; 2026-11-18, overview D27), then spec 7. Repo:
+  spec 7. The steps after Grill Me aren't built yet, so a run then stops at `spec` (`step-not-built`). Spec 11
+  (`skill-discovery`; added 2026-11-18, overview D27) built 2026-11-21: every model step sees the target repo's
+  own instructions (`src/llm`). `workflow.json` may name
+  `repoSkills` folders; every skill (step skills and repo skills) needs a valid Agent Skills header or the run
+  stops (`invalid skills`). The prompt holds the step skill's `SKILL.md` and the root `AGENTS.md`, and lists the
+  repo skills, the other `AGENTS.md` files and the step skill's other files; the model loads them with two
+  LangChain tools (`load_skill`, `load_file`; `ContextLoaderService`) within `SKILL_DISCOVERY_MAX_LOADS` and
+  `SKILL_DISCOVERY_MAX_BYTES` per call. `CLAUDE.md` and unlisted files are never read. The commit's reads are kept
+  in memory for the latest commit. `LlmService.call()` has load turns: one `execution_logs` row per request
+  (`call_id`, `turn`, three new sizes), one `context_loads` row per file given or asked for (outcome, reason,
+  provider `tokens` from Gemini's `countTokens`, `estimatedTokens`). Comments get a "Read:" line, a looked-for line
+  and a limit line. Smoke check 9 loads a repo skill on the real model. Next: spec 7. Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 

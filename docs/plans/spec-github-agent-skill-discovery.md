@@ -1,6 +1,8 @@
 # Implementation Plan — Spec #11: Skill Discovery
 
-> **Created:** 2026-11-20 · **Status:** approved 2026-11-20 (fresh-context review 2026-11-20, its findings applied
+> **Created:** 2026-11-20 · **Status:** built and verified 2026-11-21 (Tasks 0–24; one matrix row,
+> `smoke/spec-11-missing`, not observed on the real model: see the spec) ·
+> approved 2026-11-20 (fresh-context review 2026-11-20, its findings applied
 > the same day: see "Review"; P1–P4 and the write-time P6, P7, P10, P16, P19, P21 confirmed the same day, all as
 > guessed but P21: an `error` outcome)
 >
@@ -782,9 +784,13 @@ and `call()`, no change in `src/grill`.
   passed. Not observed on real Gemini: a refused request at `SKILL_DISCOVERY_MAX_LOADS=1` (3 tries; the model kept
   to one file) and the `smoke/spec-11-missing` requests (2 tries; it asked only for listed files). Both are covered
   by T19's integration suites. The invariants held over everything stored (12 evaluations).
-- [ ] Matrix "Spec 6 still works" on a new issue
+  2026-11-21 (Task 24): `SKILL_DISCOVERY_MAX_LOADS=1` passed on #45 (two-loads branch: `rounding.md` →
+  `limit-reached`, the limit line, the questions posted). `smoke/spec-11-missing` was still not observed on #46
+  (3 tries in all); the spec's row stays open with its note.
+- [x] Matrix "Spec 6 still works" on a new issue
   2026-11-21 (#42, closed): an answer → one reply, `/approve` → the reply, `grill: skip` → the stopped comment. The
   partial answer got round 2 instead of 👀 (the model also proposed new questions; spec 6's rule, unchanged).
+  2026-11-21 (Task 24, #47, closed): a partial answer → 👀 and no comment.
 - [ ] You review and commit
 
 ---
@@ -884,8 +890,10 @@ too large`, `unreadable AGENTS.md`, `repoSkills folder not found`, `invalid skil
 `skills-ref validate`). `AGENTS.md` "State", the README, the spec's and this plan's status lines.
 
 **Acceptance criteria:**
-- [ ] Every item of the spec's "Setup & configuration" is in the guide; every command in it runs as written
-- [ ] `AGENTS.md` "State" says spec 11 is built and spec 7 is next
+- [x] Every item of the spec's "Setup & configuration" is in the guide; every command in it runs as written
+  (2026-11-21: the curl downloads match the sandbox byte for byte; the branch copy ran against a local bare repo;
+  `calls_of`, `loads_of` and `tokens_per_file` ran on the dev database)
+- [x] `AGENTS.md` "State" says spec 11 is built and spec 7 is next
 
 **Verification:**
 - [ ] Manual: you read the diff
@@ -902,12 +910,18 @@ rows that need sandbox commits ("Your part", item 5) wait for you. The row that 
 `#A` waits for answers" uses a new issue like `#A` if `#A` has left Grill Me.
 
 **Acceptance criteria:**
-- [ ] Every matrix row ticked in the spec, or written down with why it can't pass
-- [ ] Every invariant passes, scoped to the rows stored since the build went live
-- [ ] The success criteria hold; the spec and this plan say "built and verified <date>"
+- [x] Every matrix row ticked in the spec, or written down with why it can't pass (2026-11-21, issues #45–#47, all
+  closed: every row ticked but `smoke/spec-11-missing`, not observed in 3 tries; the real model asks only for
+  listed files, and T19's suite covers the behavior)
+- [x] Every invariant passes, scoped to the rows stored since the build went live (2026-11-21: all seven, over 97
+  `context_loads` rows, 59 `execution_logs` rows, 20 evaluations and 32 bot comments on #30–#47)
+- [x] The success criteria hold; the spec and this plan say "built and verified <date>" (2026-11-21: `src/llm`
+  names steps only in the five-step list, so specs 7, 9 and 10 call it unchanged; the overview, the idea doc,
+  the guide, `.env.example`, `AGENTS.md` and the README reflect the spec; the sandbox's `main` has the SD9 content)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (2026-11-21: 1,252 unit
+  tests in 50 files, 281 integration tests in 30 files)
 
 **Dependencies:** T23
 **Files:** the spec (ticks, status), this plan (status)
