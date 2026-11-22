@@ -200,6 +200,32 @@ describe('runSmoke (repo checks)', () => {
     ]);
   });
 
+  it('compares the base branch’s commit with itself and prints the compare URL (spec 7 plan P22)', async () => {
+    const { repo, lines, run } = setup();
+    const sha = await repo.resolveRef('main');
+
+    await expect(run()).resolves.toBe(true);
+
+    expect(lines).toContainEqual(
+      `PASS changedFiles main with itself: ${sha.slice(0, 7)} → no paths, complete; https://github.com/${REPO}/compare/${sha}...${sha}`,
+    );
+  });
+
+  it('reports FAIL when the compare call fails', async () => {
+    const { repo, lines, run } = setup();
+    vi.spyOn(repo, 'changedFiles').mockRejectedValue(
+      new ProviderError('GitHub GET … → 404: Not Found', 'permanent', {
+        status: 404,
+      }),
+    );
+
+    await expect(run()).resolves.toBe(false);
+
+    expect(lines).toContainEqual(
+      'FAIL changedFiles main with itself: GitHub GET … → 404: Not Found',
+    );
+  });
+
   it('lists a nested skill directory with the executable bit', async () => {
     const { lines, run } = setup({ dir: 'smoke-skill' });
 

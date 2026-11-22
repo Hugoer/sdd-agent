@@ -11,6 +11,8 @@ import { GitHubClient } from './github-client.js';
 
 /** GitHub's JSON form of the Contents API carries files up to 1 MB (plan P8). */
 const MAX_FILE_BYTES = 1024 * 1024;
+/** The compare API lists at most this many files, so a list this long may be cut (spec 7 SP3). */
+const MAX_COMPARE_FILES = 300;
 /** SHA-1, or SHA-256 in a repository that uses it. */
 const COMMIT_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const QUALITY_GATE = 'Quality Gate';
@@ -168,6 +170,40 @@ export class GitHubRepoProvider implements RepoProvider {
       );
     }
     return sha;
+  }
+
+  /**
+   * Spec 7 SP3: one compare request. Each file's path, and the old path of a rename, so a file read under its old
+   * name is found; GitHub lists at most 300 files, so 300 means the list may be cut (`complete: false`). An
+   * unknown commit answers 404 (or 422): the client's permanent error with GitHub's status, which the caller
+   * reads as "not compared" (plan P32); every other failure keeps the client's error.
+   */
+  async changedFiles(
+    from: string,
+    to: string,
+  ): Promise<{ paths: string[]; complete: boolean }> {
+    const { owner, repo } = this.github;
+    const { data } = await this.github.request((octokit) =>
+      octokit.request('GET /repos/{owner}/{repo}/compare/{basehead}', {
+        owner,
+        repo,
+        basehead: `${from}...${to}`,
+      }),
+    );
+    const files = data.files ?? [];
+    const paths = new Set<string>();
+    for (const file of files) {
+      paths.add(file.filename);
+      if (file.previous_filename) paths.add(file.previous_filename);
+    }
+    return {
+      paths: [...paths].sort(),
+      complete: files.length < MAX_COMPARE_FILES,
+    };
+  }
+
+  compareUrl(from: string, to: string): string {
+    return `https://github.com/${this.github.targetRepo}/compare/${from}...${to}`;
   }
 
   /** A normal PR. No lookup first: a retry runs findPullRequest before this (overview §7 rule 7). */

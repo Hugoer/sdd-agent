@@ -9,6 +9,8 @@ import type {
 import { ContextLoaderService } from '../../src/llm/context-loader.service.js';
 import type { LoadLimits } from '../../src/llm/context-tools.js';
 import { RepoCatalogService } from '../../src/llm/repo-catalog.service.js';
+import { SecretScanner } from '../../src/secret-scan/secret-scanner.js';
+import { testEnv } from '../test-env.js';
 import { InMemoryRepoProvider } from './in-memory-repo-provider.js';
 
 export interface FakeContextLoad extends ContextLoadEntry {
@@ -80,6 +82,17 @@ export function contextLoaderOver(
     new ConfigService<Env, true>({
       SKILL_DISCOVERY_MAX_LOADS: limits.maxLoads,
       SKILL_DISCOVERY_MAX_BYTES: limits.maxBytes,
+    }),
+    testScanner(),
+  );
+}
+
+/** Spec 7 (plan P29): the scanner the loader redacts repo files with, over the test values of the bot's secrets. */
+export function testScanner(): SecretScanner {
+  return new SecretScanner(
+    new ConfigService<Env, true>({
+      GITHUB_WEBHOOK_SECRET: testEnv.GITHUB_WEBHOOK_SECRET,
+      GOOGLE_API_KEY: testEnv.GOOGLE_API_KEY,
     }),
   );
 }

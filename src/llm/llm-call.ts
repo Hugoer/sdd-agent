@@ -26,8 +26,18 @@ export interface LlmCall<T> {
   /** The step's own instructions (role, task, output rules), written in the step's spec. */
   frame: string;
   turns: Turn[];
-  /** A Zod schema (Gemini is asked for the format, Zod judges it), or 'text' (T is string). */
-  output: z.ZodType<T> | 'text';
+  /**
+   * A Zod schema (Gemini is asked for the format, Zod judges it), or 'text' (T is string), or (spec 7) text with a
+   * maximum: a longer answer is re-asked like any other mismatch.
+   */
+  output: z.ZodType<T> | 'text' | TextOutput;
+  /** Spec 7 (SP2): offer `list_files` and `read_file` over the repo at the step's commit (Spec, Plan, refresh). */
+  repoFiles?: true;
+}
+
+/** Spec 7 "Contracts" → `src/llm`: a text answer of at most `maxChars` characters (T is string). */
+export interface TextOutput {
+  text: { maxChars: number };
 }
 
 export interface LlmResult<T> {

@@ -103,6 +103,75 @@ describe('InMemoryRepoProvider', () => {
     await expect(repo.resolveRef('main')).rejects.toBe(down);
   });
 
+  it('changedFiles: seeding a file moves main, and the two commits differ by exactly that path', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'README.md', 'x');
+    repo.seedFile('main', 'src/index.ts', 'a');
+    const before = await repo.resolveRef('main');
+
+    repo.seedFile('main', 'src/index.ts', 'b');
+    const after = await repo.resolveRef('main');
+
+    await expect(repo.changedFiles(before, after)).resolves.toEqual({
+      paths: ['src/index.ts'],
+      complete: true,
+    });
+    await expect(repo.changedFiles(after, after)).resolves.toEqual({
+      paths: [],
+      complete: true,
+    });
+  });
+
+  it('changedFiles: an added and a removed file both count; the executable bit counts', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'old.ts', 'x');
+    repo.seedFile('main', 'run.sh', 'echo');
+    const before = await repo.resolveRef('main');
+
+    repo.removeFile('main', 'old.ts');
+    repo.seedFile('main', 'new.ts', 'x');
+    repo.seedFile('main', 'run.sh', 'echo', { executable: true });
+    const after = await repo.resolveRef('main');
+
+    await expect(repo.changedFiles(before, after)).resolves.toEqual({
+      paths: ['new.ts', 'old.ts', 'run.sh'],
+      complete: true,
+    });
+  });
+
+  it('changedFiles: 300 paths or more → the first 300, complete: false', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'README.md', 'x');
+    const before = await repo.resolveRef('main');
+    for (let i = 0; i < 301; i++) {
+      repo.seedFile('main', `f/${String(i).padStart(3, '0')}.ts`, 'x');
+    }
+    const after = await repo.resolveRef('main');
+
+    const changed = await repo.changedFiles(before, after);
+
+    expect(changed.complete).toBe(false);
+    expect(changed.paths).toHaveLength(300);
+    expect(changed.paths.at(-1)).toBe('f/299.ts');
+  });
+
+  it('changedFiles: an unknown commit → permanent 404; failNext applies; compareUrl names both', async () => {
+    const repo = new InMemoryRepoProvider();
+    repo.seedFile('main', 'README.md', 'x');
+    const sha = await repo.resolveRef('main');
+
+    await expect(repo.changedFiles('gone', sha)).rejects.toMatchObject({
+      kind: 'permanent',
+      detail: { status: 404 },
+    });
+    const down = new ProviderError('503', 'transient');
+    repo.failNext(down);
+    await expect(repo.changedFiles(sha, sha)).rejects.toBe(down);
+    expect(repo.compareUrl('a1', 'b2')).toBe(
+      `https://github.com/${REPO}/compare/a1...b2`,
+    );
+  });
+
   it('gives a new push token on every call', async () => {
     const repo = new InMemoryRepoProvider(REPO);
 

@@ -226,8 +226,11 @@ lines it changes" for every confirmed decision, each with the date and the plan'
 plans did), plus the review's fixes that need no choice. The overview where named (P6: the step outcomes; P10: D28).
 
 **Acceptance criteria:**
-- [ ] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named
-- [ ] Every matrix row a decision changes can be checked as written
+- [x] Every confirmed decision with a "Spec lines" entry is in the spec, and in the overview where named (P1–P14,
+  P20, P21, P31–P33; overview: P6, P10), plus two review fixes (finding 6: a `/refresh` while the Plan waits checks
+  the Plan first; finding 1: the `/approve` diagram picks the waiting document by status)
+- [x] Every matrix row a decision changes can be checked as written (P1, P3, P4 and P10 amend rows; P4 and P5 add
+  one row each)
 
 **Verification:**
 - [ ] Manual: you read the diff of both documents
@@ -252,17 +255,17 @@ after)`: P1's hunks in a ```` ```diff ```` fence one backtick longer than any ru
 texts are the same.
 
 **Acceptance criteria:**
-- [ ] SPW20 and P31: a hidden marker in the model's text is removed (also one cut off at the end); `@alice` →
+- [x] SPW20 and P31: a hidden marker in the model's text is removed (also one cut off at the end); `@alice` →
   `` `@alice` ``; `@Injectable()` in a ``` block, a `~~~` block and inline code stays; an e-mail address stays; a
   mention next to a stray backtick loses its `@` and the backtick stays
-- [ ] SPW5: the text between the markers; a removed start or end marker → the whole comment minus hidden markers; a
+- [x] SPW5: the text between the markers; a removed start or end marker → the whole comment minus hidden markers; a
   human who typed the markers → the first start and the last end count; `\r\n` edits give the same text as `\n`
-- [ ] `lineCounts`: unchanged → 0 and 0; one line edited → 1 and 1; CRLF only → 0 and 0
-- [ ] `diffBlock`: P1's shape for a one-line change in 40 lines; a text with a ```` ```` ```` run gets a five-backtick
+- [x] `lineCounts`: unchanged → 0 and 0; one line edited → 1 and 1; CRLF only → 0 and 0
+- [x] `diffBlock`: P1's shape for a one-line change in 40 lines; a text with a ```` ```` ```` run gets a five-backtick
   fence
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass; `npm ls diff` shows 9.0.0
+- [x] `npm run typecheck && npm run lint && npm test` pass; `npm ls diff` shows 9.0.0
 
 **Dependencies:** None
 **Files:** `package.json`, `package-lock.json`, `src/documents/document-text.ts` (+ spec), `src/grill/grill-comments.ts`
@@ -281,19 +284,20 @@ lookups: `versionFor(runId, kind, triggerCommentId)` and `actionFor(action, sour
 run). Later tasks add the approval, the deletion and the refresh writes.
 
 **Acceptance criteria:**
-- [ ] The migration applies on an empty test database and on one with spec 11's rows; the indexes are the spec's
-- [ ] Tx1 supersedes as the spec says (a Spec v2 supersedes v1, approved or not, and the waiting Plan; a Plan v2
+- [x] The migration applies on an empty test database and on one with spec 11's rows (your dev database, at
+  `npm run db:migrate`); the indexes are the spec's (a test reads `pg_indexes`)
+- [x] Tx1 supersedes as the spec says (a Spec v2 supersedes v1, approved or not, and the waiting Plan; a Plan v2
   supersedes Plan v1 only); a run has at most one current Spec and one current Plan
-- [ ] A second `insertAction` with the same `(action, source_comment_id)` and a second version with the same
+- [x] A second `insertAction` with the same `(action, source_comment_id)` and a second version with the same
   `(run_id, kind, trigger_comment_id)` are refused by the database, and the two lookups find the first; a write
   without the lease throws spec 5's error
-- [ ] `waiting()` by status: `spec-review` → the current Spec even when a Plan is posted; `ready-for-dev` → the Plan
+- [x] `waiting()` by status: `spec-review` → the current Spec even when a Plan is posted; `ready-for-dev` → the Plan
   or the go-signal; `needs-human` → by `statusBeforeStop`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-store.integration.spec.ts`)
-- [ ] Your part: `npm run db:migrate` on the dev database
+- [x] Your part: `npm run db:migrate` on the dev database
 
 **Dependencies:** None
 **Files:** `prisma/schema.prisma`, `prisma/migrations/<ts>_documents/migration.sql`, `src/documents/documents.store.ts`,
@@ -310,15 +314,16 @@ the paths that differ between the two snapshots `resolveRef` kept (added, remove
 permanent; a `failNext` works as for the other methods. The GitHub smoke calls both (P22).
 
 **Acceptance criteria:**
-- [ ] Adapter: a rename gives both paths; 300 files → `complete: false`; 404 → permanent with GitHub's status; a
+- [x] Adapter: a rename gives both paths; 300 files → `complete: false`; 404 → permanent with GitHub's status; a
   `503` stays transient (spec 3's client rules)
-- [ ] Fake: seeding a file moves `main` to a new SHA, and `changedFiles(old, new)` lists exactly that path; the same
+- [x] Fake: seeding a file moves `main` to a new SHA, and `changedFiles(old, new)` lists exactly that path; the same
   SHA twice → `[]`, complete
-- [ ] `npm run github:smoke` prints the compare check as PASS against the fake (unit) and against the sandbox
+- [x] `npm run github:smoke` prints the compare check as PASS against the fake (unit); against the sandbox at
+  Checkpoint 1
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
-- [ ] Manual: `npm run github:smoke` on the sandbox at Checkpoint 1 (stop `npm run dev` first)
+- [x] `npm run typecheck && npm run lint && npm test` pass
+- [x] Manual: `npm run github:smoke` on the sandbox at Checkpoint 1 (stop `npm run dev` first)
 
 **Dependencies:** None
 **Files:** `src/contracts/repo-provider.ts`, `src/github/github-repo.provider.ts` (+ spec),
@@ -335,12 +340,12 @@ characters; at most 50,000 fit: shorten it". After two re-asks, `invalid-answer`
 schema is T18's (P2: its own `max` message).
 
 **Acceptance criteria:**
-- [ ] 60,000 characters three times → two re-asks, three `execution_logs` rows (attempts 1–3), then `LlmError`
+- [x] 60,000 characters three times → two re-asks, three `execution_logs` rows (attempts 1–3), then `LlmError`
   `invalid-answer` with P2's message; 50,000 exactly passes
-- [ ] A long answer then a short one → the short one is the output; `'text'` calls behave as before
+- [x] A long answer then a short one → the short one is the output; `'text'` calls behave as before
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/llm/llm-call.ts`, `src/llm/llm.service.ts` (+ spec)
@@ -360,18 +365,18 @@ tools are offered; the "Read:" line lists the files read with `read_file` by pat
 are never named.
 
 **Acceptance criteria:**
-- [ ] Every outcome of the spec's table, each with its answer: `loaded`, `not-found` (a file, a folder, `CLAUDE.md` in
+- [x] Every outcome of the spec's table, each with its answer: `loaded`, `not-found` (a file, a folder, `CLAUDE.md` in
   any folder, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, a file under
   `.cursor/`, a file under `.github-agent/`), `already-loaded` (a file, also one given by `load_file`; a folder
   twice), `too-large`, `limit-reached`
-- [ ] A listing of 812 files → 500 lines and the "and 312 more" line; an empty folder name lists the root
-- [ ] "Loading:" with the read tools names `load_skill`, `load_file`, `list_files`, `read_file`; without them it is
+- [x] A listing of 812 files → 500 lines and the "and 312 more" line; an empty folder name lists the root
+- [x] "Loading:" with the read tools names `load_skill`, `load_file`, `list_files`, `read_file`; without them it is
   spec 11's sentence, byte for byte (`prompt.spec.ts:252`)
-- [ ] "Read: skill `money-rules` (`SKILL.md`), `src/index.ts`, `src/index.test.ts`": repo files after spec 11's
+- [x] "Read: skill `money-rules` (`SKILL.md`), `src/index.ts`, `src/index.test.ts`": repo files after spec 11's
   entries, whatever the load order; spec 11's cases unchanged (`prompt.spec.ts:430–445`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass
 
 **Dependencies:** None
 **Files:** `src/llm/context-tools.ts` (+ spec), `src/llm/prompt.ts` (+ spec)
@@ -389,15 +394,15 @@ are never named.
 loader's own spec build the scanner with test values for the two secrets it reads.
 
 **Acceptance criteria:**
-- [ ] A text call with `repoFiles`: the model lists `src`, reads `src/index.ts`, answers; two `context_loads` rows
+- [x] A text call with `repoFiles`: the model lists `src`, reads `src/index.ts`, answers; two `context_loads` rows
   with the new values; the file reached the model wrapped in the call's tag; the notes' "Read:" line names it
-- [ ] A file holding a token-shaped test string → the model gets `[REDACTED: …]`, one log line without the value; a
+- [x] A file holding a token-shaped test string → the model gets `[REDACTED: …]`, one log line without the value; a
   file with an injection pattern → its kinds on the row and no warning comment posted
-- [ ] `read_file` and `load_file` share one budget: the limits stop both; a call without `repoFiles` offers no read
+- [x] `read_file` and `load_file` share one budget: the limits stop both; a call without `repoFiles` offers no read
   tool (Grill Me unchanged)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T5
 **Files:** `src/llm/context-loader.service.ts` (+ spec), `src/llm/context-load.service.ts`, `src/llm/llm.service.ts`
@@ -405,8 +410,11 @@ loader's own spec build the scanner with test values for the two secrets it read
 **Scope:** M
 
 ### Checkpoint 1 — Foundations
-- [ ] All tests pass; `npm run db:migrate` ran on the dev database
-- [ ] `npm run github:smoke` on the sandbox: the compare check passes (I run it, `npm run dev` stopped)
+- [x] All tests pass (1,337 unit, 296 integration)
+- [x] `npm run db:migrate` ran on the dev database (you, 2026-11-22: `20261122202553_documents` applied)
+- [x] `npm run github:smoke` on the sandbox: the compare check passes (2026-11-22, issue #11, run by you: the
+  classifier blocked me; every line PASS, `changedFiles main with itself: 86cf3e3 → no paths, complete` and its
+  compare URL)
 - [ ] You review and commit
 
 ---

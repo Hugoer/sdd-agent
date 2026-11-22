@@ -22,13 +22,13 @@ export const approveMarker = (commentId: string): string =>
 /** A hidden marker, also one cut off at the end of the text. */
 const HIDDEN_MARKER = /<!--\s*sdd-agent:[\s\S]*?(?:-->|$)/gi;
 /** A code span as CommonMark reads it: a backtick run, then the next run of the same length. */
-const CODE_SPAN = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
+export const CODE_SPAN = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
 /**
  * A GitHub mention: `@login` or `@org/team`, not inside a word (an e-mail address is left alone). Mentions written
  * together (`@a@b`) are one match, so the backticks around the first can't uncover the next.
  */
 const NAME = String.raw`@[A-Za-z0-9][\w-]*(?:\/[A-Za-z0-9][\w.-]*)?`;
-const MENTION = new RegExp(String.raw`(?<!\w)${NAME}(?:${NAME})*`, 'g');
+export const MENTION = new RegExp(String.raw`(?<!\w)${NAME}(?:${NAME})*`, 'g');
 const SPAN_OR_MENTION = new RegExp(
   `${CODE_SPAN.source}|${MENTION.source}`,
   'g',

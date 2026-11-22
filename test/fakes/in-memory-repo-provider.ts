@@ -11,6 +11,7 @@ import type {
 } from '../../src/contracts/repo-provider.js';
 
 const MAX_FILE_BYTES = 1024 * 1024;
+const MAX_COMPARE_FILES = 300;
 
 interface FakePullRequest {
   ref: PullRequestRef;
@@ -141,6 +142,43 @@ export class InMemoryRepoProvider implements RepoProvider {
       if (!this.refs.has(sha)) this.refs.set(sha, new Map(files));
       return sha;
     });
+  }
+
+  /**
+   * Spec 7: the paths that differ between two commits `resolveRef` kept (added, removed or changed), sorted; like
+   * GitHub, at most 300, and 300 means the list may be cut. An unknown commit → permanent (404).
+   */
+  changedFiles(
+    from: string,
+    to: string,
+  ): Promise<{ paths: string[]; complete: boolean }> {
+    return this.call('changedFiles', [from, to], () => {
+      const [before, after] = [from, to].map((sha) => {
+        const files = this.refs.get(sha);
+        if (!files) {
+          throw new ProviderError(
+            `GitHub GET /repos/${this.repo}/compare/${from}...${to} → 404: Not Found`,
+            'permanent',
+            { status: 404 },
+          );
+        }
+        return files;
+      });
+      const paths = [...new Set([...before.keys(), ...after.keys()])]
+        .filter((path) => {
+          const [a, b] = [before.get(path), after.get(path)];
+          return a?.content !== b?.content || a?.executable !== b?.executable;
+        })
+        .sort();
+      return {
+        paths: paths.slice(0, MAX_COMPARE_FILES),
+        complete: paths.length < MAX_COMPARE_FILES,
+      };
+    });
+  }
+
+  compareUrl(from: string, to: string): string {
+    return `https://github.com/${this.repo}/compare/${from}...${to}`;
   }
 
   openPullRequest(

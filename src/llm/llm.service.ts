@@ -10,7 +10,10 @@ import {
   type ToolCall,
 } from '@langchain/core/messages';
 import type { StructuredToolInterface } from '@langchain/core/tools';
+import type { z } from 'zod';
 import { LlmError } from '../contracts/llm-error.js';
+import type { StepName } from '../contracts/step.js';
+import { modelLabel } from '../github/labels.js';
 import {
   CHAT_MODEL_FACTORY,
   type ChatModelFactory,
@@ -53,6 +56,8 @@ type Attempt<T> =
       error: LlmError;
       /** The format problem, told to the model in the re-ask; absent for any other error. */
       mismatch?: string;
+      /** Spec 7: the answer's length, when it was text longer than the call's maximum. */
+      tooLong?: { chars: number; maxChars: number };
       raw?: AIMessage;
       durationMs: number;
     };
@@ -78,8 +83,10 @@ export class LlmService {
     const { context, setup } = input;
     // Spec 11 (SDW13): every request of this call is a row with this id and its turn number.
     const callId = randomUUID();
-    // Spec 11 (SDW7): the two tools when something can be loaded; only then the lists and "Loading:".
-    const tools = this.loader.tools(setup);
+    // Spec 11 (SDW7): the two tools when something can be loaded; only then the lists and "Loading:". Spec 7: all
+    // four when the call reads repo files.
+    const repoFiles = input.repoFiles === true;
+    const tools = this.loader.tools(setup, repoFiles);
     // 1–2. Guard every untrusted block and build the messages; warnings are posted before the model is called.
     const prompt = buildPrompt(
       input.frame,
@@ -87,6 +94,7 @@ export class LlmService {
         skill: setup.skill,
         repo: setup.repo,
         loading: tools.length > 0 ? this.loader.limits : undefined,
+        repoFiles,
       },
       input.turns,
     );
@@ -110,14 +118,29 @@ export class LlmService {
     const sizes: PromptSizes = { ...prompt.sizes };
     /** Messages already stored on an earlier row: a later turn stores only the ones added since (L18, SDW9). */
     let stored = 0;
+    /** Spec 7: the re-asks so far that asked for a shorter answer (plan P2's stop message counts them). */
+    let shortenRequests = 0;
     for (let attempt = 1, turn = 1; ; turn++) {
       const sent = [...messages];
-      const result = await this.ask(
+      const asked = await this.ask(
         setup.model.name,
         input.output,
         sent,
         offered,
       );
+      // Plan P2: the last too-long answer stops the run with a message for people, on its row too.
+      const result =
+        !asked.ok && asked.tooLong && attempt === MAX_ATTEMPTS
+          ? {
+              ...asked,
+              error: tooLongError(
+                setup.model.name,
+                asked.tooLong,
+                shortenRequests,
+                context.step,
+              ),
+            }
+          : asked;
       const raw = result.raw;
       const logId = await this.logs.record({
         task: context.task,
@@ -173,6 +196,7 @@ export class LlmService {
               callId,
               turn,
               setup,
+              repoFiles: repoFiles ? { tag: prompt.tag } : undefined,
             },
             request,
             budget,
@@ -213,6 +237,7 @@ export class LlmService {
       // answer at all there is nothing to repeat, so only the message is added (an empty turn can be refused).
       attempt++;
       offered = undefined;
+      if (result.tooLong) shortenRequests++;
       const answer = raw?.text ?? '';
       const reask =
         `Your answer did not match the required format: ${result.mismatch}. ` +
@@ -329,7 +354,7 @@ export class LlmService {
       raw = await this.factory
         .request(modelName, {
           tools,
-          schema: output === 'text' ? undefined : output,
+          schema: isSchema(output) ? output : undefined,
         })
         .invoke(messages, { timeout: CALL_TIMEOUT_MS });
     } catch (error) {
@@ -357,7 +382,11 @@ export class LlmService {
     const judged = judge(raw.text, output);
     return judged.ok
       ? { ok: true, output: judged.output, raw, durationMs }
-      : { ...mismatch(modelName, judged.problem, durationMs), raw };
+      : {
+          ...mismatch(modelName, judged.problem, durationMs),
+          raw,
+          tooLong: judged.tooLong,
+        };
   }
 
   /** Plan P2: a timeout is `provider-unavailable` here, for every provider; anything else is the factory's. */
@@ -376,15 +405,32 @@ export class LlmService {
   }
 }
 
-/** Step 4: Zod judges a schema answer; a text answer must not be empty. Never quotes the answer. */
+/**
+ * Step 4: Zod judges a schema answer; a text answer must not be empty, nor (spec 7) longer than its maximum. Never
+ * quotes the answer.
+ */
 function judge<T>(
   text: string,
   output: LlmCall<T>['output'],
-): { ok: true; output: T } | { ok: false; problem: string } {
-  if (output === 'text') {
-    return text.trim() === ''
-      ? { ok: false, problem: 'the answer is empty' }
-      : { ok: true, output: text as T };
+):
+  | { ok: true; output: T }
+  | {
+      ok: false;
+      problem: string;
+      tooLong?: { chars: number; maxChars: number };
+    } {
+  if (!isSchema(output)) {
+    if (text.trim() === '')
+      return { ok: false, problem: 'the answer is empty' };
+    const maxChars = output === 'text' ? Infinity : output.text.maxChars;
+    if (text.length > maxChars) {
+      return {
+        ok: false,
+        problem: `your answer has ${count(text.length)} characters; at most ${count(maxChars)} fit: shorten it`,
+        tooLong: { chars: text.length, maxChars },
+      };
+    }
+    return { ok: true, output: text as T };
   }
   let value: unknown;
   try {
@@ -406,11 +452,41 @@ function judge<T>(
   };
 }
 
+function isSchema<T>(output: LlmCall<T>['output']): output is z.ZodType<T> {
+  return output !== 'text' && 'safeParse' in output;
+}
+
+/**
+ * Plan P2: the stop after the last too-long answer speaks to people: how long, the limit, the re-asks that asked
+ * for less, and the step's `model: max-*` label. No final period: the stop comment adds one before the cause.
+ */
+function tooLongError(
+  model: string,
+  { chars, maxChars }: { chars: number; maxChars: number },
+  shortenRequests: number,
+  step: StepName,
+): LlmError {
+  const after =
+    shortenRequests === 0
+      ? ''
+      : `, also after ${shortenRequests} request${shortenRequests === 1 ? '' : 's'} to shorten it`;
+  return new LlmError(
+    `model \`${model}\` answered with ${count(chars)} characters, more than the ${count(maxChars)} a document may ` +
+      `have${after}. Adding \`${modelLabel(step)}\` before \`/retry\` may help`,
+    'permanent',
+    'invalid-answer',
+  );
+}
+
+function count(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
 function mismatch(
   model: string,
   problem: string,
   durationMs: number,
-): Attempt<never> {
+): Extract<Attempt<never>, { ok: false }> {
   return {
     ok: false,
     error: new LlmError(

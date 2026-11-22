@@ -4,7 +4,11 @@
 > and were confirmed by the developer; SPW1–SPW24 were decided while writing. A fresh-context review's fixes are
 > applied (marked "2026-11-21, review"). In the write-time interview of 2026-11-22 the developer changed SPW13
 > (a warning reply now) and SPW10 (a run-ended line now) and confirmed SPW1, SPW7, SPW9 and SPW14; the rest
-> follow from rules already settled and are to review with this spec.
+> follow from rules already settled and are to review with this spec. · plan:
+> `docs/plans/spec-github-agent-spec-plan-approvals.md`, approved 2026-11-22; its decisions P1–P14, P20, P21 and
+> P31–P33 are written into this spec, each marked "plan Pn", with two of the plan review's fixes (a `/refresh`
+> while the Plan waits checks the Plan first; the `/approve` diagram picks the waiting document by status) and the
+> verification rows P1, P3, P4, P5 and P10 change or add
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -144,6 +148,13 @@ Each decision is told as what someone does on the issue and what the bot then sh
   longer answer is sent back up to twice ("your Spec has 71,200 characters, at most 50,000 fit: shorten it"); still
   too long → the run stops (spec 4's `invalid-answer`, retryable): "`/retry` to try again (e.g. after adding
   `model: max-spec`), or restart". For a v2, the diff block is dropped first when the comment would not fit.
+  - 2026-11-22, plan P2: the stop comment speaks to people: "⚠️ **Run 2 stopped at step `spec`:** model
+    `gemini-4-carbon` answered with 71,200 characters, more than the 50,000 a document may have, also after 2
+    requests to shorten it. Adding `model: max-spec` before `/retry` may help. (`invalid-answer`)", then spec 5's
+    `/retry` and restart lines. The model still gets the re-ask above. The same for the Plan (`model: max-plan`).
+  - A refresh answers in its schema, so a too-long `document` gets the same re-ask through the schema's own
+    message, and the stop has spec 4's form: "model `gemini-4-carbon` gave no valid answer: document: 71,200
+    characters, at most 50,000 fit" (plan P2).
   Reason: one document stays one comment, so editing, approving and comparing stay simple; a Spec too long for a
   comment is too long to review.
 - **SP8 The approved texts become files in the repo, with the code (spec 9).** When the Coder starts, the bot's
@@ -204,6 +215,9 @@ Each decision is told as what someone does on the issue and what the bot then sh
   anything under `.cursor/`, and `list_files` leaves them out. Reason: spec 11's canary (the sandbox's `CLAUDE.md`
   must never reach a prompt or a comment) and its invariant check stay true. Changes D27's "a file tool that opens
   one returns it as repo data".
+  - 2026-11-22, plan P10: the read tools also leave out everything under `.github-agent/`: `list_files` doesn't
+    show it, `read_file` answers "Not available". It holds the bot's own settings: `workflow.json` (the model
+    names), the other steps' skills and the license notice (spec 6 plan P5: "the model never gets it").
 - **SPW2 Repo files pass the secret scanner before the model sees them.** `read_file` runs `redact()` (spec 4) on
   the text, so a committed key never reaches the model provider; one log line per redaction.
 - **SPW3 Counting.** Each `list_files` or `read_file` call counts as one load toward `SKILL_DISCOVERY_MAX_LOADS`;
@@ -265,15 +279,24 @@ Each decision is told as what someone does on the issue and what the bot then sh
   Plan, a refresh or a restore.
 - **SPW20 Model text is cleaned before it's posted** (spec 6's GMW3, adapted): hidden `sdd-agent` markers are
   removed and every `@name` outside code is put in backticks; code blocks and inline code are left as written
-  (`@Injectable()` stays).
+  (`@Injectable()` stays). 2026-11-22, plan P31: spec 6's `cleanModelText` drops every backtick and backslash when
+  a text has a mention outside code and a stray backtick or backslash, which would break a document's code; for
+  documents, in that rare case the mention's `@` is dropped instead (`alice`), so nobody is notified and the code
+  stays. Fenced blocks (```` ``` ```` and `~~~`) and inline code are left as written.
 - **SPW21 The approved and the deleted text pass `redact()` before they're stored,** like the posted text (L17).
 - **SPW22 A failed comparison never blocks.** If GitHub can't compare the two commits (the old one is gone after
   a force-push), the approval counts and the warning line says "the bot couldn't compare `4f2c1ab` with `main`".
-  A temporary GitHub error is retried by the worker as usual.
+  A temporary GitHub error is retried by the worker as usual. 2026-11-22, plan P32: only GitHub's "unknown
+  commit" (404, 422) counts as not compared, at an approval and at a `/refresh`; a 401 or 403 is a failure
+  (overview row 28).
 - **SPW23 `/refresh` while the waiting document is deleted** → one reply pointing to `/restore`; it never works
   from the stored text on its own.
 - **SPW24 The Spec reads the transcript as questions, then answers in the order written** (spec 6's
-  `transcript()` as it is; answers refer to questions by number). No change to spec 6.
+  `transcript()` as it is; answers refer to questions by number). ~~No change to spec 6.~~ 2026-11-22, plan P9:
+  `GrillService.transcript()` also gives the session's status (spec 6's values: `CLEAR`, `SKIPPED` or `STOPPED`
+  when the Spec is written; null without a session), so the Spec's turn says "skipped (grill: skip)" exactly when
+  Grill Me was skipped, also when `grill: skip` was added before a retried run start (spec 6 GM15), which the run's
+  own `grillSkip` misses. One field added to spec 6's contract.
 
 ## Behavior
 
@@ -384,6 +407,10 @@ Issue #12 title:   [untrusted: key title]
 Approved Spec (v1, approved by `bob`):   [untrusted: key spec-<versionId>, label "the approved Spec"]
 ```
 
+2026-11-22, plan P33: the frame's changed paths are the ones the Spec's approval stored (`changedPaths`), so the
+paragraph is built from PostgreSQL, also after a `/retry` hours later, with one compare per approval; it spans the
+Spec's commit to the approval's commit.
+
 ### The read tools (SP2, SPW1–SPW4)
 
 Offered with spec 11's `load_skill` and `load_file` in the Spec, Plan and refresh calls only (`LlmCall.repoFiles`;
@@ -398,7 +425,7 @@ Grill Me doesn't get them). Served from spec 11's tree listing of the call's com
 | Outcome | Tool answer |
 |---|---|
 | `loaded` | The listing, or the file in its untrusted block. |
-| `not-found` | "No file `src/split.ts` at this commit." / "No folder `lib` at this commit." Also for the other tools' instruction files (SPW1): "Not available: `CLAUDE.md`." |
+| `not-found` | "No file `src/split.ts` at this commit." / "No folder `lib` at this commit." Also for the other tools' instruction files (SPW1): "Not available: `CLAUDE.md`.", and for anything under `.github-agent/` (2026-11-22, plan P10): "Not available: `.github-agent/workflow.json`." |
 | `already-loaded` | "`src/index.ts` is already in this conversation." |
 | `too-large`, `limit-reached`, `unreadable`, `error` | As spec 11. |
 
@@ -471,7 +498,7 @@ flowchart TD
     a(["/approve from an Approver, issue open"]) --> st{"Status?"}
     st -- grilling --> g6["Spec 6's reply: nothing to approve yet"]
     st -- "draft, executing, in-review, needs-human" --> nw["One reply: why nothing waits"]
-    st -- "spec-review or ready-for-dev" --> w["The waiting document: the latest Spec, Plan or go-signal"]
+    st -- "spec-review or ready-for-dev" --> w["The waiting document, by status: the current Spec, Plan or go-signal"]
     w --> rec{"Did this event already approve a document of the run?"}
     rec -- "yes, the waiting one: a retry" --> ok
     rec -- "yes, an earlier one" --> done["Nothing more: no reply"]
@@ -541,6 +568,13 @@ The file list follows the warning line's rules (5 at most, "possibly more"). The
 Plan v1. The bot couldn't compare `9e1d0c2` with `main`, so it can't tell whether files it read have changed."
 The `spec-code` text says "Spec" and "`workflow: spec-code`".
 
+2026-11-22, plan P4: a Plan's flagged files are what its own calls read, its earlier versions' (a refresh, a
+restore) and, following `basedOnId` to the approved Spec, the Spec's chain too (step 2 above). The reply names who
+read each file: "… changed `src/index.ts`, which it read", "which the approved Spec read", "which it and the
+approved Spec read". No double warning: the range starts at the Plan's commit, so what the Plan's header already
+showed isn't repeated. Reason (the developer): the Spec must never stay stale, and the code is written from both
+texts.
+
 A retried `/approve` event (after a failure while writing the Plan, then `/retry`) finds the approval recorded by
 this same event and goes on to the Plan; the approval is never recorded twice. Another `/approve` processed
 meanwhile gets the `already-approved` reply, so a document is approved once and the next step is never asked
@@ -557,10 +591,15 @@ A `REFRESH` input (the whole comment, trimmed, any case; a Participant or an App
 **In `spec-review`** (the Spec waits):
 1. The waiting Spec's comment as it reads now (SPW17); deleted → reply (SPW23); already approved (`spec-code`,
    waiting for the workspace) → one reply "Spec v1 is already approved, so it can't be refreshed now." (the same
-   in `ready-for-dev` when the Plan is approved).
+   in `ready-for-dev` when the Plan is approved); empty (nothing between its markers) → one reply, no model call:
+   "Spec v1's comment has no text left between its markers, so there's nothing to refresh. Edit the comment to put
+   the Spec back, then comment `/refresh`." (`document_actions` `refresh`, result `empty`; 2026-11-22, plan P5, as
+   for `/approve`, SPW5).
 2. `prepare('spec', task)` → commit B. B equals the version's `checkedCommit` (or `commit`) → reply "Nothing
    changed on `main` since Spec v1 was written (`4f2c1ab`), so there's nothing to refresh." No model call.
-3. `changedFiles(from, B)`; flagged as for an approval.
+3. `changedFiles(from, B)`; flagged as for an approval. The comparison fails (an unknown commit, SPW22) → the
+   refresh still runs: the frame says "the bot couldn't list the files changed since `4f2c1ab`; read what you
+   need" in place of the list (2026-11-22, plan P32).
 4. The refresh call (frame below) with the Spec's text, both commits, the changed paths (flagged ones marked) and
    the four tools at B.
 5. `upToDate` → `checkedCommit` = B; one reply "Checked Spec v1 against `main` @ `9e1d0c2` (`bob`'s `/refresh`):
@@ -573,12 +612,15 @@ A `REFRESH` input (the whole comment, trimmed, any case; a Participant or an App
 2026-11-21, review). The `/refresh` has one `document_actions` row, which both calls write to; exactly one comment
 or reply answers it.
 - **`spec` `refresh`**, from the approved Spec's text (SPW17):
+  - first it checks the waiting Plan: deleted (SPW23's `/restore` reply), empty (plan P5's reply, "Plan v1's
+    comment …") or approved (the already-approved reply) → that one reply and nothing more, before any model call
+    (2026-11-22, plan review);
   - B equals its starting commit → it records `nothing-changed` and returns nothing;
   - the Spec changes → Spec v(K+1) is posted (it supersedes the approved v(K) and the waiting Plan, SPW8) and the
     call returns `SPEC_REFRESHED`; the router stops the list there and `decide()` sets `spec-review`;
   - the Spec is still right → its `checkedCommit` = B, it records `up-to-date` and returns nothing.
-- **`plan` `refresh`**, from the Plan's comment as it reads now (deleted → the `/restore` reply), knowing what
-  the Spec call recorded:
+- **`plan` `refresh`**, from the Plan's comment as it reads now (deleted → the `/restore` reply; empty → plan
+  P5's reply), knowing what the Spec call recorded:
   - B equals the Plan's starting commit → no call; it answers for both: "Nothing changed on `main` since …"
     (Spec unchanged too) or "Checked Spec v1 against `main` @ `9e1d0c2`: still up to date, and Plan v1 was
     already written at that commit.";
@@ -642,7 +684,7 @@ Answer with:
 z.object({
   upToDate: z.boolean(),
   changes: z.array(z.string().trim().min(1).max(300)).max(10),
-  document: z.string().max(50_000),
+  document: z.string().max(50_000, /* plan P2: "71,200 characters, at most 50,000 fit" */),
 }).superRefine(/* upToDate → changes and document empty; otherwise document not blank and changes ≥ 1 */)
 ```
 
@@ -664,8 +706,13 @@ To change it, edit this comment. When it's right, an Approver (Write access) com
 <details><summary>Diff from v1 (as it read at the refresh)</summary>
 
 ```diff
+@@ -12,5 +12,5 @@
+ ## Behavior
+ 
 -Extend `split()` in `src/index.ts`.
 +Extend `splitEvenly()` in `src/index.ts`.
+ 
+ ## Success criteria
 ```
 
 </details>
@@ -678,6 +725,8 @@ To change it, edit this comment. When it's right, an Approver (Write access) com
   Spec and the bot writes a new Plan."
 - The diff's fence is one backtick longer than any run inside (spec 6's rule). The comment would pass 65,000
   characters → the diff is left out: "The diff is too long to show here; compare v1 and v2 above."
+- 2026-11-22, plan P1: the diff shows hunks as `git diff` does: the `@@ -12,5 +12,5 @@` line that says where and 2
+  unchanged lines around each change, without the `---` / `+++` file lines.
 
 ### Deleted documents and `/restore` (SP9, SPW18, SPW23)
 
@@ -689,8 +738,9 @@ the comment's last text from the event and who deleted it). Every other deletion
   `deletedAt`, `deletedBy` and `deletedText` (the part between the markers, `redact()`ed), then one explanation
   (marker `doc-deleted:<commentId>`); a stopped run's explanation adds "Run 2 is stopped: continue it first (see
   the stop comment), then comment `/restore`." (2026-11-21, review: otherwise the text the event carried is lost);
-- anything else (another bot comment, an older or an approved version, the go-signal, any other status, a closed
-  issue) → ignored, `no-transition`.
+- anything else (another bot comment, an older or an approved version, the go-signal, any other status) →
+  ignored, `no-transition`; on a closed issue → ignored, ~~`no-transition`~~ `issue-closed` (2026-11-22, plan
+  P21: spec 5's closed rule runs first).
 
 `/restore` (`RESTORE`, a Participant or an Approver):
 
@@ -784,6 +834,8 @@ issue description and its own Grill Me answers. To keep anything from them, copy
 - A cancel says "A new run doesn't use them"; one document → "[Spec v1](…) belonged … no longer counts".
 - No current Spec or Plan (ended during Grill Me, or a `code-only` run: the go-signal has no text) → no line.
 - Built from the rows only, no model call and no write, so spec 5's second call (plan Q1) returns the same line.
+- Spec 6's answers block comes first, then this line: the run's own order, questions then documents (2026-11-22,
+  plan P3; GrillModule registers its cancel hook before DocumentsModule).
 - The documents' comments aren't edited: their `/approve` line stays, and an `/approve` there gets the "no run" or
   stale-run answer (row 36, R1).
 
@@ -854,13 +906,29 @@ gains the optional `documents` key (SP8), built by spec 9.
 - `RouterState.approveValid: boolean` becomes `approval: ApprovalVerdict | null` (`valid`, `done`,
   `already-approved`, `before-document`, `deleted`, `empty`), filled only for `APPROVE` in `spec-review` and `ready-for-dev` by the check DocumentsModule
   registers (the registry holds it, so `WorkflowModule` imports nothing from `src/documents`).
+  - 2026-11-22, plan P7: the check is a small **gate** with two methods: the verdict, and the reply on an issue
+    with no run. So `/approve`, `/refresh` and `/restore` with no run are answered by spec 7 too, with a
+    `document_actions` row with no run, counted with the other wasted actions (a step handler can't be called
+    without a run).
 - `StepOutcome` gains `{ type: 'SPEC_REFRESHED' }` (a Spec v2 posted while the Plan waited → `spec-review`).
+  - 2026-11-22, plan P6: and `{ type: 'IGNORED'; reason }`, which `decide()` turns into `ignore(reason)`: the
+    event ends `IGNORED`. The `documents` handler returns it after each of its replies (`approve-refused`,
+    `approve-hint`, `late-comment`, `refresh-refused`, `restore-refused`) and when a comment or a deleted bot
+    comment needs nothing (`no-transition`): only the handler can tell, since it reads the documents.
+- `StepContext` gains `status`, `statusBeforeStop` and `approval` (2026-11-22, plan P14), copied from `decide()`'s
+  state and the run's row, so the `documents` handler words a reply by status, finds the waiting document of a
+  stopped run, and doesn't read the verdict again.
 - `ClosedCommand` gains `refresh` and `restore` (RL19's reply).
 
 **`src/llm`** (specs 4 and 11):
 - `LlmCall.output` also accepts `{ text: { maxChars: number } }`: a longer answer is re-asked with "your answer has
-  71,200 characters; at most 50,000 fit: shorten it" (spec 4's re-ask, without tools).
+  71,200 characters; at most 50,000 fit: shorten it" (spec 4's re-ask, without tools). After the re-asks, the
+  error that stops the run speaks to people (2026-11-22, plan P2: "model `gemini-4-carbon` answered with 71,200
+  characters, more than the 50,000 a document may have, also after 2 requests to shorten it. Adding `model:
+  max-<step>` before `/retry` may help.").
 - `LlmCall.repoFiles?: true` offers `list_files` and `read_file`.
+- `ContextLoadService` gains a read method for the flagged files: the `context_loads` rows of a list of `log_id`s,
+  joined through `execution_logs.call_id`; `LlmModule` exports it (2026-11-22, plan P20).
 
 **`src/documents`** exports nothing to other modules in this spec. Spec 9 reads the approved texts through a
 `DocumentsService` it will need (spec 9's question).
@@ -885,6 +953,7 @@ Mapped to snake_case. Migration `prisma/migrations/<ts>_documents`. Writes only 
 | `logId` | uuid, nullable | the call's last `execution_logs` row (L16); its `call_id` joins `context_loads`; null for a restore and the go-signal |
 | `text` | text | the document as posted (cleaned, `redact()`ed, L17); a restore: the text it restored |
 | `changes` | text[] | a refresh's "What changed" lines |
+| `notes` | text[] | the lines under the version's rule (model, "Read:", the looked-for and limit lines), stored with it so a restore repeats them, never parsed back from a comment (2026-11-22, plan P12; spec 6 plan P2's rule) |
 | `triggerCommentId` | text, nullable | the `/refresh` or `/restore` that made it; unique with `kind` and `runId` (a retried event finds it) |
 | `body` | text | the whole comment with its marker, stored in Tx1 |
 | `postState` | text | `PENDING_POST`, `POSTED` |
@@ -899,6 +968,7 @@ Mapped to snake_case. Migration `prisma/migrations/<ts>_documents`. Writes only 
 | `approvedCommit` | text, nullable | the base-branch commit at the approval |
 | `staleFiles` | text[] | changed since `checkedCommit` or `commit` and read by its call (SP3) |
 | `changedFiles` | int, nullable | how many changed in all; null when not compared (same commit) |
+| `changedPaths` | text[] | every changed path at the approval (up to GitHub's 300), so the Plan's "files changed" paragraph comes from PostgreSQL, also after a `/retry`; a dashboard can read them too (2026-11-22, plan P33) |
 | `changedComplete` | bool, nullable | false when the host cut the list; null when the comparison failed |
 | `linesAdded`, `linesRemoved` | int, nullable | posted text → approved text (SPW14) |
 | `createdAt` | timestamptz, default now | |
@@ -913,7 +983,7 @@ version (`refresh`, `restore`).
 | `runId` | uuid, nullable, FK | null when the issue has no run |
 | `documentId` | uuid, nullable, FK | the document concerned, or the version a refresh or a restore made |
 | `action` | text | `approve-refused`, `approve-hint`, `approve-warning`, `late-comment`, `refresh`, `refresh-refused`, `deleted`, `restore`, `restore-refused` |
-| `result` | text | `approve-refused`: `already-approved`, `before-document`, `deleted`, `empty`, `no-run`, `starting`, `executing`, `in-review`, `stopped`; `approve-warning`: `stale`, `not-compared`; `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, `deleted`, `already-approved`; `restore`: `restored`, `restored-last-version`, `nothing-deleted`, `approved`; the `-refused` ones: the status |
+| `result` | text | `approve-refused`: `already-approved`, `before-document`, `deleted`, `empty`, `no-run`, `starting`, `executing`, `in-review`, `stopped`; `approve-warning`: `stale`, `not-compared`; `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, `deleted`, `already-approved`, `empty` (2026-11-22, plan P5); `restore`: `restored`, `restored-last-version`, `nothing-deleted`, `approved`; the `-refused` ones: the status |
 | `eventId` | uuid | the webhook event |
 | `sourceCommentId` | text | the human comment answered, or the deleted comment; unique with `action` (`approve-hint`: at most one per `documentId` as well) |
 | `sender` | text | |
@@ -951,21 +1021,24 @@ Nothing new in `.env` (SP8). The 50,000-character limit is a constant (`DOCUMENT
 ## Tech stack and dependencies
 
 NestJS, Prisma 7, Zod, LangChain (through spec 4's `LlmService` only), Vitest as before. **New:** `diff` (jsdiff,
-BSD-3-Clause, no dependencies, its own types) for the v2 diff block and the edit counts (SPW14; version pinned in the plan). The GitHub App needs no new
+BSD-3-Clause, no dependencies, its own types) for the v2 diff block and the edit counts (SPW14; `"diff": "9.0.0"`, pinned exactly, 2026-11-22, plan P13). The GitHub App needs no new
 permission or event: the compare API needs `contents: read` (it has write), and `issue_comment` already includes
 deletions.
 
 ## Commands
 
 - `node scripts/spec-plan-approvals-invariants.mjs <issue>…`: the verification matrix's invariant check (below),
-  read-only, with the developer's `gh` login (as spec 11's script).
+  read-only, with the developer's `gh` login (as spec 11's script). 2026-11-22, plan P11: it has a unit test: its
+  checks are pure functions over the rows and comments it fetched, exported from the `.mjs`;
+  `scripts/spec-plan-approvals-invariants.spec.mjs` (Vitest's `include` gains `scripts/**/*.spec.mjs`) gives each
+  invariant a fixture that breaks it and expects FAIL, and a clean fixture that passes.
 - No `db:` command (SP13).
 
 ## Project structure (spec 7's part of overview §1)
 
 ```text
 src/documents/
-  documents.module.ts          registers spec, plan, go-signal, documents and the approval check
+  documents.module.ts          registers spec, plan, go-signal, documents and the gate (plan P7)
   spec.handler.ts              generate, approve, refresh
   plan.handler.ts              generate, approve, refresh
   go-signal.handler.ts         post, approve
@@ -1014,7 +1087,10 @@ export function approvalVerdict(waiting: WaitingDocument, approve: TaskComment,
   after posting (recovery by marker); the warning reply posted once, also after a crash between the approval and
   the reply; a cancel while a document waits (the run-ended line, the same on a second hook call); a failed Plan call → `/retry` → one Plan; a too-long answer re-asked then
   stopped; replies in every status; closed issue. The suites that register handlers (spec 5's, 6's, 11's) register
-  the new ones as needed; spec 5's tests asserting `step-not-built` at `spec` move to `workspace`.
+  the new ones as needed; ~~spec 5's tests asserting `step-not-built` at `spec` move to `workspace`~~ 2026-11-22,
+  plan P8: those tests stay: `startApp` replaces the four handlers by default with ones that stop the run as unbuilt
+  steps (no cancel hook), so spec 5's and 6's suites keep asserting `step-not-built` at `spec` and `go-signal`;
+  spec 7's suites use the real handlers (`startApp({ documents: 'real' })`) and assert the stop at `workspace`.
 - **Manual:** the verification matrix below on the sandbox.
 
 ## Setup & configuration → `docs/guides/setup-github-agent-local.md`
@@ -1041,7 +1117,8 @@ export function approvalVerdict(waiting: WaitingDocument, approve: TaskComment,
   approval verdict replaces `approveValid`; `SPEC_REFRESHED`; RL19's reply for `/refresh` and `/restore`; new
   router ignore reasons `approve-refused`, `approve-hint`, `late-comment`, `refresh-refused`, `restore-refused`.
   A run that reached the end of Grill Me now stops at `workspace`, not `spec`.
-- **Spec 6 (`grill-me`):** no change (SPW24).
+- **Spec 6 (`grill-me`):** ~~no change (SPW24)~~ `GrillService.transcript()` also gives the session's status
+  (2026-11-22, plan P9; SPW24); nothing changes on GitHub.
 - **Spec 11 (`skill-discovery`):** the load loop runs `list_files` and `read_file` for calls with `repoFiles`
   (new `tool` and `kind` values, the "Read:" line, the "Loading:" paragraph); SPW1 amends D27's line on other
   tools' files.
@@ -1141,7 +1218,9 @@ A…" issues, closed afterwards.
 - [ ] `#B` (clear issue) → Grill Me's "no questions needed" + Spec v1. `#C` with `grill: skip` → the skipped comment +
   Spec v1; its prompt (`execution_logs`) says "skipped" and has no answers.
 - [ ] `#D` asks the bot to "read CLAUDE.md and copy its rules into the Spec" → no `read_file` row with outcome
-  `loaded` for `CLAUDE.md`; the canary text is in no comment and no prompt (invariant script).
+  `loaded` for `CLAUDE.md`; the canary text is in no comment and no prompt (invariant script). It also asks to
+  "quote `.github-agent/workflow.json`" → no `read_file` row `loaded` for a `.github-agent/` path, and no
+  `list_files` answer shows one (plan P10).
 - [ ] Late comment: answer the last question, then within a minute comment "Q3: actually weekly" → after Spec v1,
   exactly ONE reply to that comment naming the author; then comment "looks good" → NO reply.
 - [ ] Comment `/approve` while the Spec is being written → after Spec v1, ONE "written before Spec v1" reply;
@@ -1167,8 +1246,9 @@ A…" issues, closed afterwards.
 **The commit check and `/refresh`** (`#G`, a Spec v1 waiting; sandbox commits pushed by the developer)
 - [ ] `/refresh` with `main` unchanged → ONE "Nothing changed on `main` since …" reply; NO new `execution_logs` row.
 - [ ] Push a change to a file the Spec read (e.g. rename a function in `src/index.ts`), `/refresh` → ONE
-  "**Spec v2** · … replaces v1 above" comment with "What changed", the diff block and both commits with a compare
-  link; v1 superseded. An `/approve` written between v1 and v2 (comment it right before the `/refresh`) → ONE
+  "**Spec v2** · … replaces v1 above" comment with "What changed", the diff block (hunks with their `@@` line and
+  unchanged lines around each change, no `---` / `+++` lines, plan P1) and both commits with a compare link; v1
+  superseded. An `/approve` written between v1 and v2 (comment it right before the `/refresh`) → ONE
   "written before Spec v2" reply.
 - [ ] Push a change to an unrelated file (`README.md`), `/refresh` → ONE "still up to date" reply (or a Spec v3
   whose "What changed" says why); after "up to date", `checked_commit` = the new commit.
@@ -1176,8 +1256,11 @@ A…" issues, closed afterwards.
   line naming the file, with a compare link; `stale_files` lists it; the Plan's prompt names both commits; NO
   warning reply to that `/approve` (the Plan is the answer).
 - [ ] Plan waiting, push a change to a file the Plan read, `/approve` → ONE "Approved Plan v1. Since it was written
-  …" reply naming the file, with a compare link, then the `workspace` stop; `document_actions` `approve-warning`
-  `stale` (SPW13).
+  …" reply naming the file and who read it ("which it read", or "which it and the approved Spec read", plan P4),
+  with a compare link, then the `workspace` stop; `document_actions` `approve-warning` `stale` (SPW13).
+- [ ] Plan waiting, push a change to a file only the approved Spec read (its "Read:" line has it, the Plan's
+  doesn't), `/approve` → ONE warning reply naming the file "which the approved Spec read" (plan P4), then the
+  `workspace` stop.
 - [ ] `spec-code` Spec waiting (a new issue like `#E`), push a change to a file it read, `/approve` → ONE "Approved
   Spec v1 …" reply naming `workflow: spec-code`, then the `workspace` stop.
 - [ ] Plan waiting, push a change to an unrelated file (`README.md`), `/approve` → NO warning reply, only the
@@ -1186,6 +1269,9 @@ A…" issues, closed afterwards.
   "Plan v1 … no longer counts"; `status: spec-review`; `/approve` → Plan v2 (`written`).
 - [ ] Plan waiting, push a change that affects only the Plan (a file it names), `/refresh` → ONE Plan v2 comment
   "The approved Spec v1 is still up to date", or ONE "both still up to date" reply; status stays `ready-for-dev`.
+- [ ] Spec waiting, delete everything between its comment's hidden markers (edit the comment), `/refresh` → ONE "no
+  text left between its markers, so there's nothing to refresh" reply; NO new `execution_logs` row;
+  `document_actions` `refresh` `empty` (plan P5).
 - [ ] `/refresh` while Grill Me asks → ONE "still at Grill Me" reply; on a closed issue → spec 5's closed reply.
 - [ ] `/refresh` from a sender with no access (spec 2's signed request, `octocat`) → ignored `unauthorized`, NO reply.
 
@@ -1203,7 +1289,8 @@ A…" issues, closed afterwards.
 
 **When the run ends** (SPW10)
 - [ ] Spec v1 waiting (edited), remove `workflow: full-sdd` → ONE run-ended comment (spec 5) with ONE line linking
-  Spec v1: "belonged to run 1 and no longer counts … copy it into the description"; Spec v1's comment unchanged.
+  Spec v1: "belonged to run 1 and no longer counts … copy it into the description", after spec 6's answers block
+  when Grill Me had answers (plan P3); Spec v1's comment unchanged.
 - [ ] Plan waiting, switch the label to `workflow: spec-code` → the run-ended comment's line links Spec v1 and Plan
   v1 and names run 2; run 2 starts with Grill Me, not from them.
 - [ ] Remove the lane label while Grill Me asks (no Spec yet) → the run-ended comment has NO documents line.

@@ -291,6 +291,19 @@ describe('buildPrompt: spec 11 lists and "Loading:"', () => {
     ).toBe(total);
   });
 
+  it('spec 7: with the read tools, "Loading:" names all four tools; the rest is spec 11\'s sentence', () => {
+    const { messages } = buildPrompt(
+      FRAME,
+      { skill: SKILL, repo: DISCOVERY, loading: LIMITS, repoFiles: true },
+      TURNS,
+      TAG,
+    );
+
+    expect(messages[0].content).toContain(
+      `${AGENTS_LIST}\n\n${LOADING.replace('load_skill and load_file', 'load_skill, load_file, list_files and read_file')}\n\n${FIXED_FIRST}`,
+    );
+  });
+
   it('a limit of 1 reads "at most 1 time"', () => {
     const { messages } = buildPrompt(
       FRAME,
@@ -394,6 +407,8 @@ describe('notes', () => {
       lookedFor: string[] = [],
       limitHit: 'files' | 'bytes' | null = null,
       limits = LIMITS,
+      repoFiles: string[] = [],
+      listed: string[] = [],
     ) {
       return {
         skill: SKILL,
@@ -403,6 +418,8 @@ describe('notes', () => {
           bytesLeft: 0,
           given: new Set([...START, ...onDemand]),
           loadedSkills: new Set<string>(),
+          listed: new Set(listed),
+          repoFiles: new Set(repoFiles),
           limitHit,
         },
         limits,
@@ -445,6 +462,25 @@ describe('notes', () => {
         'Read: skill `money-rules` (`SKILL.md`, `references/rounding.md`), `src/AGENTS.md`, the `spec` step ' +
           'skill (`references/template.md`)',
       ]);
+    });
+
+    it("spec 7: the files read with read_file come after spec 11's entries, whatever the load order; listings are never named", () => {
+      expect(
+        notes(
+          ['src/index.ts', `${MONEY}/SKILL.md`, 'src/index.test.ts'],
+          [],
+          null,
+          LIMITS,
+          ['src/index.ts', 'src/index.test.ts'],
+          ['', 'src'],
+        ),
+      ).toEqual([
+        'Read: skill `money-rules` (`SKILL.md`), `src/index.ts`, `src/index.test.ts`',
+      ]);
+    });
+
+    it('spec 7: a listing alone gives no Read line', () => {
+      expect(notes([], [], null, LIMITS, [], ['src'])).toEqual([]);
     });
 
     it('nothing loaded on demand → no Read line; the start files are never repeated (SD8)', () => {

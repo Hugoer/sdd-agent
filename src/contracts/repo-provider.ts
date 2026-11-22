@@ -33,6 +33,15 @@ export interface RepoProvider {
   /** the commit SHA a branch or ref points to now, so a skill is read at one commit; unknown ref →
    *  permanent ProviderError (added 2026-11-12, spec 4) */
   resolveRef(ref: string): Promise<string>;
+  /** the paths changed between two commits (both sides of a rename); complete = false when the host cut the
+   *  list; unknown commit → permanent ProviderError (added 2026-11-21, spec 7, D29) */
+  changedFiles(
+    from: string,
+    to: string,
+  ): Promise<{ paths: string[]; complete: boolean }>;
+  /** a page people can open to see the change between two commits (GitHub: /compare/<from>...<to>;
+   *  added 2026-11-21, spec 7) */
+  compareUrl(from: string, to: string): string;
   openPullRequest(
     branch: string,
     base: string,

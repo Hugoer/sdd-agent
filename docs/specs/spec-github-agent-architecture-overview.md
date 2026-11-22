@@ -16,7 +16,8 @@
 > verification rows marked 11), approved with that spec on 2026-11-20 · amended 2026-11-22 with spec 7's draft
 > (interview 2026-11-21: SP1–SP13; review fixes 2026-11-21; write-time interview 2026-11-22: SPW1, SPW10, SPW13:
 > D28–D31, D27 annotated; §1 row 7; §3 inputs, step outcomes, R2, rows 5, 18–20, 27, 32–36 and the diagram; §4;
-> §6; edge case 7; the verification rows marked 7), approved with that spec on 2026-11-22
+> §6; edge case 7; the verification rows marked 7), approved with that spec on 2026-11-22 · amended 2026-11-22
+> with spec 7's plan (P6: §3 step outcomes; P10: D28)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -188,8 +189,9 @@ comments, without acting under the developer's identity or touching their checko
   (`RepoProvider`; never the workspace, so Spec and Plan never wait for its lease). The file text is untrusted
   data, passes the secret scanner and counts toward spec 11's two limits per call; no code search. They never open
   another tool's instruction file (`CLAUDE.md` in any folder, `GEMINI.md`, `.github/copilot-instructions.md`,
-  `.cursorrules`, `.windsurfrules`, `.cursor/`): `not-found`, and left out of listings. Reason: a Spec must know
-  what exists to say what changes; a Plan must name real files.
+  `.cursorrules`, `.windsurfrules`, `.cursor/`): `not-found`, and left out of listings. 2026-11-22 (spec 7 plan
+  P10): nor anything under `.github-agent/`, the bot's own settings (`workflow.json`, the step skills, the license
+  notice). Reason: a Spec must know what exists to say what changes; a Plan must name real files.
 - **D29 Each document records the commit it read; `/approve` compares it with the base branch, `/refresh`
   updates it (2026-11-21, spec 7 SP3–SP5; 2026-11-22, SPW13).** At `/approve` the bot asks the host which files
   changed since that commit; those the document's model read are flagged, stored with the approval and shown with
@@ -338,7 +340,7 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 | `REFRESH`, `RESTORE` | `issue_comment.created` whose whole text is `/refresh` or `/restore` (D29, D30, 2026-11-21, spec 7) |
 | `BOT_COMMENT_DELETED` | `issue_comment.deleted` of a comment the bot wrote on the issue; the sender is who deleted it (D30, 2026-11-21, spec 7) |
 | `PR_UPDATED` | `pull_request.opened` / `synchronize` on a bot PR |
-| Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` (an evaluation that only waits returns nothing, 2026-11-17, spec 6) · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` · 2026-11-21 (spec 7): `SPEC_REFRESHED` (a Spec v2 posted while the Plan waited) |
+| Step outcomes | Grill `ASKED`, `CLEAR`, `LIMIT` (an evaluation that only waits returns nothing, 2026-11-17, spec 6) · workspace `WS_BUSY`, `WS_DIRTY`, `WS_CLAIMED` · Coder `GREEN`, `RED` · `INTERRUPTED` · `FAILED(cause)` · 2026-11-21 (spec 7): `SPEC_REFRESHED` (a Spec v2 posted while the Plan waited) · 2026-11-22 (spec 7 plan P6): `IGNORED(reason)` (a step that only replied, or found nothing to do: the event ends `IGNORED` with that reason; the `documents` handler's replies and `no-transition`) |
 
 The first ~~seven~~ nine rows (2026-11-21, spec 7) are the `WorkflowInput` type of §4, produced by intake (spec 2).
 `RETRY` needs a Participant (2026-11-16); so do `REFRESH`, `RESTORE` and `BOT_COMMENT_DELETED` (2026-11-21, spec 7).

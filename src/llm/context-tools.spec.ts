@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import type { StepSetup } from '../contracts/step.js';
+import type { RepoFile } from '../contracts/repo-provider.js';
 import {
   CONTEXT_TOOLS,
   NONE_GIVEN,
+  REPO_FILE_TOOLS,
   canLoad,
   checkRequest,
+  isHiddenPath,
   loadedAnswer,
   markLoaded,
   newBudget,
@@ -131,6 +134,8 @@ describe('canLoad (SDW7) and newBudget', () => {
       bytesLeft: 204_800,
       given: new Set(['.github-agent/skills/grill/SKILL.md', 'AGENTS.md']),
       loadedSkills: new Set(),
+      listed: new Set(),
+      repoFiles: new Set(),
       limitHit: null,
     });
     expect(
@@ -421,5 +426,301 @@ describe('the request, its reason, the answers', () => {
     expect(loadedAnswer(checked.file, 'm')).toBe(
       `<skill name="money-rules" path="${MONEY_DIR}">\n<file path="${MONEY_MD}">\nm\n</file>\n</skill>`,
     );
+  });
+});
+
+describe('spec 7: the read tools (SP2, SPW1, SPW3, plan P10, P19)', () => {
+  const entry = (path: string, size = 100): RepoFile => ({
+    path,
+    size,
+    executable: false,
+  });
+  const LISTING: RepoFile[] = [
+    entry('AGENTS.md', 13),
+    entry('CLAUDE.md'),
+    entry('README.md', 2048),
+    entry('.github-agent/workflow.json'),
+    entry('.github-agent/skills/grill/SKILL.md'),
+    entry('.github/copilot-instructions.md'),
+    entry('.github/workflows/ci.yml', 300),
+    entry('.cursor/rules/a.mdc'),
+    entry('.cursorrules'),
+    entry('.windsurfrules'),
+    entry('GEMINI.md'),
+    entry(MONEY_MD, 1335),
+    entry('docs/CLAUDE.md'),
+    entry('src/AGENTS.md', 1210),
+    entry('src/index.ts', 1234),
+    entry('src/index.test.ts', 2345),
+    entry('src/big.ts', 300_000),
+    entry('src/lib/split.ts', 512),
+  ];
+  const read = (path: string): LoadRequest => ({
+    tool: 'read_file',
+    path,
+    reason: 'the Spec changes it',
+  });
+  const list = (folder: string): LoadRequest => ({
+    tool: 'list_files',
+    folder,
+    reason: 'to see what exists',
+  });
+  const checkRepo = (
+    request: LoadRequest,
+    budget = newBudget(SETUP, LIMITS),
+    listing: RepoFile[] = LISTING,
+    limits = LIMITS,
+  ) => checkRequest(request, SETUP, budget, limits, SKILL_MD_BYTES, listing);
+
+  it('declares list_files (folder 0–1,024, reason 1–300) and read_file (path 1–1,024, reason 1–300), never run through LangChain', async () => {
+    const [listFiles, readFile] = REPO_FILE_TOOLS;
+    const accepts = (schema: unknown, value: unknown) =>
+      (schema as z.ZodType).safeParse(value).success;
+
+    expect(REPO_FILE_TOOLS.map((tool) => tool.name)).toEqual([
+      'list_files',
+      'read_file',
+    ]);
+    expect(accepts(listFiles.schema, { folder: '', reason: 'r' })).toBe(true);
+    expect(
+      accepts(listFiles.schema, { folder: 'f'.repeat(1025), reason: 'r' }),
+    ).toBe(false);
+    expect(accepts(readFile.schema, { path: '', reason: 'r' })).toBe(false);
+    expect(
+      accepts(readFile.schema, { path: 'p'.repeat(1024), reason: 'r' }),
+    ).toBe(true);
+    expect(
+      accepts(readFile.schema, { path: 'p', reason: 'r'.repeat(301) }),
+    ).toBe(false);
+    await expect(
+      readFile.invoke({ path: 'src/index.ts', reason: 'r' }),
+    ).rejects.toThrow('ContextLoaderService.load()');
+  });
+
+  it('requestOf reads the folder of a list_files call', () => {
+    expect(
+      requestOf({ name: 'list_files', args: { folder: 'src', reason: 'r' } }),
+    ).toMatchObject({ tool: 'list_files', folder: 'src', reason: 'r' });
+  });
+
+  it('read_file of a listed file → read, a repo file with its size from the listing', () => {
+    const budget = newBudget(SETUP, LIMITS);
+
+    expect(checkRepo(read('src/index.ts'), budget)).toEqual({
+      outcome: 'read',
+      file: { kind: 'repo-file', path: 'src/index.ts', bytes: 1234 },
+    });
+    expect(budget.loadsLeft).toBe(9);
+  });
+
+  it('read_file serves any listed file as repo data: a folder AGENTS.md, a repo skill file (P19)', () => {
+    expect(checkRepo(read('src/AGENTS.md'))).toMatchObject({
+      outcome: 'read',
+      file: { kind: 'repo-file', path: 'src/AGENTS.md' },
+    });
+    expect(checkRepo(read(MONEY_MD))).toMatchObject({
+      outcome: 'read',
+      file: { kind: 'repo-file', path: MONEY_MD, bytes: 1335 },
+    });
+  });
+
+  it('a path or folder not in the listing → not-found, counted; a leading ./ or / is dropped, the case must match', () => {
+    const budget = newBudget(SETUP, LIMITS);
+
+    expect(checkRepo(read('src/split.ts'), budget)).toEqual({
+      outcome: 'not-found',
+      answer: 'No file `src/split.ts` at this commit.',
+    });
+    expect(checkRepo(list('lib'), budget)).toEqual({
+      outcome: 'not-found',
+      answer: 'No folder `lib` at this commit.',
+    });
+    expect(checkRepo(read('src/Index.ts'), budget).outcome).toBe('not-found');
+    expect(checkRepo(read('src'), budget).outcome).toBe('not-found');
+    expect(checkRepo(read('./src/index.ts'), budget).outcome).toBe('read');
+    expect(checkRepo(read('/src/index.ts'), budget).outcome).toBe('read');
+    expect(budget.loadsLeft).toBe(4);
+  });
+
+  it.each([
+    'CLAUDE.md',
+    'docs/CLAUDE.md',
+    'GEMINI.md',
+    '.github/copilot-instructions.md',
+    '.cursorrules',
+    '.windsurfrules',
+    '.cursor/rules/a.mdc',
+    '.github-agent/workflow.json',
+    '.github-agent/skills/grill/SKILL.md',
+  ])('%s → not-found "Not available" (SPW1, P10)', (path) => {
+    expect(checkRepo(read(path))).toEqual({
+      outcome: 'not-found',
+      answer: `Not available: \`${path}\`.`,
+    });
+  });
+
+  it('a hidden folder can not be listed', () => {
+    expect(checkRepo(list('.github-agent'))).toEqual({
+      outcome: 'not-found',
+      answer: 'Not available: `.github-agent`.',
+    });
+    expect(checkRepo(list('.cursor/rules')).outcome).toBe('not-found');
+    expect(checkRepo(list('.github')).outcome).toBe('listed');
+  });
+
+  it('isHiddenPath: any letter case; .github-agent only at the root; other names are files like any other', () => {
+    expect(isHiddenPath('src/claude.md')).toBe(true);
+    expect(isHiddenPath('.GITHUB-AGENT/workflow.json')).toBe(true);
+    expect(isHiddenPath('vendor/.cursor/x')).toBe(true);
+    expect(isHiddenPath('vendor/.github-agent/workflow.json')).toBe(false);
+    expect(isHiddenPath('.github/workflows/ci.yml')).toBe(false);
+    expect(isHiddenPath('docs/CLAUDE.md.bak')).toBe(false);
+  });
+
+  it('list_files: every file under the folder at any depth, sorted, with sizes; the hidden ones left out', () => {
+    const budget = newBudget(SETUP, LIMITS);
+
+    const checked = checkRepo(list('src/'), budget);
+
+    const answer =
+      '<listing folder="src">\n' +
+      'src/AGENTS.md (1,210 bytes)\n' +
+      'src/big.ts (300,000 bytes)\n' +
+      'src/index.test.ts (2,345 bytes)\n' +
+      'src/index.ts (1,234 bytes)\n' +
+      'src/lib/split.ts (512 bytes)\n' +
+      '</listing>';
+    expect(checked).toEqual({
+      outcome: 'listed',
+      answer,
+      file: { kind: 'listing', path: 'src', bytes: Buffer.byteLength(answer) },
+    });
+  });
+
+  it('an empty folder name (or . or /) lists the root, without the hidden files', () => {
+    for (const folder of ['', '.', '/', './']) {
+      const checked = checkRepo(list(folder));
+      expect(checked).toMatchObject({
+        outcome: 'listed',
+        file: { kind: 'listing', path: '' },
+      });
+      const answer = checked.outcome === 'listed' ? checked.answer : '';
+      expect(answer.split('\n')).toEqual([
+        '<listing folder="">',
+        `${MONEY_MD} (1,335 bytes)`,
+        '.github/workflows/ci.yml (300 bytes)',
+        'AGENTS.md (13 bytes)',
+        'README.md (2,048 bytes)',
+        'src/AGENTS.md (1,210 bytes)',
+        'src/big.ts (300,000 bytes)',
+        'src/index.test.ts (2,345 bytes)',
+        'src/index.ts (1,234 bytes)',
+        'src/lib/split.ts (512 bytes)',
+        '</listing>',
+      ]);
+    }
+  });
+
+  it('a listing of 812 files → 500 lines and "… and 312 more; list a sub-folder"', () => {
+    const many = Array.from({ length: 812 }, (_, i) =>
+      entry(`gen/f${String(i).padStart(3, '0')}.ts`, 10),
+    );
+
+    const checked = checkRepo(list('gen'), newBudget(SETUP, LIMITS), many);
+
+    const lines =
+      checked.outcome === 'listed' ? checked.answer.split('\n') : [];
+    expect(lines).toHaveLength(503);
+    expect(lines[500]).toBe('gen/f499.ts (10 bytes)');
+    expect(lines[501]).toBe('… and 312 more; list a sub-folder');
+  });
+
+  it('already given → already-loaded: a start file, a file loaded with load_file (P19), a folder listed twice', () => {
+    const budget = newBudget(SETUP, LIMITS);
+
+    expect(checkRepo(read('AGENTS.md'), budget)).toMatchObject({
+      outcome: 'already-loaded',
+      answer: '`AGENTS.md` is already in this conversation.',
+    });
+    const loaded = checkRepo(file('src/AGENTS.md'), budget);
+    expect(loaded.outcome).toBe('read');
+    if (loaded.outcome === 'read') markLoaded(budget, loaded.file);
+    expect(checkRepo(read('src/AGENTS.md'), budget)).toMatchObject({
+      outcome: 'already-loaded',
+      answer: '`src/AGENTS.md` is already in this conversation.',
+    });
+    const listed = checkRepo(list('src'), budget);
+    if (listed.outcome === 'listed') markLoaded(budget, listed.file);
+    expect(checkRepo(list('src'), budget)).toMatchObject({
+      outcome: 'already-loaded',
+      answer: '`src` is already listed in this conversation.',
+    });
+    const root = checkRepo(list(''), budget);
+    if (root.outcome === 'listed') markLoaded(budget, root.file);
+    expect(checkRepo(list('./'), budget)).toMatchObject({
+      outcome: 'already-loaded',
+      answer: 'The whole repository is already listed in this conversation.',
+    });
+  });
+
+  it('a file read with read_file is given: load_file of it is already-loaded, and it is kept apart for "Read:"', () => {
+    const budget = newBudget(SETUP, LIMITS);
+    const checked = checkRepo(read('src/AGENTS.md'), budget);
+    if (checked.outcome === 'read') markLoaded(budget, checked.file);
+
+    expect(budget.repoFiles).toEqual(new Set(['src/AGENTS.md']));
+    expect(budget.given.has('src/AGENTS.md')).toBe(true);
+    expect(checkRepo(file('src/AGENTS.md'), budget).outcome).toBe(
+      'already-loaded',
+    );
+  });
+
+  it("a listing counts its answer's bytes (SPW3); a folder is listed, never given", () => {
+    const budget = newBudget(SETUP, LIMITS);
+    const checked = checkRepo(list('src'), budget);
+    if (checked.outcome !== 'listed') throw new Error('expected a listing');
+
+    markLoaded(budget, checked.file);
+
+    expect(budget.bytesLeft).toBe(204_800 - Buffer.byteLength(checked.answer));
+    expect(budget.listed).toEqual(new Set(['src']));
+    expect(budget.given.has('src')).toBe(false);
+  });
+
+  it('too large → too-large; more than the bytes left → limit-reached; loads left → limit-reached', () => {
+    expect(checkRepo(read('src/big.ts'))).toEqual({
+      outcome: 'too-large',
+      answer:
+        '`src/big.ts` has 300,000 bytes, more than the 204,800 a whole answer may load; carry on without it.',
+      file: { kind: 'repo-file', path: 'src/big.ts', bytes: 300_000 },
+    });
+    const small = { maxLoads: 10, maxBytes: 1300 };
+    const budget = newBudget(SETUP, small);
+    budget.bytesLeft = 1000;
+    expect(
+      checkRepo(read('src/index.ts'), budget, LISTING, small),
+    ).toMatchObject({ outcome: 'limit-reached' });
+    expect(budget.limitHit).toBe('bytes');
+    const spent = newBudget(SETUP, LIMITS);
+    spent.loadsLeft = 0;
+    expect(checkRepo(list('src'), spent)).toMatchObject({
+      outcome: 'limit-reached',
+    });
+  });
+
+  it('an unknown tool names all four when the read tools are offered', () => {
+    expect(checkRepo({ tool: 'grep', reason: 'r' })).toEqual({
+      outcome: 'not-found',
+      answer:
+        'No tool named `grep`: use load_skill, load_file, list_files or read_file.',
+    });
+  });
+
+  it("spec 11's tools keep their rules when the read tools are offered", () => {
+    expect(checkRepo(file('CLAUDE.md')).outcome).toBe('not-found');
+    expect(checkRepo(skill('money-rules'))).toMatchObject({
+      outcome: 'read',
+      file: { kind: 'repo-skill', path: MONEY_MD },
+    });
   });
 });

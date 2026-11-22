@@ -60,6 +60,8 @@ export interface PromptContext {
   repo: RepoContext;
   /** Spec 11 (SDW7): the call's limits when it offers the two tools; the lists and "Loading:" appear only then. */
   loading?: LoadLimits;
+  /** Spec 7: the call also offers `list_files` and `read_file`; "Loading:" names all four tools. */
+  repoFiles?: boolean;
 }
 
 /**
@@ -69,7 +71,7 @@ export interface PromptContext {
  */
 export function buildPrompt(
   frame: string,
-  { skill, repo, loading }: PromptContext,
+  { skill, repo, loading, repoFiles = false }: PromptContext,
   turns: Turn[],
   tag: string = newDataTag(),
 ): BuiltPrompt {
@@ -85,7 +87,7 @@ export function buildPrompt(
     skillBlock,
     agentsBlock,
     ...lists,
-    loading ? loadingParagraph(loading) : '',
+    loading ? loadingParagraph(loading, repoFiles) : '',
     fixed,
   ]
     .filter((part) => part !== '')
@@ -157,7 +159,8 @@ export interface LoadNotes {
 
 /**
  * The lines a step adds to what it posts: the model line always (L5), one line per cut text; spec 11: "Read:"
- * (left out when nothing was loaded on demand), the skills the model looked for, the limit it reached.
+ * (left out when nothing was loaded on demand; spec 7: the files read with `read_file` last, by path, listings never
+ * named), the skills the model looked for, the limit it reached.
  */
 export function notesFor(
   model: ResolvedModel,
@@ -201,7 +204,7 @@ function loadLines({
     return added;
   };
   for (const path of budget.given) {
-    if (start.has(path)) continue;
+    if (start.has(path) || budget.repoFiles.has(path)) continue;
     const repoSkill = repo.skills.find((candidate) =>
       path.startsWith(`${candidate.path}/`),
     );
@@ -215,6 +218,8 @@ function loadLines({
       );
     else groups.push({ label: code(path), files: [] });
   }
+  for (const path of budget.repoFiles)
+    groups.push({ label: code(path), files: [] });
   if (groups.length > 0)
     lines.push(
       `Read: ${groups
@@ -311,10 +316,16 @@ function listSections(repo: RepoContext): string[] {
   return [skills, agents].filter((part) => part !== '');
 }
 
-/** Spec 11 (SD6, SDW4; plan P18: "1 time" in the singular). */
-function loadingParagraph({ maxLoads, maxBytes }: LoadLimits): string {
+/** Spec 11 (SD6, SDW4; plan P18: "1 time" in the singular); spec 7: the four tools when the read tools are offered. */
+function loadingParagraph(
+  { maxLoads, maxBytes }: LoadLimits,
+  repoFiles: boolean,
+): string {
+  const tools = repoFiles
+    ? 'load_skill, load_file, list_files and read_file'
+    : 'load_skill and load_file';
   return (
-    `Loading: before you answer, you may call load_skill and load_file, at most ${maxLoads} ` +
+    `Loading: before you answer, you may call ${tools}, at most ${maxLoads} ` +
     `${maxLoads === 1 ? 'time' : 'times'} and ${maxBytes.toLocaleString('en-US')} bytes in all for this answer. ` +
     'Every call counts, even one that finds nothing. Give a one-line reason with each call, load only what this ' +
     'issue needs, and use paths exactly as listed. The bot runs nothing: a script in a skill is text you can ' +

@@ -312,6 +312,100 @@ describe('GitHubRepoProvider.resolveRef', () => {
   });
 });
 
+describe('GitHubRepoProvider.changedFiles and compareUrl (spec 7 SP3)', () => {
+  const FROM = 'ab12'.repeat(10);
+  const TO = 'cd34'.repeat(10);
+  const COMPARE = `/repos/${TEST_REPO}/compare/${FROM}...${TO}`;
+  const file = (filename: string, extra: object = {}) => ({
+    filename,
+    status: 'modified',
+    ...extra,
+  });
+
+  it('asks the compare API once and gives every path, both sides of a rename, sorted', async () => {
+    const fake = new FakeGitHubFetch().on('GET', COMPARE, {
+      body: {
+        files: [
+          file('src/split.ts'),
+          file('src/money.ts', {
+            status: 'renamed',
+            previous_filename: 'src/index.ts',
+          }),
+          file('README.md', { status: 'added' }),
+        ],
+      },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.changedFiles(FROM, TO)).resolves.toEqual({
+      paths: ['README.md', 'src/index.ts', 'src/money.ts', 'src/split.ts'],
+      complete: true,
+    });
+    expect(fake.to(/\/compare\//).map((r) => r.method)).toEqual(['GET']);
+  });
+
+  it('the same commit twice → no paths, complete', async () => {
+    const fake = new FakeGitHubFetch().on('GET', /\/compare\//, {
+      body: { files: [] },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.changedFiles(FROM, FROM)).resolves.toEqual({
+      paths: [],
+      complete: true,
+    });
+  });
+
+  it('300 files → complete: false (GitHub lists at most 300)', async () => {
+    const files = Array.from({ length: 300 }, (_, i) =>
+      file(`f/${String(i).padStart(3, '0')}.ts`),
+    );
+    const fake = new FakeGitHubFetch().on('GET', COMPARE, { body: { files } });
+    const repo = await providerWith(fake);
+
+    const changed = await repo.changedFiles(FROM, TO);
+
+    expect(changed.complete).toBe(false);
+    expect(changed.paths).toHaveLength(300);
+  });
+
+  it('an unknown commit (404) → permanent, with GitHub’s status', async () => {
+    const fake = new FakeGitHubFetch().on('GET', COMPARE, {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.changedFiles(FROM, TO)).rejects.toMatchObject({
+      kind: 'permanent',
+      detail: { status: 404 },
+    });
+  });
+
+  it('a 503 stays transient', async () => {
+    const fake = new FakeGitHubFetch().on('GET', COMPARE, {
+      status: 503,
+      body: { message: 'Unavailable' },
+    });
+    const repo = await providerWith(fake);
+
+    await expect(repo.changedFiles(FROM, TO)).rejects.toMatchObject({
+      kind: 'transient',
+    });
+  });
+
+  it('compareUrl is the page people open, with no request', async () => {
+    const fake = new FakeGitHubFetch();
+    const repo = await providerWith(fake);
+    const before = fake.to(/\/repos\//).length;
+
+    expect(repo.compareUrl(FROM, TO)).toBe(
+      `https://github.com/${TEST_REPO}/compare/${FROM}...${TO}`,
+    );
+    expect(fake.to(/\/repos\//)).toHaveLength(before);
+  });
+});
+
 describe('GitHubRepoProvider.getPushCredentials', () => {
   const TOKENS = `/app/installations/${TEST_INSTALLATION_ID}/access_tokens`;
   const EXPIRES = '2026-11-11T13:00:00Z';

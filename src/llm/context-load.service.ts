@@ -22,12 +22,14 @@ export interface ContextLoadEntry {
   /** The request whose answer asked for it; 0 = given at start. */
   turn: number;
   trigger: 'start' | 'tool';
-  tool?: 'load_skill' | 'load_file';
+  /** Spec 7: also the read tools. */
+  tool?: 'load_skill' | 'load_file' | 'list_files' | 'read_file';
   /** The name or path as the model wrote it. */
   requested?: string;
   /** The model's reason; the loader passes `(none given)` when it gave none. */
   reason?: string;
-  kind?: 'step-skill' | 'repo-skill' | 'agents';
+  /** Spec 7: `repo-file` (`read_file`) and `listing` (`list_files`, `path` the folder). */
+  kind?: 'step-skill' | 'repo-skill' | 'agents' | 'repo-file' | 'listing';
   /** The step name (`step-skill`) or the repo skill's name. */
   skill?: string;
   path?: string;

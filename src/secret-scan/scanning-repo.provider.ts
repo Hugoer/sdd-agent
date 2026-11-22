@@ -82,6 +82,17 @@ export class ScanningRepoProvider implements RepoProvider {
     return this.inner.resolveRef(ref);
   }
 
+  changedFiles(
+    from: string,
+    to: string,
+  ): Promise<{ paths: string[]; complete: boolean }> {
+    return this.inner.changedFiles(from, to);
+  }
+
+  compareUrl(from: string, to: string): string {
+    return this.inner.compareUrl(from, to);
+  }
+
   findPullRequest(branch: string): Promise<PullRequestRef | null> {
     return this.inner.findPullRequest(branch);
   }

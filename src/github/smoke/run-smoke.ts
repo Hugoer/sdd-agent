@@ -286,6 +286,19 @@ function repoChecks(
         return `${base}:${missingDir} → null`;
       },
     ],
+    [
+      // Spec 7 plan P22: the compare call, on the base branch's commit with itself.
+      `changedFiles ${base} with itself`,
+      async () => {
+        const sha = await repo.resolveRef(base);
+        const { paths, complete } = await repo.changedFiles(sha, sha);
+        assert(
+          paths.length === 0 && complete,
+          `expected no paths, complete; got ${paths.length} paths, complete ${complete}`,
+        );
+        return `${sha.slice(0, 7)} → no paths, complete; ${repo.compareUrl(sha, sha)}`;
+      },
+    ],
   ];
 }
 

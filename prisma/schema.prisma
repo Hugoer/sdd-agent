@@ -166,32 +166,34 @@ model ContextLoad {
 /// One row per issue (spec 5, "Owned tables"). `status` is the source of truth; `shownStatus` is the `status: *`
 /// label GitHub shows (null = none set). Only TaskService writes it; every write inside a job checks the lease.
 model Task {
-  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   /// `TaskRef.platform`.
   platform          String
   /// `TaskRef.id`.
-  platformId        String         @map("platform_id")
+  platformId        String           @map("platform_id")
   /// `owner/repo#number`, refreshed from every event.
-  externalRef       String         @map("external_ref")
+  externalRef       String           @map("external_ref")
   /// A `TaskStatus`.
-  status            String         @default("draft")
-  shownStatus       String?        @map("shown_status")
+  status            String           @default("draft")
+  shownStatus       String?          @map("shown_status")
   /// Null when no run is current.
-  currentRunId      String?        @unique @map("current_run_id") @db.Uuid
-  currentRun        Run?           @relation("CurrentRun", fields: [currentRunId], references: [id])
+  currentRunId      String?          @unique @map("current_run_id") @db.Uuid
+  currentRun        Run?             @relation("CurrentRun", fields: [currentRunId], references: [id])
   /// The last run number.
-  runCount          Int            @default(0) @map("run_count")
+  runCount          Int              @default(0) @map("run_count")
   /// The `webhook_events.id` holding the session lease.
-  leaseOwner        String?        @map("lease_owner") @db.Uuid
-  leaseExpiresAt    DateTime?      @map("lease_expires_at") @db.Timestamptz
+  leaseOwner        String?          @map("lease_owner") @db.Uuid
+  leaseExpiresAt    DateTime?        @map("lease_expires_at") @db.Timestamptz
   /// RL8, plan Q3: the lanes the open lane-conflict reminder lists; empty when none is open.
-  laneConflictLanes String[]       @default([]) @map("lane_conflict_lanes")
+  laneConflictLanes String[]         @default([]) @map("lane_conflict_lanes")
   /// Reminders posted so far (their marker's number).
-  laneConflicts     Int            @default(0) @map("lane_conflicts")
-  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt         DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  runs              Run[]          @relation("TaskRuns")
+  laneConflicts     Int              @default(0) @map("lane_conflicts")
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  runs              Run[]            @relation("TaskRuns")
   grillSessions     GrillSession[]
+  documents         TaskDocument[]
+  documentActions   DocumentAction[]
 
   @@unique([platform, platformId])
   @@map("tasks")
@@ -200,43 +202,45 @@ model Task {
 /// One row per run (spec 5, D24): its id is the run id everywhere (`execution_logs.run_id`, specs 6–10). A stop
 /// (`needs-human`) pauses a run; only a cancel or a restart ends it (RLW1). Only RunService writes it.
 model Run {
-  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  taskId               String        @map("task_id") @db.Uuid
-  task                 Task          @relation("TaskRuns", fields: [taskId], references: [id])
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId               String           @map("task_id") @db.Uuid
+  task                 Task             @relation("TaskRuns", fields: [taskId], references: [id])
   /// 1, 2, 3 … per task.
   number               Int
   lane                 String
   /// `grill: skip`, read at run start.
-  grillSkip            Boolean       @map("grill_skip")
+  grillSkip            Boolean          @map("grill_skip")
   /// The `webhook_events` row that started it.
-  startEventId         String        @map("start_event_id") @db.Uuid
+  startEventId         String           @map("start_event_id") @db.Uuid
   /// A copy of that event's `received_at`, for the stale rule (RL10).
-  startEventReceivedAt DateTime      @map("start_event_received_at") @db.Timestamptz
-  startedAt            DateTime      @default(now()) @map("started_at") @db.Timestamptz
-  endedAt              DateTime?     @map("ended_at") @db.Timestamptz
+  startEventReceivedAt DateTime         @map("start_event_received_at") @db.Timestamptz
+  startedAt            DateTime         @default(now()) @map("started_at") @db.Timestamptz
+  endedAt              DateTime?        @map("ended_at") @db.Timestamptz
   /// `cancelled` or `restarted`.
-  endReason            String?       @map("end_reason")
+  endReason            String?          @map("end_reason")
   /// The `webhook_events` row that ended it; its sender is named in the run-ended comment (plan Q2).
-  endEventId           String?       @map("end_event_id") @db.Uuid
+  endEventId           String?          @map("end_event_id") @db.Uuid
   /// Set while stopped (`needs-human`); cleared by `/retry`.
-  stoppedAt            DateTime?     @map("stopped_at") @db.Timestamptz
+  stoppedAt            DateTime?        @map("stopped_at") @db.Timestamptz
   /// The latest stop, kept after `/retry` and after the run ends.
-  stopStep             String?       @map("stop_step")
-  stopCause            String?       @map("stop_cause")
-  stopMessage          String?       @map("stop_message")
-  stopRetryable        Boolean?      @map("stop_retryable")
+  stopStep             String?          @map("stop_step")
+  stopCause            String?          @map("stop_cause")
+  stopMessage          String?          @map("stop_message")
+  stopRetryable        Boolean?         @map("stop_retryable")
   /// The event `/retry` re-queues.
-  stopEventId          String?       @map("stop_event_id") @db.Uuid
+  stopEventId          String?          @map("stop_event_id") @db.Uuid
   /// The status `/retry` restores.
-  statusBeforeStop     String?       @map("status_before_stop")
+  statusBeforeStop     String?          @map("status_before_stop")
   /// Null while the stop comment is pending (RL5).
-  stopCommentId        String?       @map("stop_comment_id")
+  stopCommentId        String?          @map("stop_comment_id")
   /// The run-ended comment; null on an ended run while it is pending (RL5, plan Q1).
-  endCommentId         String?       @map("end_comment_id")
-  stops                Int           @default(0)
-  retries              Int           @default(0)
-  currentFor           Task?         @relation("CurrentRun")
+  endCommentId         String?          @map("end_comment_id")
+  stops                Int              @default(0)
+  retries              Int              @default(0)
+  currentFor           Task?            @relation("CurrentRun")
   grillSession         GrillSession?
+  documents            TaskDocument[]
+  documentActions      DocumentAction[]
 
   @@unique([taskId, number])
   @@index([taskId, startedAt])
@@ -360,4 +364,118 @@ model GrillAnswer {
 
   @@unique([sessionId, commentId])
   @@map("grill_answers")
+}
+
+/// One per posted version of a Spec or a Plan, and one per go-signal (spec 7, "Owned tables"). Only DocumentsStore
+/// writes the two document tables, and every transaction first checks the session lease (spec 5). Stored with its
+/// full comment in Tx1, marked posted in Tx2.
+model TaskDocument {
+  /// In the comment's marker.
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId           String           @map("task_id") @db.Uuid
+  task             Task             @relation(fields: [taskId], references: [id])
+  runId            String           @map("run_id") @db.Uuid
+  run              Run              @relation(fields: [runId], references: [id])
+  /// `spec`, `plan`, `go-signal`.
+  kind             String
+  /// 1, 2, … per run and kind; a restore keeps it (SPW18); 1 for the go-signal.
+  version          Int
+  /// `written`, `refreshed`, `restored`.
+  origin           String
+  /// The version a refresh or a restore started from; a Plan `written`: the approved Spec version.
+  basedOnId        String?          @map("based_on_id") @db.Uuid
+  basedOn          TaskDocument?    @relation("BasedOn", fields: [basedOnId], references: [id])
+  basedOnBy        TaskDocument[]   @relation("BasedOn")
+  /// The base-branch commit its model read (a restore: the original's); null for the go-signal.
+  commit           String?
+  /// The latest commit a refresh found it up to date at (SPW11).
+  checkedCommit    String?          @map("checked_commit")
+  /// The call's last `execution_logs` row (L16; no foreign key); null for a restore and the go-signal.
+  logId            String?          @map("log_id") @db.Uuid
+  /// The document as posted (cleaned, `redact()`ed); a restore: the text it restored; empty for the go-signal.
+  text             String
+  /// A refresh's "What changed" lines.
+  changes          String[]
+  /// The lines under the comment's rule, so a restore repeats them (plan P12).
+  notes            String[]
+  /// The `/refresh` or `/restore` that made it (a retried event finds it).
+  triggerCommentId String?          @map("trigger_comment_id")
+  /// The comment's full text with its marker, posted as is (recovery).
+  body             String
+  /// `PENDING_POST` or `POSTED`.
+  postState        String           @map("post_state")
+  commentId        String?          @map("comment_id")
+  commentUrl       String?          @map("comment_url")
+  /// The comment's creation time on GitHub (the `/approve` time check).
+  postedAt         DateTime?        @map("posted_at") @db.Timestamptz
+  /// A newer version replaced it, or (a Plan) its Spec was refreshed.
+  supersededAt     DateTime?        @map("superseded_at") @db.Timestamptz
+  /// From the deletion event, or when a command found the comment gone.
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz
+  deletedBy        String?          @map("deleted_by")
+  /// Its document text when deleted (`redact()`ed); null when the bot missed the event.
+  deletedText      String?          @map("deleted_text")
+  /// The text at `/approve` (`redact()`ed); the go-signal: the issue's title and description.
+  approvedText     String?          @map("approved_text")
+  approvedBy       String?          @map("approved_by")
+  approvedAt       DateTime?        @map("approved_at") @db.Timestamptz
+  /// The event and the comment that approved it (a retried event is recognized).
+  approveEventId   String?          @map("approve_event_id") @db.Uuid
+  approveCommentId String?          @map("approve_comment_id")
+  /// The base-branch commit at the approval.
+  approvedCommit   String?          @map("approved_commit")
+  /// Changed since `checkedCommit` or `commit` and read by its calls (SP3).
+  staleFiles       String[]         @map("stale_files")
+  /// How many changed in all; null when not compared (same commit).
+  changedFiles     Int?             @map("changed_files")
+  /// Every changed path at the approval, up to GitHub's 300 (plan P33).
+  changedPaths     String[]         @map("changed_paths")
+  /// False when the host cut the list; null when the comparison failed.
+  changedComplete  Boolean?         @map("changed_complete")
+  /// Posted text → approved text (SPW14).
+  linesAdded       Int?             @map("lines_added")
+  linesRemoved     Int?             @map("lines_removed")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  actions          DocumentAction[]
+
+  @@unique([runId, kind, triggerCommentId])
+  @@index([runId, kind, version])
+  @@index([commentId])
+  @@map("task_documents")
+}
+
+/// One per human action spec 7 answered with a reply, or that made a version (`refresh`, `restore`).
+model DocumentAction {
+  /// In the reply's marker.
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId          String        @map("task_id") @db.Uuid
+  task            Task          @relation(fields: [taskId], references: [id])
+  /// Null when the issue has no run (plan P7).
+  runId           String?       @map("run_id") @db.Uuid
+  run             Run?          @relation(fields: [runId], references: [id])
+  /// The document concerned, or the version a refresh or a restore made.
+  documentId      String?       @map("document_id") @db.Uuid
+  document        TaskDocument? @relation(fields: [documentId], references: [id])
+  /// `approve-refused`, `approve-hint`, `approve-warning`, `late-comment`, `refresh`, `refresh-refused`, `deleted`,
+  /// `restore`, `restore-refused`.
+  action          String
+  /// Per action, as the spec's table.
+  result          String
+  /// The webhook event (no foreign key).
+  eventId         String        @map("event_id") @db.Uuid
+  /// The human comment answered, or the deleted comment.
+  sourceCommentId String        @map("source_comment_id")
+  sender          String
+  /// A refresh's calls (one or two).
+  logIds          String[]      @map("log_ids") @db.Uuid
+  /// The reply with its marker, stored in Tx1; null when the answer is a version.
+  replyBody       String?       @map("reply_body")
+  /// `PENDING_POST` or `POSTED`; null without a reply.
+  replyPostState  String?       @map("reply_post_state")
+  replyCommentId  String?       @map("reply_comment_id")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([action, sourceCommentId])
+  @@index([runId, createdAt])
+  @@map("document_actions")
 }

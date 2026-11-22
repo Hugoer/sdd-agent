@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { GitHubModule } from '../github/github.module.js';
+import { SecretScanModule } from '../secret-scan/secret-scan.module.js';
 import { CHAT_MODEL_FACTORY } from './chat-model.factory.js';
 import { ContextLoadService } from './context-load.service.js';
 import { ContextLoaderService } from './context-loader.service.js';
@@ -15,7 +16,8 @@ import { StepConfigService } from './step-config.service.js';
  * scripted fake (plan P8). Nothing here calls a model at startup.
  */
 @Module({
-  imports: [GitHubModule],
+  // Spec 7 (plan P29): the scanner redacts the repo files the read tools give the model (SPW2).
+  imports: [GitHubModule, SecretScanModule],
   providers: [
     { provide: CHAT_MODEL_FACTORY, useClass: GoogleChatModelFactory },
     RepoCatalogService,

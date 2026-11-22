@@ -138,6 +138,8 @@ describe('ScanningRepoProvider', () => {
     readFile: ['main', `.github-agent/${TOKEN}.md`],
     listFiles: [SHA, '.github-agent/skills/spec'],
     resolveRef: ['main'],
+    changedFiles: [SHA, 'cd34'.repeat(10)],
+    compareUrl: [SHA, 'cd34'.repeat(10)],
     findPullRequest: ['agent/issue-12'],
   };
 
