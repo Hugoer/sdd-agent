@@ -431,13 +431,14 @@ loader's own spec build the scanner with test values for the two secrets it read
 no stub yet.
 
 **Acceptance criteria:**
-- [ ] decide(): `IGNORED` → `ignore` with that reason; `SPEC_REFRESHED` → `set-status` `spec-review`; `REFRESH`,
+- [x] decide(): `IGNORED` → `ignore` with that reason; `SPEC_REFRESHED` → `set-status` `spec-review`; `REFRESH`,
   `RESTORE`, `BOT_COMMENT_DELETED` → ignored `no-transition` (open issue) for now
-- [ ] A scripted handler returning `IGNORED` ends the event `IGNORED` with its reason (router integration)
-- [ ] Every existing suite passes unchanged
+- [x] A scripted handler returning `IGNORED` ends the event `IGNORED` with its reason (router integration)
+  (in `test/run-start.integration.spec.ts`'s dispatch-loop suite, which already boots with scripted handlers)
+- [x] Every existing suite passes unchanged
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/contracts/workflow-input.ts`, `src/workflow/decide.ts` (+ spec), `src/workflow/step-handler.registry.ts`,
@@ -453,15 +454,15 @@ without a session), then the answers in the order written as untrusted blocks (`
 `<login>`"). `GrillService.transcript()` gains `status` (P9).
 
 **Acceptance criteria:**
-- [ ] The frame says "a Plan is then written…" for `full-sdd` and "the code is then written…, with no Plan in
+- [x] The frame says "a Plan is then written…" for `full-sdd` and "the code is then written…, with no Plan in
   between" for `spec-code`; the commit is the setup's
-- [ ] The turn for a skipped run says "skipped" and has no answers; a run with questions lists Q1, Q2 with guesses,
+- [x] The turn for a skipped run says "skipped" and has no answers; a run with questions lists Q1, Q2 with guesses,
   then each answer as its own untrusted block in creation order
-- [ ] `test/grill-cancel.integration.spec.ts:341–388`: the two `toEqual` gain the status; a run with no session →
+- [x] `test/grill-cancel.integration.spec.ts:341–388`: the two `toEqual` gain the status; a run with no session →
   `status: null`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** None
 **Files:** `src/documents/spec-frame.ts` (+ spec), `src/grill/grill.service.ts`, `test/grill-cancel.integration.spec.ts`
@@ -480,17 +481,17 @@ notes), Tx1 → `postComment` → Tx2. One log line per action (spec "Logging").
 (P8).
 
 **Acceptance criteria:**
-- [ ] Grill Me clear → exactly one Spec v1 comment, `status: spec-review`; the row `written`, `POSTED`, `commit` =
+- [x] Grill Me clear → exactly one Spec v1 comment, `status: spec-review`; the row `written`, `POSTED`, `commit` =
   the base branch's, `log_id` a `spec` row of the run; `grill: skip` at run start → the skipped comment, then Spec v1
-- [ ] The spec's comment shape for both lanes; a model text with a marker and an `@name` is cleaned; a token-shaped
+- [x] The spec's comment shape for both lanes; a model text with a marker and an `@name` is cleaned; a token-shaped
   string is redacted in the comment and in `text`
-- [ ] A crash after `postComment` (a fake port that fails after posting) → the retry finds the marker and posts
+- [x] A crash after `postComment` (a fake port that fails after posting) → the retry finds the marker and posts
   nothing more; a retried `PENDING_POST` row posts its stored body; no second model call
-- [ ] 60,000 characters three times → stop at step `spec`, P2's message; `/retry` with a short answer → one Spec v1
-- [ ] Spec 5's and 6's suites pass unchanged (P8)
+- [x] 60,000 characters three times → stop at step `spec`, P2's message; `/retry` with a short answer → one Spec v1
+- [x] Spec 5's and 6's suites pass unchanged (P8)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-spec.integration.spec.ts`)
 
 **Dependencies:** T1, T2, T4, T6, T7, T8
@@ -512,13 +513,13 @@ section (kept, changed, dropped), as for `grill`. Then one paste-ready block (`(
 commits and pushes both.
 
 **Acceptance criteria:**
-- [ ] The skill passes spec 11's header check (I run it on the file); nothing in it asks to save, name or commit a
+- [x] The skill passes spec 11's header check (I run it on the file); nothing in it asks to save, name or commit a
   file, or for a second document
-- [ ] The notice lists what was kept, changed and dropped, with the MIT text already in the file
+- [x] The notice lists what was kept, changed and dropped, with the MIT text already in the file
 
 **Verification:**
-- [ ] Manual: you read the diff in the clone, run the block; I check the push (`git ls-remote`, the file at the new
-  commit)
+- [x] Manual: you read the diff in the clone, run the block; I check the push (`git ls-remote`, the file at the new
+  commit) (2026-11-22: sandbox `main` at `abf8f2d`)
 
 **Dependencies:** T8 (the frame the skill sits under); pushed before Checkpoint 2
 **Files:** in `/Users/891944/Projects/sdd-agent-sandbox`: `.github-agent/skills/spec/SKILL.md`,
@@ -526,12 +527,20 @@ commits and pushes both.
 **Scope:** S (sandbox only)
 
 ### Checkpoint 2 — The Spec on the sandbox
-- [ ] T10 is on the sandbox's `main`
-- [ ] Matrix "The Spec": `#A` (Spec v1 shape, rows, sections with a verification matrix, cents, no `@`, no marker
+- [x] T10 is on the sandbox's `main` (`abf8f2d`)
+- [x] Matrix "The Spec": `#A` (Spec v1 shape, rows, sections with a verification matrix, cents, no `@`, no marker
   inside), its "Read:" line and `read_file` row, `#B` and `#C`, `#D` (`CLAUDE.md` never loaded; the canary checked
   with spec 11's `scripts/skill-discovery-invariants.mjs` here, spec 7's script at T26)
-- [ ] Matrix "Failures": `model: max-spec` before the Spec; the token-shaped string; the `spec` skill loads
-  `money-rules`
+  (2026-11-22, sandbox `abf8f2d`, my instance: `#A` = #48, two Grill rounds then Spec v1, 10,511 characters, nine
+  sections with a 13-row matrix in cents, `read_file` rows for `src/index.ts`, `src/index.test.ts`, `package.json`,
+  `tsconfig.json`, `README.md`; `#B` = #49, "no questions needed" then Spec v1; `#C` = #50, the skipped comment then
+  Spec v1, its prompt "Grill Me: skipped (grill: skip)" with no answers; `#D` = #51, the model never asked for
+  `CLAUDE.md` or `.github-agent/`, no root listing shows either; spec 11's invariant 1 PASS. Its invariant 2 FAILs
+  on the four Spec comments only: it matches a "Read:" line to Grill evaluations, which spec 7's comments aren't)
+- [x] Matrix "Failures": `model: max-spec` before the Spec; the token-shaped string; the `spec` skill loads
+  `money-rules` (#49: model line `(max)`, its four `spec` rows `max`, Grill's `standard`; #51: the key is in
+  neither the comment nor `text`, the Spec says it keeps credentials out; #48, #50: `load_skill money-rules` in the
+  Spec call)
 - [ ] You review and commit
 
 ---
@@ -1015,6 +1024,10 @@ as the spec says.
 - GitHub's timestamps have one-second resolution: an `/approve` in the same second as its document counts (the
   verdict's `<`).
 - Spec 6's `cleanModelText` would drop a document's backticks in one rare case (P31).
+- (Checkpoint 2, 2026-11-22) Spec 11's `scripts/skill-discovery-invariants.mjs` invariant 2 ("every Read: line lists
+  exactly the call's loaded tool rows") only knows Grill evaluations, so it FAILs on every Spec comment; spec 7's own
+  script (T24) doesn't check "Read:" lines. Not changed; to decide with T24.
+- (Checkpoint 2) A root listing logs as `list_files  → loaded` (an empty folder name): cosmetic.
 
 ## Risks and mitigations
 

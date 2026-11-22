@@ -19,9 +19,12 @@ export type WorkflowInput = {
   | { type: 'ISSUE_OPENED' | 'SKIP_ADDED'; task: TaskRef }
   | { type: 'LANE_ADDED' | 'LANE_REMOVED'; task: TaskRef; lane: Lane }
   | {
-      type: 'COMMENT' | 'APPROVE' | 'RETRY'; // RETRY: 2026-11-16, D25
+      // RETRY: 2026-11-16, D25; REFRESH, RESTORE: 2026-11-21, spec 7 (D29, D30)
+      type: 'COMMENT' | 'APPROVE' | 'RETRY' | 'REFRESH' | 'RESTORE';
       task: TaskRef;
       comment: TaskComment;
     }
+  // 2026-11-21, spec 7 (D30): a comment the bot wrote on the issue was deleted; `body` is its text when deleted.
+  | { type: 'BOT_COMMENT_DELETED'; task: TaskRef; comment: TaskComment }
   | { type: 'PR_UPDATED'; pr: PullRequestRef; headSha: string }
 );

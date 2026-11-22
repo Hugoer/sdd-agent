@@ -56,6 +56,24 @@ const ev = {
     task,
     comment: comment('/retry'),
   }),
+  refresh: (): WorkflowInput => ({
+    ...base,
+    type: 'REFRESH',
+    task,
+    comment: comment('/refresh'),
+  }),
+  restore: (): WorkflowInput => ({
+    ...base,
+    type: 'RESTORE',
+    task,
+    comment: comment('/restore'),
+  }),
+  deleted: (): WorkflowInput => ({
+    ...base,
+    type: 'BOT_COMMENT_DELETED',
+    task,
+    comment: comment('<!-- sdd-agent:spec:x -->'),
+  }),
   pr: (): WorkflowInput => ({
     ...base,
     type: 'PR_UPDATED',
@@ -594,6 +612,47 @@ describe('decide(): overview §3 rows 1–31', () => {
         reason: 'the Grill round limit was reached',
       },
     });
+  });
+});
+
+describe('decide(): spec 7 seam (plan T7)', () => {
+  it('a step outcome IGNORED → the event ends IGNORED with that reason (plan P6)', () => {
+    for (const reason of [
+      'approve-refused',
+      'approve-hint',
+      'late-comment',
+      'refresh-refused',
+      'restore-refused',
+      'no-transition',
+    ] as const) {
+      expect(
+        act(running({ status: 'spec-review' }), { type: 'IGNORED', reason }),
+      ).toEqual(ignored(reason));
+    }
+  });
+
+  it('SPEC_REFRESHED → set-status spec-review (row 32)', () => {
+    expect(
+      act(running({ status: 'ready-for-dev' }), { type: 'SPEC_REFRESHED' }),
+    ).toEqual({ kind: 'set-status', status: 'spec-review' });
+  });
+
+  it('REFRESH, RESTORE, BOT_COMMENT_DELETED on an open issue → ignored no-transition until their tasks', () => {
+    const statuses = ['spec-review', 'ready-for-dev', 'grilling'] as const;
+    for (const input of [ev.refresh(), ev.restore(), ev.deleted()]) {
+      expect(act(state(), input)).toEqual(ignored('no-transition'));
+      for (const status of statuses)
+        expect(act(running({ status }), input)).toEqual(
+          ignored('no-transition'),
+        );
+    }
+  });
+
+  it('… and on a closed issue → ignored issue-closed', () => {
+    for (const input of [ev.refresh(), ev.restore(), ev.deleted()])
+      expect(
+        act(running({ status: 'spec-review', open: false }), input),
+      ).toEqual(ignored('issue-closed'));
   });
 });
 

@@ -13,17 +13,18 @@ import type {
   RunRef,
 } from './workflow-comments.js';
 
-/** The step handlers (spec "Step-handler registry"); spec 5 only names them. */
+/** The step handlers (spec "Step-handler registry"); spec 5 only names them. Spec 7: `documents` (the replies). */
 export type HandlerName =
   | 'grill'
   | 'spec'
   | 'plan'
   | 'go-signal'
+  | 'documents'
   | 'workspace'
   | 'code'
   | 'qualityGate';
 
-/** What a handler is asked to do (overview §3, the rows' actions). */
+/** What a handler is asked to do (overview §3, the rows' actions). Spec 7: `refresh`, `reply`, `deleted`, `restore`. */
 export type HandlerOp =
   | 'start'
   | 'skip'
@@ -31,6 +32,10 @@ export type HandlerOp =
   | 'generate'
   | 'approve'
   | 'post'
+  | 'refresh'
+  | 'reply'
+  | 'deleted'
+  | 'restore'
   | 'claim'
   | 'review';
 
@@ -41,9 +46,13 @@ export interface HandlerCall {
 
 /**
  * Overview §3 "Step outcomes". A result of the work that stops the run carries the step's comment body
- * (plan P4). A handler that only posts (a document, the go-signal) returns nothing instead.
+ * (plan P4). A handler that only posts (a document, the go-signal) returns nothing instead. Spec 7:
+ * `SPEC_REFRESHED` (a Spec v2 posted while the Plan waited → `spec-review`) and, plan P6, `IGNORED` (a step that
+ * only replied, or found nothing to do: the event ends `IGNORED` with that reason).
  */
 export type StepOutcome =
+  | { type: 'IGNORED'; reason: RouterIgnoreReason }
+  | { type: 'SPEC_REFRESHED' }
   | { type: 'ASKED' }
   | { type: 'CLEAR' }
   | { type: 'LIMIT'; body: string }
@@ -104,7 +113,27 @@ export interface RouterState {
 }
 
 export type RouterIgnoreReason =
-  'no-transition' | 'issue-closed' | 'lane-conflict';
+  | 'no-transition'
+  | 'issue-closed'
+  | 'lane-conflict'
+  // Spec 7: a command or comment the `documents` handler answered with a reply (plan P6).
+  | 'approve-refused'
+  | 'approve-hint'
+  | 'late-comment'
+  | 'refresh-refused'
+  | 'restore-refused';
+
+/**
+ * Spec 7 "`/approve`" (R2): the verdict on an `/approve` in `spec-review` or `ready-for-dev`, from the gate
+ * DocumentsModule registers (plan P26: it lives here, so WorkflowModule imports nothing from `src/documents`).
+ */
+export type ApprovalVerdict =
+  | 'valid'
+  | 'done'
+  | 'already-approved'
+  | 'before-document'
+  | 'deleted'
+  | 'empty';
 
 export type StopDecision =
   | {
@@ -205,6 +234,9 @@ function isIssueEvent(input: DecideInput): input is IssueEvent {
     case 'COMMENT':
     case 'APPROVE':
     case 'RETRY':
+    case 'REFRESH':
+    case 'RESTORE':
+    case 'BOT_COMMENT_DELETED':
       return true;
     default:
       return false;
@@ -407,6 +439,10 @@ function otherInput(
       return run
         ? steps([{ handler: 'qualityGate', op: 'review' }], null)
         : ignore('no-transition');
+    case 'IGNORED':
+      return ignore(input.reason); // spec 7, plan P6
+    case 'SPEC_REFRESHED':
+      return { kind: 'set-status', status: 'spec-review' }; // row 32
     case 'ASKED':
       return { kind: 'set-status', status: 'grilling' }; // row 12
     case 'CLEAR':

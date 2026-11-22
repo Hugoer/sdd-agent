@@ -12,6 +12,7 @@ import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
 import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
 import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
+import { SpecHandler } from '../src/documents/spec.handler.js';
 import { GrillHandler } from '../src/grill/grill.handler.js';
 import { IntakeService } from '../src/intake/intake.service.js';
 import { CHAT_MODEL_FACTORY } from '../src/llm/chat-model.factory.js';
@@ -179,7 +180,25 @@ export interface StartOptions {
    * as before spec 6, so spec 5's suites keep testing the router alone; a scripted handler; or `'real'`.
    */
   grill?: StepHandler | 'real';
+  /**
+   * Spec 7 plan P8: the four handlers DocumentsModule registers (`spec`, `plan`, `go-signal`, `documents`).
+   * Default: ones that stop the run as unbuilt steps, as before spec 7, so spec 5's and 6's suites keep their
+   * `step-not-built` stops; `'real'`; or scripted ones by name (the others stay stubs). Each stub comes with the
+   * task that registers its real handler (T9, T11, T13, T15).
+   */
+  documents?: 'real' | Partial<Record<DocumentHandler, StepHandler>>;
 }
+
+/** Spec 7: the handlers DocumentsModule registers. */
+export type DocumentHandler = 'spec' | 'plan' | 'go-signal' | 'documents';
+
+/** Spec 7 plan P8: each document handler's provider, replaced by default with an unbuilt step. */
+const DOCUMENT_HANDLERS = { spec: SpecHandler } as const;
+
+/** What the router did before a step existed (`step-not-built` at that step), with no cancel hook. */
+const notBuilt = (step: string): StepHandler => ({
+  run: () => Promise.reject(new StepNotBuiltError(step)),
+});
 
 /** Spec 6 plan P8: what the router did before Grill Me existed (`step-not-built` at `grill`). */
 const GRILL_NOT_BUILT: StepHandler = {
@@ -220,6 +239,14 @@ export async function startApp(options: StartOptions = {}): Promise<TestApp> {
     builder = builder
       .overrideProvider(GrillHandler)
       .useValue(asProvider(options.grill ?? GRILL_NOT_BUILT));
+  }
+  if (options.documents !== 'real') {
+    for (const [name, provider] of Object.entries(DOCUMENT_HANDLERS)) {
+      const scripted = options.documents?.[name as DocumentHandler];
+      builder = builder
+        .overrideProvider(provider)
+        .useValue(asProvider(scripted ?? notBuilt(name)));
+    }
   }
   if (options.processor) {
     const chosen = options.processor;

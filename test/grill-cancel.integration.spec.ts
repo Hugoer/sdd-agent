@@ -341,6 +341,7 @@ describe('Grill Me when a run ends (spec 6)', () => {
         .transcript((await firstRun()).id);
 
       expect(transcript).toEqual({
+        status: 'ASKING',
         rounds: [
           {
             number: 1,
@@ -379,10 +380,12 @@ describe('Grill Me when a run ends (spec 6)', () => {
       const grill = t.app.get(GrillService);
 
       expect(await grill.transcript((await firstRun()).id)).toEqual({
+        status: 'SKIPPED',
         rounds: [],
         answers: [],
       });
       expect(await grill.transcript(randomUUID())).toEqual({
+        status: null,
         rounds: [],
         answers: [],
       });

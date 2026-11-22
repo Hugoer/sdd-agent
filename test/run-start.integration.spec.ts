@@ -228,4 +228,26 @@ describe('the dispatch loop with scripted handlers (spec 5, T14, plan P4)', () =
     });
     expect(t.issues.labelsOf(issue)).toContain('status: grilling');
   });
+
+  it('a step returning IGNORED → the event ends IGNORED with its reason; the context has the status (spec 7, P6, P14)', async () => {
+    seedIssue(t, 47, { labels: ['workflow: full-sdd'] });
+    grill.answerNext({ type: 'IGNORED', reason: 'late-comment' });
+
+    const row = await deliver(t, lane(47, 'full-sdd'));
+
+    expect(row).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: 'late-comment',
+    });
+    expect(grill.calls).toHaveLength(1);
+    expect(grill.calls[0]).toMatchObject({
+      op: 'start',
+      status: 'draft',
+      statusBeforeStop: null,
+      approval: null,
+    });
+    expect(await t.prisma.task.findFirstOrThrow()).toMatchObject({
+      status: 'draft',
+    });
+  });
 });

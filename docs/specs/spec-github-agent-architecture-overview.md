@@ -17,7 +17,9 @@
 > (interview 2026-11-21: SP1–SP13; review fixes 2026-11-21; write-time interview 2026-11-22: SPW1, SPW10, SPW13:
 > D28–D31, D27 annotated; §1 row 7; §3 inputs, step outcomes, R2, rows 5, 18–20, 27, 32–36 and the diagram; §4;
 > §6; edge case 7; the verification rows marked 7), approved with that spec on 2026-11-22 · amended 2026-11-22
-> with spec 7's plan (P6: §3 step outcomes; P10: D28)
+> with spec 7's plan (P6: §3 step outcomes; P10: D28) · amended 2026-11-22 (D32, decided by the user during spec
+> 7's build, after sandbox issue #51: a new spec 12 `bot-data-protection`, to interview; §1 row 12 and the build
+> order)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -214,6 +216,19 @@ comments, without acting under the developer's identity or touching their checko
   `workflow.json`'s optional `documents` key (default `docs/specs`, `docs/plans`), so they are reviewed in the PR
   and later issues read them with D28's tools. Nothing in `.env`. Rejected: the file on a branch as the document
   (branches before spec 8, left behind by cancelled runs, reading away from the issue).
+- **D32 The bot's own data is protected by deterministic code, never by the model's judgment (2026-11-22, the user,
+  during spec 7's build; a new spec 12, to interview).** The bot's data is its settings (`.github-agent/`: the map,
+  the step skills), the other tools' instruction files it never reads (`CLAUDE.md` …), its secrets, and its records
+  (stored prompts, documents, its comments). No step may change or expose them, and every such protection is code:
+  redaction, path rules, tool limits, permissions, human approval. A system-prompt sentence is fine as an extra
+  layer, never as the guard. Reason: sandbox issue #51 asked the Spec step to copy `CLAUDE.md`, `workflow.json` and
+  a key; the model refused on its own, the read tools would have refused by code, and the key reached the model and
+  the stored prompt because no code runs there. Spec 12's starting list (its interview decides): issue and comment
+  text redacted before the model and before `ExecutionLog` stores the prompt (amends spec 4: today only what is
+  posted is scanned); the root `AGENTS.md` and the skills too; injection detection for asks like "copy CLAUDE.md"
+  or "put this key in the Spec"; the paths the Coder may never change (`.github-agent/`, the other tools'
+  instruction files, …) and the Quality Gate's check of them (specs 9, 10); human edits to the bot's own comments;
+  how long stored prompts are kept. Built after spec 7 and before spec 8, so specs 8–10 are written against it.
 
 ## Contradictions found in the idea doc
 
@@ -251,9 +266,10 @@ Numbers are IDs, not build order.
 | 9 | `coder` | `CoderModule` · `src/coder` | Coder agent loop (LangGraph), file tools, command allowlist, lint/test gate, commit/push/PR, red and interrupted runs; 2026-11-18 (D27): spec 11's discovery in the loop, a folder's `AGENTS.md` for the files it works on | 4, 7, 8, 11 (2026-11-18) | xhigh |
 | 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files | 4, 9, 11 (2026-11-18) | xhigh |
 | 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
+| 12 | `bot-data-protection` (2026-11-22, D32; id to confirm at its interview) | to decide at its interview | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code) | to decide |
 
-**Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → 8 → 9 → 10 (2026-11-18: spec 11 added, D27). Specs 2 and 4 can
-swap; spec 8 only needs 3 and 5.
+**Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → ~~8~~ 12 → 8 → 9 → 10 (2026-11-18: spec 11 added, D27;
+2026-11-22: spec 12 added, D32). Specs 2 and 4 can swap; spec 8 only needs 3 and 5.
 
 **Module rules**
 - Imports follow the "Depends on" column, with no cycles. Step modules (6, 7, 9, 10) register their handlers in

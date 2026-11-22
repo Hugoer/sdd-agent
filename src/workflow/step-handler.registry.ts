@@ -1,9 +1,14 @@
 // Spec 5 "Step-handler registry" (RL1, RLW7): the seam later specs plug into. Step modules register their
 // handlers in their onModuleInit; WorkflowModule never imports them (overview §1 module rules).
 import { Injectable } from '@nestjs/common';
-import type { Lane, TaskRef } from '../contracts/issue-provider.js';
+import type { Lane, TaskRef, TaskStatus } from '../contracts/issue-provider.js';
 import type { WorkflowInput } from '../contracts/workflow-input.js';
-import type { HandlerName, HandlerOp, StepOutcome } from './decide.js';
+import type {
+  ApprovalVerdict,
+  HandlerName,
+  HandlerOp,
+  StepOutcome,
+} from './decide.js';
 import type { HeldLease } from './session-lease.service.js';
 import type { RunEnd } from './workflow-comments.js';
 import { StepNotBuiltError } from './workflow-errors.js';
@@ -28,10 +33,19 @@ export interface StepContext {
   input: WorkflowInput;
   /** The session lease this job holds; the router renews it while the handler runs. */
   lease: HeldLease;
+  /** Spec 7 (plan P14): the issue's status when the handler is called, as decide() read it. */
+  status: TaskStatus;
+  /** Spec 7 (plan P14): the status `/retry` restores, while the run is stopped (`Run.statusBeforeStop`). */
+  statusBeforeStop: TaskStatus | null;
+  /** Spec 7 (plan P14): the gate's verdict on this event's `/approve`, when decide() read one. */
+  approval: ApprovalVerdict | null;
 }
 
 /** What a cancel hook is told (spec 6 plan P6), also when a later event posts the run-ended comment. */
-export interface CancelContext extends Omit<StepContext, 'op' | 'input'> {
+export interface CancelContext extends Omit<
+  StepContext,
+  'op' | 'input' | 'status' | 'statusBeforeStop' | 'approval'
+> {
   /** `cancelled`, or `replaced` with the new run's number and lane (spec 6 GM17). */
   end: RunEnd;
   /** The `received_at` of the event that ended the run (spec 6 GM16: answers received before it count). */

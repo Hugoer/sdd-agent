@@ -544,6 +544,9 @@ export class RouterService {
       op: call.op,
       input: job.input,
       lease: job.lease,
+      status: routing.state.status,
+      statusBeforeStop: run.statusBeforeStop as TaskStatus | null,
+      approval: null,
     });
     job.mark.step = waitingStep(routing.state.status, runLane(run));
     return outcome ?? null;

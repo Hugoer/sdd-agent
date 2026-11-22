@@ -1358,6 +1358,11 @@ live; test once that it can fail, e.g. with a wrong issue list)
   - must stop the Coder from changing those files (or restore them before the push).
 - **Spec 10 (`quality-gate`):** reviews against the approved texts; the files are in the PR's diff too.
 - **Dashboard (no spec yet):** reads the two tables ("Usage data").
+- **Spec 12 (`bot-data-protection`, overview D32; added 2026-11-22 after sandbox issue #51, to interview):** the
+  bot's own data is protected by code, never by the model's judgment. From spec 7: the read tools' path rule (SPW1,
+  plan P10) and `redact()` before a document is stored or posted (SPW21) are code already; the issue text, the
+  Grill answers and the approved Spec reach the model unredacted and are stored as sent in `execution_logs`
+  (spec 4), which spec 12 decides. Spec 7 changes nothing for it.
 
 ## Open questions
 
