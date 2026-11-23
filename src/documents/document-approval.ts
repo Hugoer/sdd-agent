@@ -121,6 +121,7 @@ export class DocumentApprovals {
         approvedBy: input.sender,
         approveCommentId: input.comment.id,
         approvedCommit: now,
+        approvedFromCommit: from,
         staleFiles: flagged.map(({ path }) => path),
         changedFiles: listed?.paths.length ?? null,
         changedPaths: listed?.paths ?? [],

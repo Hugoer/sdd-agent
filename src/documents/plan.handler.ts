@@ -9,10 +9,6 @@ import {
   type IssueProvider,
 } from '../contracts/issue-provider.js';
 import { LlmError } from '../contracts/llm-error.js';
-import {
-  REPO_PROVIDER,
-  type RepoProvider,
-} from '../contracts/repo-provider.js';
 import type {
   DocumentAction,
   TaskDocument,
@@ -31,7 +27,6 @@ import {
   refreshNothingChangedReply,
   refreshRefusedReply,
   refreshUpToDateReply,
-  type SpecWarning,
 } from './document-comments.js';
 import { DocumentApprovals } from './document-approval.js';
 import {
@@ -46,7 +41,12 @@ import {
   DOCUMENT_MAX_CHARS,
 } from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
-import { planFrame, planTurns, type PlanChanges } from './plan-frame.js';
+import {
+  planFrame,
+  planTurns,
+  type PlanChanges,
+  type PlanNotCompared,
+} from './plan-frame.js';
 
 @Injectable()
 export class PlanHandler implements StepHandler {
@@ -54,7 +54,6 @@ export class PlanHandler implements StepHandler {
 
   constructor(
     @Inject(ISSUE_PROVIDER) private readonly issues: IssueProvider,
-    @Inject(REPO_PROVIDER) private readonly repo: RepoProvider,
     private readonly store: DocumentsStore,
     private readonly stepConfig: StepConfigService,
     private readonly llm: LlmService,
@@ -139,7 +138,6 @@ export class PlanHandler implements StepHandler {
         base: this.base,
         commit: setup.commit,
         specVersion: spec.version,
-        warning: this.warningOf(spec),
         text,
         notes: result.notes,
       }),
@@ -307,7 +305,6 @@ export class PlanHandler implements StepHandler {
                 base: this.base,
                 commit: check.to,
                 specVersion: spec.version,
-                warning: null,
                 text: check.text,
                 notes: check.notes,
                 origin: {
@@ -355,22 +352,6 @@ export class PlanHandler implements StepHandler {
     await this.posts.postReply(context, action);
   }
 
-  /** SP3: the Spec's approval flagged files (with GitHub's compare link), or couldn't compare; else no line. */
-  private warningOf(spec: TaskDocument): SpecWarning | null {
-    const from = spec.checkedCommit ?? spec.commit;
-    if (!from || !spec.approvedCommit || from === spec.approvedCommit)
-      return null;
-    if (spec.changedComplete === null) return { kind: 'not-compared', from };
-    if (spec.staleFiles.length === 0) return null;
-    return {
-      kind: 'stale',
-      from,
-      files: spec.staleFiles,
-      complete: spec.changedComplete,
-      compareUrl: this.repo.compareUrl(from, spec.approvedCommit),
-    };
-  }
-
   /** A Plan stored by Tx1 but not posted (a crash before Tx2): find its marker, else post its body; then Tx2. */
   private async postPending(context: StepContext): Promise<void> {
     const pending = await this.store.pendingVersion(context.run.id);
@@ -380,10 +361,19 @@ export class PlanHandler implements StepHandler {
   }
 }
 
-/** Plan P33: the paths the Spec's approval stored, the ones it read marked; none changed → no paragraph. */
-function changesOf(spec: TaskDocument): PlanChanges | null {
-  const from = spec.checkedCommit ?? spec.commit;
-  if (!from || spec.changedPaths.length === 0) return null;
+/**
+ * Plan P33: the paths the Spec's approval stored, the ones it read marked; none changed → no paragraph. Spec 14: the
+ * range starts at `approved_from_commit` (a later refresh may move `checked_commit`; an approval stored before
+ * spec 14 has none: `checked_commit ?? commit`, plan UP10); an approval that couldn't compare → not compared (UAW3).
+ */
+function changesOf(spec: TaskDocument): PlanChanges | PlanNotCompared | null {
+  const from = spec.approvedFromCommit ?? spec.checkedCommit ?? spec.commit;
+  if (!from) return null;
+  if (spec.changedComplete === null)
+    return spec.approvedCommit && from !== spec.approvedCommit
+      ? { specCommit: from, notCompared: true }
+      : null;
+  if (spec.changedPaths.length === 0) return null;
   return {
     specCommit: from,
     paths: spec.changedPaths,

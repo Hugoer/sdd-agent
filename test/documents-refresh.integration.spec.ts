@@ -205,6 +205,15 @@ describe('/refresh while the Spec waits (spec 7)', () => {
     expect(replies(issue, 10302)[0].body).toContain(
       `has nothing to refresh: nothing changed on \`main\` since Spec v1 was last checked (\`${now.slice(0, 7)}\`).`,
     );
+
+    // Spec 14: the approval's range starts where the refresh found it up to date.
+    t.models.reply({ answer: PLAN_TEXT });
+    await deliver(t, commentNow(103, 10303, '/approve'));
+
+    expect((await specs())[0]).toMatchObject({
+      approvedFromCommit: now,
+      approvedCommit: now,
+    });
   });
 
   it('deleted (not seen), emptied, or already approved → ONE reply each, NO model call, `IGNORED` `refresh-refused`', async () => {

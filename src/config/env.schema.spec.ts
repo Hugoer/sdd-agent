@@ -53,6 +53,7 @@ describe('validateEnv', () => {
       GRILL_CONFIDENCE_THRESHOLD: 95,
       SKILL_DISCOVERY_MAX_LOADS: 10,
       SKILL_DISCOVERY_MAX_BYTES: 204800,
+      APPROVAL_LARGE_CHANGE_FILES: 15,
     });
   });
 
@@ -67,6 +68,8 @@ describe('validateEnv', () => {
     ['SKILL_DISCOVERY_MAX_LOADS', '50', 50],
     ['SKILL_DISCOVERY_MAX_BYTES', '1024', 1024],
     ['SKILL_DISCOVERY_MAX_BYTES', '1048576', 1048576],
+    ['APPROVAL_LARGE_CHANGE_FILES', '15', 15],
+    ['APPROVAL_LARGE_CHANGE_FILES', '150', 150],
   ])('accepts %s=%s', (name, value, expected) => {
     expect(validateEnv({ ...valid, [name]: value })).toMatchObject({
       [name]: expected,
@@ -142,11 +145,26 @@ describe('validateEnv', () => {
     ['SKILL_DISCOVERY_MAX_BYTES', '1023'],
     ['SKILL_DISCOVERY_MAX_BYTES', '1048577'],
     ['SKILL_DISCOVERY_MAX_BYTES', 'abc'],
+    ['APPROVAL_LARGE_CHANGE_FILES', '14'],
+    ['APPROVAL_LARGE_CHANGE_FILES', '151'],
+    ['APPROVAL_LARGE_CHANGE_FILES', 'abc'],
+    ['APPROVAL_LARGE_CHANGE_FILES', '2.5'],
   ])('rejects %s=%s naming the variable', (name, value) => {
     expect(errorOf({ ...valid, [name]: value })).toMatch(
       new RegExp(`- ${name}: `),
     );
   });
+
+  it.each(['14', '151', 'abc', '2.5'])(
+    'rejects APPROVAL_LARGE_CHANGE_FILES=%s with its range (spec 14)',
+    (value) => {
+      expect(
+        errorOf({ ...valid, APPROVAL_LARGE_CHANGE_FILES: value }),
+      ).toContain(
+        '- APPROVAL_LARGE_CHANGE_FILES: must be an integer from 15 to 150',
+      );
+    },
+  );
 
   it.each(Object.keys(valid))('requires %s', (name) => {
     expect(errorOf({ ...valid, [name]: undefined })).toContain(

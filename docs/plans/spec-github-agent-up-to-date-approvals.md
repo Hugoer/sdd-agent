@@ -182,11 +182,11 @@ for every confirmed decision (UP1–UP4, UP13, UP19–UP21), each dated with its
 above. The overview needs nothing (its rows were updated with the spec).
 
 **Acceptance criteria:**
-- [ ] Every confirmed decision with a "Spec lines" entry is in the spec, dated
-- [ ] The two `#H` matrix fixes are in; every matrix row can be checked as written
+- [x] Every confirmed decision with a "Spec lines" entry is in the spec, dated
+- [x] The two `#H` matrix fixes are in; every matrix row can be checked as written
 
 **Verification:**
-- [ ] Manual: you read the spec's diff
+- [ ] Manual: you read the spec's diff (Checkpoint 1)
 
 **Dependencies:** your approval of this plan
 **Files:** `docs/specs/spec-github-agent-up-to-date-approvals.md`
@@ -216,17 +216,17 @@ above. The overview needs nothing (its rows were updated with the spec).
   `checked_commit` closes the question).
 
 **Acceptance criteria:**
-- [ ] The migration applies to the test database; `prisma migrate diff` from the migrations to the schema is empty;
+- [x] The migration applies to the test database; `prisma migrate diff` from the migrations to the schema is empty;
   rows stored before it keep nulls
-- [ ] `ask` writes both or nothing (without the lease: nothing); a second question for the same comment is refused
+- [x] `ask` writes both or nothing (without the lease: nothing); a second question for the same comment is refused
   (unique `action`, `source_comment_id`); `lastQuestion` answers the newest of two
-- [ ] `markUpToDate` and `finishRefresh` with `checked` clear `asked_commit`; `markReplyPosted` records the time and the
+- [x] `markUpToDate` and `finishRefresh` with `checked` clear `asked_commit`; `markReplyPosted` records the time and the
   URL
-- [ ] A Spec approval stores `approved_from_commit` (`commit`, or `checked_commit` after an up-to-date refresh); the
+- [x] A Spec approval stores `approved_from_commit` (`commit`, or `checked_commit` after an up-to-date refresh); the
   go-signal's is null
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T0
 **Files:** `prisma/schema.prisma`, `prisma/migrations/<ts>_up_to_date_approvals/migration.sql`,
@@ -242,11 +242,11 @@ with its comment line; `.env.example` gains `APPROVAL_LARGE_CHANGE_FILES=15` wit
 `test/test-env.ts` pins `'15'`.
 
 **Acceptance criteria:**
-- [ ] Unset → 15; `15` and `150` accepted; `14`, `151`, `abc`, `2.5` → `validateEnv` names the variable and "must be
+- [x] Unset → 15; `15` and `150` accepted; `14`, `151`, `abc`, `2.5` → `validateEnv` names the variable and "must be
   an integer from 15 to 150"
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass (`src/config/env.schema.spec.ts`)
+- [x] `npm run typecheck && npm run lint && npm test` pass (`src/config/env.schema.spec.ts`)
 
 **Dependencies:** T0
 **Files:** `src/config/env.schema.ts`, `src/config/env.schema.spec.ts`, `test/test-env.ts`, `.env.example`
@@ -262,13 +262,13 @@ written at commit {specCommit}; the bot couldn't list the files changed on the b
 facts about the code no longer hold, follow the code at {commit}; what to build still comes from the Spec.").
 
 **Acceptance criteria:**
-- [ ] A Plan written after an approval that flagged files, or couldn't compare, has no ⚠️ line; the rest of its
+- [x] A Plan written after an approval that flagged files, or couldn't compare, has no ⚠️ line; the rest of its
   header is unchanged (a refreshed or restored Plan: as before)
-- [ ] The prompt's "files changed" paragraph names `approved_from_commit` as the Spec's commit; an approval that
+- [x] The prompt's "files changed" paragraph names `approved_from_commit` as the Spec's commit; an approval that
   couldn't compare → the "couldn't list" paragraph; nothing changed → no paragraph (as before)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (`plan-frame.spec.ts`,
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass (`plan-frame.spec.ts`,
   `document-comments.spec.ts`, `test/documents-plan.integration.spec.ts:135`, `:163`)
 
 **Dependencies:** T1
@@ -278,9 +278,9 @@ facts about the code no longer hold, follow the code at {commit}; what to build 
 
 ### Checkpoint 1 — Foundations
 
-- [ ] All four suites pass; `npm run build` passes
+- [x] All four suites pass; `npm run build` passes
 - [ ] You run `npm run db:migrate` on the dev database (UP16)
-- [ ] Matrix `#H`, the config row: my instance (port 3101, the test database) with `APPROVAL_LARGE_CHANGE_FILES=14`,
+- [x] Matrix `#H`, the config row: my instance (port 3101, the test database) with `APPROVAL_LARGE_CHANGE_FILES=14`,
   then `=151` → it doesn't start, the log names the setting and "must be an integer from 15 to 150"; unset → it
   starts (that the default is 15 shows in `#H`'s 16-file row at Checkpoint 2)
 - [ ] You review and commit

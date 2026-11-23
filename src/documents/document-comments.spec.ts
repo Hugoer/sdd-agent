@@ -275,13 +275,10 @@ describe('planComment (spec "The document comment")', () => {
     base: 'main',
     commit: PLAN_COMMIT,
     specVersion: 1,
-    warning: null,
     text: '# Plan',
     notes: ['Model: `gemini-4-carbon` (standard)'],
   };
-  const URL = `https://github.com/o/r/compare/${COMMIT}...${PLAN_COMMIT}`;
-
-  it('no warning: marker, header from the approved Spec, the coding line, the document, the notes', () => {
+  it('no ⚠️ line, ever (spec 14, UA4): marker, header from the approved Spec, the coding line, the document, the notes', () => {
     expect(planComment(input)).toBe(
       [
         '<!-- sdd-agent:plan:p-1 -->',
@@ -299,57 +296,6 @@ describe('planComment (spec "The document comment")', () => {
       ].join('\n'),
     );
     expect(planComment(input).startsWith(planMarker('p-1'))).toBe(true);
-  });
-
-  it('flagged files → the ⚠️ line with the compare link, before the coding line', () => {
-    const lines = planComment({
-      ...input,
-      warning: {
-        kind: 'stale',
-        from: COMMIT,
-        files: ['src/index.ts'],
-        complete: true,
-        compareUrl: URL,
-      },
-    }).split('\n');
-
-    expect(lines[3]).toBe(
-      `⚠️ Since the Spec was written (\`4f2c1ab\`), \`main\` changed \`src/index.ts\`, which it read ([compare](${URL})). ` +
-        'This Plan reads the current code. If the change affects the Spec, comment `/refresh`.',
-    );
-    expect(lines[5].startsWith('To change it')).toBe(true);
-  });
-
-  it('more than five files → the first five and "and N more"; a cut list → "possibly more"', () => {
-    const files = Array.from({ length: 7 }, (_, i) => `f${i}.ts`);
-    const warning = {
-      kind: 'stale' as const,
-      from: COMMIT,
-      files,
-      complete: true,
-      compareUrl: URL,
-    };
-
-    expect(planComment({ ...input, warning })).toContain(
-      'changed `f0.ts`, `f1.ts`, `f2.ts`, `f3.ts`, `f4.ts` and 2 more, which it read',
-    );
-    expect(
-      planComment({
-        ...input,
-        warning: { ...warning, files: ['a.ts'], complete: false },
-      }),
-    ).toContain('changed `a.ts` … and possibly more, which it read');
-  });
-
-  it('the comparison failed → the not-compared line', () => {
-    expect(
-      planComment({
-        ...input,
-        warning: { kind: 'not-compared', from: COMMIT },
-      }).split('\n')[3],
-    ).toBe(
-      "⚠️ The bot couldn't compare `4f2c1ab` with `main`, so it can't tell whether the Spec is out of date.",
-    );
   });
 });
 
@@ -551,7 +497,6 @@ describe('the refreshed and restored comments (spec "The v2 comment", the `/rest
       base: 'main',
       commit: B,
       specVersion: 1,
-      warning: null,
       text: 'a\nB\nc',
       notes: [],
       origin: refreshed(),

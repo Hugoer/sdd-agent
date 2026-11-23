@@ -371,72 +371,78 @@ model GrillAnswer {
 /// full comment in Tx1, marked posted in Tx2.
 model TaskDocument {
   /// In the comment's marker.
-  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  taskId           String           @map("task_id") @db.Uuid
-  task             Task             @relation(fields: [taskId], references: [id])
-  runId            String           @map("run_id") @db.Uuid
-  run              Run              @relation(fields: [runId], references: [id])
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId             String           @map("task_id") @db.Uuid
+  task               Task             @relation(fields: [taskId], references: [id])
+  runId              String           @map("run_id") @db.Uuid
+  run                Run              @relation(fields: [runId], references: [id])
   /// `spec`, `plan`, `go-signal`.
-  kind             String
+  kind               String
   /// 1, 2, … per run and kind; a restore keeps it (SPW18); 1 for the go-signal.
-  version          Int
+  version            Int
   /// `written`, `refreshed`, `restored`.
-  origin           String
+  origin             String
   /// The version a refresh or a restore started from; a Plan `written`: the approved Spec version.
-  basedOnId        String?          @map("based_on_id") @db.Uuid
-  basedOn          TaskDocument?    @relation("BasedOn", fields: [basedOnId], references: [id])
-  basedOnBy        TaskDocument[]   @relation("BasedOn")
+  basedOnId          String?          @map("based_on_id") @db.Uuid
+  basedOn            TaskDocument?    @relation("BasedOn", fields: [basedOnId], references: [id])
+  basedOnBy          TaskDocument[]   @relation("BasedOn")
   /// The base-branch commit its model read (a restore: the original's); null for the go-signal.
-  commit           String?
+  commit             String?
   /// The latest commit a refresh found it up to date at (SPW11).
-  checkedCommit    String?          @map("checked_commit")
+  checkedCommit      String?          @map("checked_commit")
+  /// Spec 14 (UAW3): the commit the version's last question compared to; cleared when a refresh moves
+  /// `checkedCommit`; only `/approve` reads it.
+  askedCommit        String?          @map("asked_commit")
   /// The call's last `execution_logs` row (L16; no foreign key); null for a restore and the go-signal.
-  logId            String?          @map("log_id") @db.Uuid
+  logId              String?          @map("log_id") @db.Uuid
   /// The document as posted (cleaned, `redact()`ed); a restore: the text it restored; empty for the go-signal.
-  text             String
+  text               String
   /// A refresh's "What changed" lines.
-  changes          String[]
+  changes            String[]
   /// The lines under the comment's rule, so a restore repeats them (plan P12).
-  notes            String[]
+  notes              String[]
   /// The `/refresh` or `/restore` that made it (a retried event finds it).
-  triggerCommentId String?          @map("trigger_comment_id")
+  triggerCommentId   String?          @map("trigger_comment_id")
   /// The comment's full text with its marker, posted as is (recovery).
-  body             String
+  body               String
   /// `PENDING_POST` or `POSTED`.
-  postState        String           @map("post_state")
-  commentId        String?          @map("comment_id")
-  commentUrl       String?          @map("comment_url")
+  postState          String           @map("post_state")
+  commentId          String?          @map("comment_id")
+  commentUrl         String?          @map("comment_url")
   /// The comment's creation time on GitHub (the `/approve` time check).
-  postedAt         DateTime?        @map("posted_at") @db.Timestamptz
+  postedAt           DateTime?        @map("posted_at") @db.Timestamptz
   /// A newer version replaced it, or (a Plan) its Spec was refreshed.
-  supersededAt     DateTime?        @map("superseded_at") @db.Timestamptz
+  supersededAt       DateTime?        @map("superseded_at") @db.Timestamptz
   /// From the deletion event, or when a command found the comment gone.
-  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz
-  deletedBy        String?          @map("deleted_by")
+  deletedAt          DateTime?        @map("deleted_at") @db.Timestamptz
+  deletedBy          String?          @map("deleted_by")
   /// Its document text when deleted (`redact()`ed); null when the bot missed the event.
-  deletedText      String?          @map("deleted_text")
+  deletedText        String?          @map("deleted_text")
   /// The text at `/approve` (`redact()`ed); the go-signal: the issue's title and description.
-  approvedText     String?          @map("approved_text")
-  approvedBy       String?          @map("approved_by")
-  approvedAt       DateTime?        @map("approved_at") @db.Timestamptz
+  approvedText       String?          @map("approved_text")
+  approvedBy         String?          @map("approved_by")
+  approvedAt         DateTime?        @map("approved_at") @db.Timestamptz
   /// The event and the comment that approved it (a retried event is recognized).
-  approveEventId   String?          @map("approve_event_id") @db.Uuid
-  approveCommentId String?          @map("approve_comment_id")
+  approveEventId     String?          @map("approve_event_id") @db.Uuid
+  approveCommentId   String?          @map("approve_comment_id")
   /// The base-branch commit at the approval.
-  approvedCommit   String?          @map("approved_commit")
+  approvedCommit     String?          @map("approved_commit")
+  /// Spec 14: the start of the range the approval compared and stored (`checkedCommit ?? commit` then); null for the
+  /// go-signal and for approvals stored before spec 14.
+  approvedFromCommit String?          @map("approved_from_commit")
   /// Changed since `checkedCommit` or `commit` and read by its calls (SP3).
-  staleFiles       String[]         @map("stale_files")
+  staleFiles         String[]         @map("stale_files")
   /// How many changed in all; null when not compared (same commit).
-  changedFiles     Int?             @map("changed_files")
+  changedFiles       Int?             @map("changed_files")
   /// Every changed path at the approval, up to GitHub's 300 (plan P33).
-  changedPaths     String[]         @map("changed_paths")
+  changedPaths       String[]         @map("changed_paths")
   /// False when the host cut the list; null when the comparison failed.
-  changedComplete  Boolean?         @map("changed_complete")
+  changedComplete    Boolean?         @map("changed_complete")
   /// Posted text → approved text (SPW14).
-  linesAdded       Int?             @map("lines_added")
-  linesRemoved     Int?             @map("lines_removed")
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  actions          DocumentAction[]
+  linesAdded         Int?             @map("lines_added")
+  linesRemoved       Int?             @map("lines_removed")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  actions            DocumentAction[]
 
   @@unique([runId, kind, triggerCommentId])
   @@index([runId, kind, version])
@@ -456,8 +462,8 @@ model DocumentAction {
   /// The document concerned, or the version a refresh or a restore made.
   documentId      String?       @map("document_id") @db.Uuid
   document        TaskDocument? @relation(fields: [documentId], references: [id])
-  /// `approve-refused`, `approve-hint`, `approve-warning`, `late-comment`, `refresh`, `refresh-refused`, `deleted`,
-  /// `restore`, `restore-refused`.
+  /// `approve-refused`, `approve-hint`, `approve-asked` (spec 14), `late-comment`, `refresh`, `refresh-refused`,
+  /// `deleted`, `restore`, `restore-refused`; `approve-warning` (spec 7, no longer written).
   action          String
   /// Per action, as the spec's table.
   result          String
@@ -473,6 +479,18 @@ model DocumentAction {
   /// `PENDING_POST` or `POSTED`; null without a reply.
   replyPostState  String?       @map("reply_post_state")
   replyCommentId  String?       @map("reply_comment_id")
+  /// Spec 14 (UAW9, plan UP2): the reply's URL and creation time on GitHub, recorded with `replyCommentId`.
+  replyCommentUrl String?       @map("reply_comment_url")
+  replyPostedAt   DateTime?     @map("reply_posted_at") @db.Timestamptz
+  /// Spec 14, `approve-asked`: the starting point and the commit now.
+  fromCommit      String?       @map("from_commit")
+  toCommit        String?       @map("to_commit")
+  /// Spec 14, `approve-asked`: every flagged file, `[{ path, readers: ['own' | 'spec'] }]`; empty when none.
+  files           Json?
+  /// Spec 14, `approve-asked`: how many paths changed in the range; null when not compared.
+  changedFiles    Int?          @map("changed_files")
+  /// Spec 14, `approve-asked`: false when GitHub cut the list; null when not compared.
+  filesComplete   Boolean?      @map("files_complete")
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   @@unique([action, sourceCommentId])

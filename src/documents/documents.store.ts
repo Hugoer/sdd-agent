@@ -1,7 +1,7 @@
 // Spec 7 "Owned tables": the only writer of `task_documents` and `document_actions`. Every transaction first checks
 // that this job still holds the issue's session lease (spec 5's assertHeld), so a job that lost it writes nothing.
 import { Injectable } from '@nestjs/common';
-import type { TaskStatus } from '../contracts/issue-provider.js';
+import type { CommentRef, TaskStatus } from '../contracts/issue-provider.js';
 import type {
   DocumentAction,
   Prisma,
@@ -12,12 +12,14 @@ import {
   SessionLeaseService,
   type HeldLease,
 } from '../workflow/session-lease.service.js';
+import type { FlaggedFile } from './commit-check.js';
 
 export type DocumentKind = 'spec' | 'plan' | 'go-signal';
 export type DocumentOrigin = 'written' | 'refreshed' | 'restored';
 export type DocumentActionName =
   | 'approve-refused'
   | 'approve-hint'
+  | 'approve-asked'
   | 'approve-warning'
   | 'late-comment'
   | 'refresh'
@@ -67,6 +69,15 @@ export interface ActionRecord {
   logIds?: string[];
   /** The reply with its marker; null when the answer is a version. */
   replyBody: string | null;
+  /** Spec 14, `approve-asked`: the starting point and the commit now. */
+  fromCommit?: string;
+  toCommit?: string;
+  /** Spec 14, `approve-asked`: every flagged file; empty for `not-compared` and `large-change`. */
+  files?: FlaggedFile[];
+  /** Spec 14, `approve-asked`: how many paths changed in the range; null when not compared. */
+  changedFiles?: number | null;
+  /** Spec 14, `approve-asked`: false when GitHub cut the list; null when not compared. */
+  filesComplete?: boolean | null;
 }
 
 /** Spec "Approving" step 4: what an approval stores (approved at PostgreSQL's clock). */
@@ -77,6 +88,8 @@ export interface ApprovalRecord {
   approveCommentId: string;
   /** The base-branch commit at the approval; null for the go-signal (it read no files). */
   approvedCommit: string | null;
+  /** Spec 14: where the stored range starts (`checkedCommit ?? commit` then); null for the go-signal. */
+  approvedFromCommit: string | null;
   /** Changed since `checkedCommit` or `commit` and read by its calls (SP3). */
   staleFiles: string[];
   /** How many changed in all; null when not compared (the same commit, or the comparison failed). */
@@ -186,6 +199,14 @@ export class DocumentsStore {
     });
   }
 
+  /** Spec 14: the version's newest question (`approve-asked`), or null. */
+  lastQuestion(documentId: string): Promise<DocumentAction | null> {
+    return this.prisma.documentAction.findFirst({
+      where: { documentId, action: 'approve-asked' },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   byId(id: string): Promise<TaskDocument | null> {
     return this.prisma.taskDocument.findUnique({ where: { id } });
   }
@@ -257,10 +278,11 @@ export class DocumentsStore {
       const version = write.version
         ? await createVersion(tx, lease, write.version)
         : null;
+      // Spec 14 (UAW3): a refresh that moves the starting point closes the version's question.
       if (write.checked)
         await tx.taskDocument.update({
           where: { id: write.checked.id },
-          data: { checkedCommit: write.checked.commit },
+          data: { checkedCommit: write.checked.commit, askedCommit: null },
         });
       const action = await tx.documentAction.update({
         where: { id: actionId },
@@ -350,8 +372,9 @@ export class DocumentsStore {
   }
 
   /**
-   * SPW11: a refresh found the document up to date at `commit`, which becomes its starting point; its `/refresh` row
-   * (with the reply, when this step answers) in the same transaction (plan P28).
+   * SPW11: a refresh found the document up to date at `commit`, which becomes its starting point (spec 14: its
+   * question, if any, is closed); its `/refresh` row (with the reply, when this step answers) in the same transaction
+   * (plan P28).
    */
   markUpToDate(
     lease: HeldLease,
@@ -362,7 +385,26 @@ export class DocumentsStore {
     return this.write(lease, async (tx) => {
       await tx.taskDocument.update({
         where: { id },
-        data: { checkedCommit: commit },
+        data: { checkedCommit: commit, askedCommit: null },
+      });
+      return tx.documentAction.create({ data: actionData(lease, action) });
+    });
+  }
+
+  /**
+   * Spec 14 "The question" (UAW9): the version's `asked_commit` and the `approve-asked` row with its reply, in one
+   * transaction, before the reply is posted.
+   */
+  ask(
+    lease: HeldLease,
+    documentId: string,
+    askedCommit: string,
+    action: ActionRecord,
+  ): Promise<DocumentAction> {
+    return this.write(lease, async (tx) => {
+      await tx.taskDocument.update({
+        where: { id: documentId },
+        data: { askedCommit },
       });
       return tx.documentAction.create({ data: actionData(lease, action) });
     });
@@ -378,16 +420,21 @@ export class DocumentsStore {
     );
   }
 
-  /** Tx2 of an answered action: its reply is on GitHub. */
+  /** Tx2 of an answered action: its reply is on GitHub (spec 14, UAW9: with its URL and creation time). */
   markReplyPosted(
     lease: HeldLease,
     id: string,
-    replyCommentId: string,
+    posted: CommentRef,
   ): Promise<DocumentAction> {
     return this.write(lease, (tx) =>
       tx.documentAction.update({
         where: { id },
-        data: { replyCommentId, replyPostState: 'POSTED' },
+        data: {
+          replyCommentId: posted.id,
+          replyCommentUrl: posted.url,
+          replyPostedAt: posted.createdAt,
+          replyPostState: 'POSTED',
+        },
       }),
     );
   }
@@ -405,8 +452,10 @@ export class DocumentsStore {
 
 /** An action's row: its task and event from the lease; its reply `PENDING_POST` when it has one. */
 function actionData(lease: HeldLease, record: ActionRecord) {
+  const { files, ...rest } = record;
   return {
-    ...record,
+    ...rest,
+    ...(files && { files: files as unknown as Prisma.InputJsonValue }),
     taskId: lease.taskId,
     eventId: lease.eventId,
     replyPostState: record.replyBody === null ? null : 'PENDING_POST',

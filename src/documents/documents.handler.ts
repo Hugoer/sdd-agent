@@ -217,7 +217,6 @@ export class DocumentsHandler implements StepHandler {
             ...common,
             run: { number: run.number },
             specVersion: spec?.version ?? 1,
-            warning: null,
           });
     const row = await this.store.insertVersion(
       lease,

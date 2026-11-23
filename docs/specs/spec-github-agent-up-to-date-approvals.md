@@ -4,7 +4,8 @@
 > and were confirmed by the developer; UAW1–UAW12 were decided while writing. A fresh-context review's fixes are
 > applied (marked "2026-11-23, review"). In the write-time interview of 2026-11-23 the developer confirmed UAW4 and
 > changed UAW5 (a large change asks too, with a setting); the other UAW decisions follow from rules already settled
-> and are reviewed with this spec.
+> and are reviewed with this spec. The plan's decisions UP1–UP4, UP13 and UP19–UP21 and two fixes to matrix `#H` are
+> applied (marked "plan UPn, 2026-11-23"; plan `docs/plans/spec-github-agent-up-to-date-approvals.md`, Task 0).
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -287,7 +288,9 @@ v1 up to date with `main`, or `/approve` again to approve Plan v1 as it is.
 (Every call reads the root `AGENTS.md`, so a change to it reads "`AGENTS.md`, which it and the approved Spec read".)
 
 - A step skill's file among them (UAW6): "… `main` changed `.github-agent/skills/spec/SKILL.md`, which it read (…).
-  Comment `/refresh` to bring it up to date with `main` and its `spec` skill, or …".
+  Comment `/refresh` to bring it up to date with `main` and its `spec` skill, or …". A Plan names the skill each such
+  file belongs to (plan UP4, 2026-11-23): "… bring Spec v1 and Plan v1 up to date with `main` and the `plan` skill"
+  (or "the `spec` skill", or "the `spec` and `plan` skills" when both changed).
 - The starting point was a question (UA2): "since [the bot asked](…) (`b71e4d8`), `main` changed
   `src/index.test.ts`, which Spec v1 read (…)". It was a refresh (SPW11): "since Spec v1 was last checked
   (`c3d9a10`)".
@@ -317,6 +320,22 @@ against today's `main`, or `/approve` again to approve it as it is.
   read."
 - "since Spec v1 was written" follows the starting point as above ("since [the bot asked](…)", "since Spec v1 was
   last checked").
+
+A Plan's `not-compared` and `large-change` forms name both readers and both documents, as its `stale` text does
+(plan UP3, 2026-11-23):
+
+```markdown
+[Your `/approve`](…) didn't count yet: the bot couldn't compare `9e1d0c2`, where Plan v1 was written, with `main`
+(that commit is no longer on GitHub, e.g. after a force-push), so it can't tell whether files it or the approved Spec
+read changed. Comment `/refresh` to check Spec v1 and Plan v1 against today's `main`, or `/approve` again to approve
+Plan v1 as it is.
+```
+
+```markdown
+[Your `/approve`](…) didn't count yet: since Plan v1 was written (`9e1d0c2`), 42 files changed on `main`
+([compare](…)), none of them one it or the approved Spec read. A change this size may still affect them. Comment
+`/refresh` to check Spec v1 and Plan v1 against today's `main`, or `/approve` again to approve Plan v1 as it is.
+```
 
 **Written before the question** (gate verdict `before-question`, UA5; `document_actions` `approve-refused`, result
 `before-question`, spec 7's refusal pattern):
@@ -390,11 +409,13 @@ sentence with "may have changed" in place of "changed"}
 | `changedFiles` other errors, `resolveRef` errors | as spec 7: a temporary error is retried by the worker, a 401 or 403 is a failure (overview row 28) |
 | The full-range compare of an `/approve` that counts fails with 404 or 422 | the approval counts (the decision compare from the question's commit passed), stored as not compared (`changed_complete` null), as spec 7 |
 | `/retry` of the `workspace` stop | no question: the approval is recorded (UAW8) |
+| A retried `/approve` that stored its question finds the run stopped (another event failed meanwhile) or ended | its stored question is posted (if it isn't yet), whatever reply the run's state would get otherwise; the event ends `IGNORED` `approve-asked`; the `/approve` gets no second reply (UAW2; plan UP21, 2026-11-23) |
 
 ### Logging
 
-One line per question: "Spec v1: /approve asked (stale, 1 file read changed since 4f2c1ab)" and "(not-compared)",
-"(large-change, 42 files)"; `before-question` as spec 7's refusals ("/approve refused (before-question)").
+One line per question, in spec 7's form (plan UP19, 2026-11-23): `#43 run 1 spec: v1 /approve asked (stale, 1 file
+read changed since 4f2c1ab)`, `(not-compared)`, `(large-change, 42 files)`; `before-question` as spec 7's refusals:
+`#43 run 1 documents: /approve refused (before-question)`.
 
 ## Contracts
 
@@ -426,8 +447,9 @@ type ApprovalResult =
 - The `{ last }` option of `approve()` goes (it chose the warning reply).
 - A new router ignore reason `approve-asked`; `StepOutcome` `APPROVE_ASKED` (`IGNORED`, `approve-asked`).
 - No `RepoProvider` change.
-- `src/config/env.schema.ts`: `APPROVAL_LARGE_CHANGE_FILES`, `z.coerce.number().int().min(15).max(150).default(15)`;
-  a value outside stops the app at start (spec 1's Zod check).
+- `src/config/env.schema.ts`: `APPROVAL_LARGE_CHANGE_FILES`, `integerFromTo(15, 150).default(15)` (spec 6's helper
+  for integer settings; plan UP13, 2026-11-23); a value outside stops the app at start (spec 1's Zod check): "-
+  APPROVAL_LARGE_CHANGE_FILES: must be an integer from 15 to 150".
 
 ## Owned tables (changes)
 
@@ -451,6 +473,7 @@ Migration `prisma/migrations/<ts>_up_to_date_approvals`. Writes only through `Do
 | `changedFiles` | int, nullable | `approve-asked`: how many paths changed in the range (300 with `filesComplete` false: more than 300); null when not compared |
 | `filesComplete` | bool, nullable | `approve-asked`: false when GitHub cut the list; null when not compared |
 | `replyPostedAt` | timestamptz, nullable | the reply's creation time on GitHub, recorded with `replyCommentId` (UAW9); written for every reply from now on, read for `approve-asked` (UA5) |
+| `replyCommentUrl` | text, nullable | the reply's URL, recorded with `replyCommentId` and `replyPostedAt`; the `before-question` reply, a second question and the `not-compared` text link the bot's last question with it (plan UP2, 2026-11-23) |
 
 ## Usage data (UA7)
 
@@ -546,6 +569,9 @@ Nothing new in `workflow.json`.
   Spec and a Plan: the stopped reply while the run stops at `workspace`, until spec 8).
 - **A question, then the document is deleted:** an `/approve` gets spec 7's `deleted` reply (spec 7's verdicts come
   first, UAW2).
+- **A question, then the document deleted and restored:** the restored version starts fresh, as spec 7's restore
+  does (a new row at the original's commit, no `checked_commit`, no `asked_commit`): an `/approve` compares from
+  where the original was written and gets the same question again; one more `/approve` counts (plan UP1, 2026-11-23).
 - **A question, then people edit the document:** an `/approve` that counts approves the text as it reads then.
 - **A question on the Plan, then `/refresh` changes the Spec:** Spec v2, `spec-review`, the Plan no longer counts
   (spec 7); the Plan's question goes with it.
@@ -639,19 +665,22 @@ with `main` unchanged)
 
 **Can't tell** (`#H`, `full-sdd`, Spec v1 waiting)
 - [ ] Set the Spec's `commit` to an unknown SHA (`UPDATE task_documents SET commit = repeat('0', 40) …`),
-  `/approve` → ONE "couldn't compare `0000000`, the commit Spec v1 read" question, no compare link; `result`
-  `not-compared`; `/approve` again → Plan v1; the approval's `changed_complete` is empty; the Plan's prompt has no
-  "files changed" paragraph.
+  `/approve` → ONE "couldn't compare `0000000`, where Spec v1 was written, with `main`" question, no compare link;
+  `result` `not-compared`; `/approve` again → Plan v1; the approval's `changed_complete` is empty; the Plan's prompt
+  has the "couldn't list the files changed" paragraph (UAW3), with no list (2026-11-23, plan Task 0: the row had
+  "the commit Spec v1 read" and "no 'files changed' paragraph").
 - [ ] Plan v1 waiting: one commit adding 16 small files under `bulk/` that no document read (Git Data API),
-  `/approve` → ONE `large-change` question "16 files changed on `main` …, none of them one it read"; `changed_files`
+  `/approve` → ONE `large-change` question "16 files changed on `main` …, none of them one it or the approved Spec
+  read" (plan UP3, 2026-11-23); `changed_files`
   16; `/approve` again → the `workspace` stop. The files are removed in one commit at the end. (More than 300
   files: the integration tests.)
 - [ ] (Config, signed requests are not needed) start the app with `APPROVAL_LARGE_CHANGE_FILES=14`, then `=151` → it
   doesn't start, the log names the setting and its range; unset → 15.
 
 **Invariants** (`node scripts/up-to-date-approvals-invariants.mjs <issues>`; scoped to rows stored since spec 14 went
-live: the `finished_at` of its migration in `_prisma_migrations`; test once that it can fail, e.g. with a wrong
-issue list)
+live: the `finished_at` of its migration in `_prisma_migrations`; invariants 2 and 3 read only the given issues'
+rows, 1 and 4 every row since the migration, since the dev bot runs spec 7's approval code between the migration and
+the question's build (plan UP20, 2026-11-23); test once that it can fail, e.g. with a wrong issue list)
 - [ ] Every `approve-asked` row answers an `/approve` that approved nothing (no `task_documents.approve_comment_id`
   equals its `source_comment_id`) and got no other reply, and its reply was posted exactly once.
 - [ ] Every Spec or Plan approved since spec 14 went live with `stale_files` not empty, `changed_files` above

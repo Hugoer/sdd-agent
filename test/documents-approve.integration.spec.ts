@@ -246,6 +246,7 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
       approvedBy: HUMAN,
       approveCommentId: '4101',
       approvedCommit: spec.commit,
+      approvedFromCommit: spec.commit,
       linesAdded: 2,
       linesRemoved: 1,
       changedFiles: null,
@@ -277,6 +278,7 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
     t.repo.seedFile('main', 'src/t43-read.ts', 'export const a = 1;\n');
     t.repo.seedFile('main', 'src/t43-other.ts', 'export const b = 1;\n');
     await specWritten(t, 43, { reads: ['src/t43-read.ts'] });
+    const written = (await specRow()).commit;
     t.repo.seedFile('main', 'src/t43-read.ts', 'export const a = 2;\n');
     t.repo.seedFile('main', 'src/t43-other.ts', 'export const b = 2;\n');
     t.models.reply({ answer: PLAN_TEXT });
@@ -289,6 +291,7 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
       changedFiles: 2,
       changedComplete: true,
       approvedCommit: await t.repo.resolveRef('main'),
+      approvedFromCommit: written,
     });
     expect(compares()).toHaveLength(1);
     expect(logs).toContain(

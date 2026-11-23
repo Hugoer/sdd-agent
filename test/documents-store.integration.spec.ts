@@ -276,9 +276,17 @@ describe('DocumentsStore (PostgreSQL)', () => {
       replyPostState: 'PENDING_POST',
       replyCommentId: null,
     });
-    expect(await store.markReplyPosted(lease, record.id, '901')).toMatchObject({
+    expect(
+      await store.markReplyPosted(lease, record.id, {
+        id: '901',
+        url: 'https://github.com/o/r/issues/12#issuecomment-901',
+        createdAt: new Date('2026-11-22T10:01:00Z'),
+      }),
+    ).toMatchObject({
       replyPostState: 'POSTED',
       replyCommentId: '901',
+      replyCommentUrl: 'https://github.com/o/r/issues/12#issuecomment-901',
+      replyPostedAt: new Date('2026-11-22T10:01:00Z'),
     });
 
     const refresh = await store.insertAction(
@@ -311,6 +319,147 @@ describe('DocumentsStore (PostgreSQL)', () => {
       lease,
       action({ action: 'approve-hint', result: 'hint' }),
     );
+  });
+
+  describe('the question (spec 14)', () => {
+    const B1 = 'b71e4d80000000000000000000000000000000b1';
+    const B2 = 'b71e4d80000000000000000000000000000000b2';
+    const question = (
+      documentId: string,
+      data: Partial<ActionRecord> = {},
+    ): ActionRecord =>
+      action({
+        documentId,
+        action: 'approve-asked',
+        result: 'stale',
+        fromCommit: '4f2c1ab0000000000000000000000000000000aa',
+        toCommit: B1,
+        files: [{ path: 'src/index.ts', readers: ['own'] }],
+        changedFiles: 2,
+        filesComplete: true,
+        replyBody: '<!-- sdd-agent:approve-asked:501 -->\nquestion',
+        ...data,
+      });
+    const askedCommit = async (id: string) =>
+      (await prisma.taskDocument.findUniqueOrThrow({ where: { id } }))
+        .askedCommit;
+
+    it('ask stores asked_commit and the approve-asked row in one transaction; lastQuestion answers the newest', async () => {
+      const spec1 = version('spec', 1);
+      await store.insertVersion(lease, spec1);
+      expect(await store.lastQuestion(spec1.id)).toBeNull();
+      const first = question(spec1.id);
+
+      const row = await store.ask(lease, spec1.id, B1, first);
+
+      expect(row).toMatchObject({
+        ...first,
+        replyPostState: 'PENDING_POST',
+        replyPostedAt: null,
+      });
+      expect(await askedCommit(spec1.id)).toBe(B1);
+      expect((await store.lastQuestion(spec1.id))?.id).toBe(first.id);
+
+      const second = question(spec1.id, {
+        sourceCommentId: '502',
+        fromCommit: B1,
+        toCommit: B2,
+      });
+      await store.ask(lease, spec1.id, B2, second);
+      expect(await askedCommit(spec1.id)).toBe(B2);
+      expect((await store.lastQuestion(spec1.id))?.id).toBe(second.id);
+    });
+
+    it('a not-compared question stores no files, no counts', async () => {
+      const spec1 = version('spec', 1);
+      await store.insertVersion(lease, spec1);
+      const record = question(spec1.id, {
+        result: 'not-compared',
+        files: [],
+        changedFiles: null,
+        filesComplete: null,
+      });
+
+      expect(await store.ask(lease, spec1.id, B1, record)).toMatchObject({
+        files: [],
+        changedFiles: null,
+        filesComplete: null,
+      });
+    });
+
+    it('writes neither without the lease; a second question for the same comment is refused, asked_commit unchanged', async () => {
+      const spec1 = version('spec', 1);
+      await store.insertVersion(lease, spec1);
+
+      await expect(
+        store.ask(lost(), spec1.id, B1, question(spec1.id)),
+      ).rejects.toBeInstanceOf(LeaseLostError);
+      expect(await askedCommit(spec1.id)).toBeNull();
+      expect(await prisma.documentAction.count()).toBe(0);
+
+      await store.ask(lease, spec1.id, B1, question(spec1.id));
+      await expect(
+        store.ask(lease, spec1.id, B2, question(spec1.id, { toCommit: B2 })),
+      ).rejects.toMatchObject({ code: 'P2002' });
+      expect(await askedCommit(spec1.id)).toBe(B1);
+    });
+
+    it('a refresh that moves the starting point clears asked_commit (markUpToDate, finishRefresh with checked)', async () => {
+      const spec1 = version('spec', 1);
+      await store.insertVersion(lease, spec1);
+      await store.ask(lease, spec1.id, B1, question(spec1.id));
+
+      await store.markUpToDate(
+        lease,
+        spec1.id,
+        B2,
+        action({
+          documentId: spec1.id,
+          action: 'refresh',
+          result: 'up-to-date',
+          sourceCommentId: '777',
+        }),
+      );
+      expect(
+        await prisma.taskDocument.findUniqueOrThrow({
+          where: { id: spec1.id },
+        }),
+      ).toMatchObject({ checkedCommit: B2, askedCommit: null });
+
+      const plan1 = version('plan', 1, { basedOnId: spec1.id });
+      await store.insertVersion(lease, plan1);
+      await store.ask(
+        lease,
+        plan1.id,
+        B1,
+        question(plan1.id, { sourceCommentId: '503' }),
+      );
+      const refresh = await store.insertAction(
+        lease,
+        action({
+          action: 'refresh',
+          result: 'pending',
+          sourceCommentId: '778',
+          replyBody: null,
+        }),
+      );
+      await store.finishRefresh(
+        lease,
+        refresh.id,
+        {
+          result: 'up-to-date',
+          documentId: plan1.id,
+          replyBody: 'both up to date',
+          logIds: [],
+        },
+        { checked: { id: plan1.id, commit: B2 } },
+      );
+      expect(
+        await prisma.taskDocument.findUniqueOrThrow({
+          where: { id: plan1.id },
+        }),
+      ).toMatchObject({ checkedCommit: B2, askedCommit: null });
+    });
   });
 
   it('writes nothing without the lease', async () => {

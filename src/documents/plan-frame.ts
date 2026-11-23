@@ -5,7 +5,7 @@ import type { Block, Turn } from '../llm/llm-call.js';
 
 /** The files changed since the Spec's commit, as the Spec's approval stored them (plan P33). */
 export interface PlanChanges {
-  /** The commit the approval compared from (the Spec's `checkedCommit` or `commit`). */
+  /** The commit the approval compared from (spec 14: its `approved_from_commit`). */
   specCommit: string;
   paths: string[];
   /** The ones the Spec's calls read: marked `*`. */
@@ -14,11 +14,17 @@ export interface PlanChanges {
   complete: boolean;
 }
 
+/** Spec 14 (UAW3): the Spec's approval couldn't compare its commit with the base branch. */
+export interface PlanNotCompared {
+  specCommit: string;
+  notCompared: true;
+}
+
 export interface PlanFrameValues {
   /** The base-branch commit the step reads (`StepSetup.commit`). */
   commit: string;
-  /** Null when nothing changed at the approval (or it couldn't compare): no paragraph. */
-  changes: PlanChanges | null;
+  /** Null when nothing changed at the approval: no paragraph. */
+  changes: PlanChanges | PlanNotCompared | null;
 }
 
 export function planFrame({ commit, changes: all }: PlanFrameValues): string {
@@ -41,12 +47,24 @@ comments.`;
  * Plan P41: the model never sees the names of the paths its read tools hide (P10: `.github-agent/`, other tools'
  * instruction files); none left → no paragraph. The stored list and the people-facing lines keep them.
  */
-function shownChanges(changes: PlanChanges | null): PlanChanges | null {
-  const paths = changes?.paths.filter((path) => !isHiddenPath(path)) ?? [];
-  return changes && paths.length > 0 ? { ...changes, paths } : null;
+function shownChanges(
+  changes: PlanChanges | PlanNotCompared | null,
+): PlanChanges | PlanNotCompared | null {
+  if (changes === null || 'notCompared' in changes) return changes;
+  const paths = changes.paths.filter((path) => !isHiddenPath(path));
+  return paths.length > 0 ? { ...changes, paths } : null;
 }
 
-function changedParagraph(changes: PlanChanges, commit: string): string {
+function changedParagraph(
+  changes: PlanChanges | PlanNotCompared,
+  commit: string,
+): string {
+  if ('notCompared' in changes)
+    return (
+      `The Spec was written at commit ${changes.specCommit}; the bot couldn't list the files changed on the base ` +
+      `branch since. Where the Spec's facts about the code no longer hold, follow the code at ${commit}; what to ` +
+      'build still comes from the Spec.'
+    );
   const paths = changes.paths
     .map((path) => (changes.read.includes(path) ? `${path} *` : path))
     .join(', ');

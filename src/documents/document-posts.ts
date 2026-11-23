@@ -85,7 +85,7 @@ export class DocumentPosts {
     const posted =
       (await this.issues.findCommentByMarker(ref, markerOf(row.replyBody))) ??
       (await this.issues.postComment(ref, row.replyBody));
-    await this.store.markReplyPosted(context.lease, row.id, posted.id);
+    await this.store.markReplyPosted(context.lease, row.id, posted);
   }
 
   /**

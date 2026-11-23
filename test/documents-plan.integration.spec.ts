@@ -132,7 +132,7 @@ describe('The Plan (spec 7, full-sdd)', () => {
     );
   });
 
-  it('a file the Spec read changed before its approval → the Plan’s ⚠️ line with the compare link, and the prompt’s paragraph with the Spec’s reads marked *', async () => {
+  it('a file the Spec read changed before its approval → NO ⚠️ line (spec 14, UA4); the prompt’s paragraph from `approved_from_commit`, the Spec’s reads marked *', async () => {
     t.repo.seedFile('main', 'src/t62-read.ts', 'export const a = 1;\n');
     t.repo.seedFile('main', 'src/t62-other.ts', 'export const b = 1;\n');
     const issue = await specWritten(t, 62, { reads: ['src/t62-read.ts'] });
@@ -145,11 +145,11 @@ describe('The Plan (spec 7, full-sdd)', () => {
     await deliver(t, commentNow(62, 6201, '/approve'));
 
     const [plan] = await rows('plan');
-    expect(plan.body).toContain(
-      `⚠️ Since the Spec was written (\`${spec.commit!.slice(0, 7)}\`), \`main\` changed \`src/t62-read.ts\`, which ` +
-        `it read ([compare](https://github.com/test-owner/test-repo/compare/${spec.commit}...${now})). This Plan ` +
-        'reads the current code. If the change affects the Spec, comment `/refresh`.',
-    );
+    expect(plan.body).not.toContain('⚠️');
+    expect((await rows('spec'))[0]).toMatchObject({
+      approvedFromCommit: spec.commit,
+      approvedCommit: now,
+    });
     const system = planPrompt()[0].text.replaceAll('\n', ' ');
     expect(system).toContain(
       `The Spec was written at commit ${spec.commit}. Since then these files changed on the base branch, * ` +
@@ -160,7 +160,7 @@ describe('The Plan (spec 7, full-sdd)', () => {
     t.repo.removeFile('main', 'src/t62-other.ts');
   });
 
-  it('the Spec’s approval couldn’t compare → the not-compared line; no paragraph in the prompt', async () => {
+  it('the Spec’s approval couldn’t compare → NO ⚠️ line; the prompt’s "couldn’t list" paragraph (spec 14, UAW3)', async () => {
     await specWritten(t, 63);
     const [spec] = await rows('spec');
     t.repo.seedFile('main', 'src/t63.ts', 'x');
@@ -174,12 +174,10 @@ describe('The Plan (spec 7, full-sdd)', () => {
     await deliver(t, commentNow(63, 6301, '/approve'));
 
     const [plan] = await rows('plan');
-    expect(plan.body).toContain(
-      `⚠️ The bot couldn't compare \`${spec.commit!.slice(0, 7)}\` with \`main\`, so it can't tell whether the ` +
-        'Spec is out of date.',
-    );
-    expect(planPrompt()[0].text).not.toContain(
-      'The Spec was written at commit',
+    expect(plan.body).not.toContain('⚠️');
+    expect(planPrompt()[0].text.replaceAll('\n', ' ')).toContain(
+      `The Spec was written at commit ${spec.commit}; the bot couldn't list the files changed on the base branch ` +
+        'since.',
     );
     t.repo.removeFile('main', 'src/t63.ts');
   });
@@ -493,6 +491,7 @@ describe('The go-signal (spec 7, code-only, SPW6)', () => {
     expect((await documentRows(t))[0]).toMatchObject({
       approvedBy: HUMAN,
       approvedCommit: null,
+      approvedFromCommit: null,
       linesAdded: null,
     });
     expect((await documentRows(t))[0].approvedText).toMatch(

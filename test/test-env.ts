@@ -19,4 +19,6 @@ export const testEnv = {
   // Spec 11: the defaults (a limit suite sets its own before boot).
   SKILL_DISCOVERY_MAX_LOADS: '10',
   SKILL_DISCOVERY_MAX_BYTES: '204800',
+  // Spec 14: the default.
+  APPROVAL_LARGE_CHANGE_FILES: '15',
 };

@@ -87,6 +87,7 @@ export class GoSignalHandler implements StepHandler {
       approvedBy: input.sender,
       approveCommentId: input.comment.id,
       approvedCommit: null,
+      approvedFromCommit: null,
       staleFiles: [],
       changedFiles: null,
       changedPaths: [],

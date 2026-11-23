@@ -115,8 +115,6 @@ interface CommentParts {
   header: string;
   /** Under the header: a refresh's "What changed" or a restore's line; none for a written version. */
   originLines: string[];
-  /** Lines of the header after the origin's (the Plan's ⚠️ line). */
-  warningLines?: string[];
   approveLine: string;
 }
 
@@ -134,7 +132,6 @@ function documentComment(
     parts.header,
     '',
     ...(parts.originLines.length > 0 ? [...parts.originLines, ''] : []),
-    ...(parts.warningLines?.length ? [...parts.warningLines, ''] : []),
     parts.approveLine,
     '',
     DOCUMENT_START,
@@ -210,18 +207,6 @@ function originLines(
 export const planMarker = (versionId: string): string =>
   marker(`plan:${versionId}`);
 
-/** The Spec's approval, as the Plan's header warns about it (SP3). */
-export type SpecWarning =
-  | {
-      kind: 'stale';
-      /** The commit the approval compared from. */
-      from: string;
-      files: string[];
-      complete: boolean;
-      compareUrl: string;
-    }
-  | { kind: 'not-compared'; from: string };
-
 export interface PlanCommentInput {
   versionId: string;
   version: number;
@@ -230,8 +215,6 @@ export interface PlanCommentInput {
   commit: string;
   /** The approved Spec version it is written from. */
   specVersion: number;
-  /** Null when the Spec's approval flagged nothing and compared (a refreshed or restored Plan: always null). */
-  warning: SpecWarning | null;
   text: string;
   notes: string[];
   /** How this version came to be; written when left out. */
@@ -240,9 +223,8 @@ export interface PlanCommentInput {
 
 /**
  * The Plan comment (spec "The document comment"): its marker, the header naming the approved Spec it comes from,
- * a refresh's changes (the approved Spec still up to date) or a restore's line, the ⚠️ line when the Spec's approval
- * flagged files or couldn't compare, how to change and approve it, the document between its markers, a refresh's
- * diff, the notes.
+ * a refresh's changes (the approved Spec still up to date) or a restore's line, how to change and approve it, the
+ * document between its markers, a refresh's diff, the notes. Spec 14 (UA4): no ⚠️ line; an approval asks first.
  */
 export function planComment(input: PlanCommentInput): string {
   const origin = input.origin ?? WRITTEN;
@@ -256,26 +238,11 @@ export function planComment(input: PlanCommentInput): string {
       origin,
     ),
     originLines: originLines(origin, input.specVersion),
-    warningLines: input.warning
-      ? [specWarningLine(input.warning, input.base)]
-      : [],
     approveLine:
       "To change it, edit this comment. When it's right, an Approver (Write access) comments `/approve` and the bot " +
       `starts coding from the approved Spec and this Plan as it reads then. \`/refresh\` checks both against today's ` +
       `\`${input.base}\`.`,
   });
-}
-
-/** SP3: the Plan header's warning about the approved Spec (5 files at most, "possibly more", or not compared). */
-function specWarningLine(warning: SpecWarning, base: string): string {
-  const from = `\`${warning.from.slice(0, 7)}\``;
-  if (warning.kind === 'not-compared')
-    return `⚠️ The bot couldn't compare ${from} with \`${base}\`, so it can't tell whether the Spec is out of date.`;
-  return (
-    `⚠️ Since the Spec was written (${from}), \`${base}\` changed ${namedFiles(warning.files, warning.complete)}, ` +
-    `which it read ([compare](${warning.compareUrl})). This Plan reads the current code. If the change affects the ` +
-    'Spec, comment `/refresh`.'
-  );
 }
 
 /** "`main` @ `4f2c1ab`": the base branch and the commit's first 7 characters. */

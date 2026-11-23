@@ -91,6 +91,8 @@ export const envSchema = z.object({
   // Spec 11 (SD6): files the model may ask for, and bytes it may load on demand, per call.
   SKILL_DISCOVERY_MAX_LOADS: integerFromTo(1, 50).default(10),
   SKILL_DISCOVERY_MAX_BYTES: integerFromTo(1024, 1_048_576).default(204_800),
+  // Spec 14 (UAW5): an `/approve` asks first when more files than this changed on the base branch, none of them read.
+  APPROVAL_LARGE_CHANGE_FILES: integerFromTo(15, 150).default(15),
   LANGSMITH_TRACING: tracingOff,
   LANGSMITH_TRACING_V2: tracingOff,
   LANGCHAIN_TRACING: tracingOff,
