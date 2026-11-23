@@ -26,6 +26,7 @@ import {
   runAgain,
   specWritten,
   withMarker,
+  yours,
 } from './documents-helpers.js';
 import { HUMAN } from './fixtures/github/payloads.js';
 import { captureLogs } from './grill-helpers.js';
@@ -74,7 +75,7 @@ describe('/approve: the gate and the refusals (spec 7)', () => {
     expect(replies(issue, 3101)).toEqual([
       expect.objectContaining({
         body:
-          `${approveRefusedMarker('3101')}\nThis \`/approve\` was written before Spec v1 was posted, so it ` +
+          `${approveRefusedMarker('3101')}\n${yours('`/approve`', 31, 3101)} was written before Spec v1 was posted, so it ` +
           `didn't count. Read [Spec v1](${spec.commentUrl}), then comment \`/approve\` again.`,
       }),
     ]);
@@ -115,7 +116,7 @@ describe('/approve: the gate and the refusals (spec 7)', () => {
     await deliver(t, commentNow(32, 3201, '/approve'));
 
     expect(replies(issue, 3201)[0].body).toContain(
-      "Spec v1's comment has no text left between its markers, so there's nothing to approve.",
+      `${yours('`/approve`', 32, 3201)} has nothing to approve: Spec v1's comment has no text left between its markers.`,
     );
     expect(await actionRows(t)).toMatchObject([{ result: 'empty' }]);
   });
@@ -127,7 +128,8 @@ describe('/approve: the gate and the refusals (spec 7)', () => {
     await deliver(t, commentNow(33, 3301, '/approve'));
 
     expect(replies(issue, 3301)[0].body).toContain(
-      "Spec v1 was deleted, so there's nothing to approve. Comment `/restore` to get it back, or remove the " +
+      `${yours('`/approve`', 33, 3301)} has nothing to approve: Spec v1 was deleted. Comment \`/restore\` to get it ` +
+        'back, or remove the ' +
         '`workflow: full-sdd` label and add it again to start over.',
     );
     const spec = await specRow();
@@ -145,7 +147,7 @@ describe('/approve: the gate and the refusals (spec 7)', () => {
     await deliver(t, commentNow(34, 3401, '/approve'));
 
     expect(replies(issue, 3401)[0].body).toContain(
-      'Spec v1 is already approved (by `carol`), so this `/approve` changes nothing.',
+      `${yours('`/approve`', 34, 3401)} changes nothing: Spec v1 is already approved (by \`carol\`).`,
     );
     expect(await actionRows(t)).toMatchObject([{ result: 'already-approved' }]);
   });

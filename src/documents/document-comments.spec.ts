@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  approveHintReply,
+  approveNothingWaitsReply,
   approveRefusedReply,
   approveWarningReply,
   goSignalComment,
+  lateCommentReply,
   planComment,
   planMarker,
   specComment,
@@ -86,6 +89,10 @@ describe('specComment (spec "The document comment")', () => {
   });
 });
 
+/** The answered comment's own link (plan P39). */
+const LINK = 'https://github.com/o/r/issues/12#issuecomment-';
+const answered = (id: string) => ({ id, url: `${LINK}${id}` });
+
 describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
   const SPEC_V1 = {
     kind: 'spec' as const,
@@ -96,34 +103,43 @@ describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
 
   it('already-approved names who approved it', () => {
     expect(
-      approveRefusedReply('501', 'already-approved', SPEC_V1, 'full-sdd'),
+      approveRefusedReply(
+        answered('501'),
+        'already-approved',
+        SPEC_V1,
+        'full-sdd',
+      ),
     ).toBe(
       '<!-- sdd-agent:approve-refused:501 -->\n' +
-        'Spec v1 is already approved (by `bob`), so this `/approve` changes nothing.',
+        `[Your \`/approve\`](${LINK}501) changes nothing: Spec v1 is already approved (by \`bob\`).`,
     );
   });
 
   it('before-document links the waiting version', () => {
     expect(
       approveRefusedReply(
-        '502',
+        answered('502'),
         'before-document',
         { ...SPEC_V1, version: 2, approvedBy: null },
         'full-sdd',
       ).split('\n')[1],
     ).toBe(
-      "This `/approve` was written before Spec v2 was posted, so it didn't count. Read " +
+      `[Your \`/approve\`](${LINK}502) was written before Spec v2 was posted, so it didn't count. Read ` +
         '[Spec v2](https://github.com/o/r/issues/12#issuecomment-9), then comment `/approve` again.',
     );
   });
 
   it('deleted points to /restore and to the lane label', () => {
     expect(
-      approveRefusedReply('503', 'deleted', SPEC_V1, 'spec-code').split(
-        '\n',
-      )[1],
+      approveRefusedReply(
+        answered('503'),
+        'deleted',
+        SPEC_V1,
+        'spec-code',
+      ).split('\n')[1],
     ).toBe(
-      "Spec v1 was deleted, so there's nothing to approve. Comment `/restore` to get it back, or remove the " +
+      `[Your \`/approve\`](${LINK}503) has nothing to approve: Spec v1 was deleted. Comment \`/restore\` to get it ` +
+        'back, or remove the ' +
         '`workflow: spec-code` label and add it again to start over.',
     );
   });
@@ -131,27 +147,92 @@ describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
   it('empty asks to put the document back', () => {
     expect(
       approveRefusedReply(
-        '504',
+        answered('504'),
         'empty',
         { ...SPEC_V1, kind: 'plan' },
         'full-sdd',
       ).split('\n')[1],
     ).toBe(
-      "Plan v1's comment has no text left between its markers, so there's nothing to approve. Edit the comment " +
-        'to put the Plan back, then comment `/approve`.',
+      `[Your \`/approve\`](${LINK}504) has nothing to approve: Plan v1's comment has no text left between its ` +
+        'markers. Edit the comment to put the Plan back, then comment `/approve`.',
     );
   });
 
   it('the go-signal is named by its comment', () => {
     expect(
       approveRefusedReply(
-        '505',
+        answered('505'),
         'already-approved',
         { kind: 'go-signal', version: 1, url: null, approvedBy: 'bob' },
         'code-only',
       ).split('\n')[1],
     ).toBe(
-      'The **Ready to code** comment is already approved (by `bob`), so this `/approve` changes nothing.',
+      `[Your \`/approve\`](${LINK}505) changes nothing: the **Ready to code** comment is already approved (by \`bob\`).`,
+    );
+  });
+
+  it('P39: an event with no link (spec 2\'s signed test requests) → "Your `/approve`" as plain text', () => {
+    expect(
+      approveRefusedReply(
+        { id: '506' },
+        'already-approved',
+        SPEC_V1,
+        'full-sdd',
+      ).split('\n')[1],
+    ).toBe(
+      'Your `/approve` changes nothing: Spec v1 is already approved (by `bob`).',
+    );
+  });
+});
+
+describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => {
+  it.each([
+    [
+      'no-run',
+      null,
+      'has nothing to approve: this issue has no run. To start one, add a `workflow:` label.',
+    ],
+    ['starting', 2, 'has nothing to approve yet: run 2 is just starting.'],
+    ['executing', 2, 'has nothing to approve: run 2 is writing the code.'],
+    [
+      'in-review',
+      2,
+      "has nothing to approve here: run 2's pull request is open; review it there.",
+    ],
+    [
+      'stopped',
+      2,
+      'has nothing to approve now: run 2 is stopped. See the stop comment for how to continue.',
+    ],
+  ] as const)(
+    '%s → its text, after the linked `/approve`',
+    (situation, run, text) => {
+      expect(approveNothingWaitsReply(answered('601'), situation, run)).toBe(
+        `<!-- sdd-agent:approve-refused:601 -->\n[Your \`/approve\`](${LINK}601) ${text}`,
+      );
+    },
+  );
+});
+
+describe('approveHintReply and lateCommentReply (P39: the answered comment linked)', () => {
+  it('the hint links the near miss', () => {
+    expect(approveHintReply('s-1', answered('701'))).toBe(
+      '<!-- sdd-agent:approve-hint:s-1 -->\n' +
+        `[Your comment](${LINK}701) isn't an approval: to approve, comment exactly \`/approve\`, with nothing else.`,
+    );
+  });
+
+  it('the late comment names its author and links the comment', () => {
+    expect(lateCommentReply(answered('702'), 'alice')).toBe(
+      '<!-- sdd-agent:late-comment:702 -->\n' +
+        `\`alice\`, [your comment](${LINK}702) was written while the bot was writing the Spec, so the Spec doesn't ` +
+        'include it. If it changes the Spec, someone with Write access can edit the Spec comment before `/approve`.',
+    );
+  });
+
+  it('no link on the event → plain text', () => {
+    expect(lateCommentReply({ id: '703' }, 'alice').split('\n')[1]).toMatch(
+      /^`alice`, your comment was written while/,
     );
   });
 });
@@ -248,6 +329,7 @@ describe('approveWarningReply (SPW13, plan P4)', () => {
   const URL = 'https://github.com/o/r/compare/a...b';
   const plan = {
     versionId: 'p-1',
+    approve: { url: `${LINK}801` },
     document: { kind: 'plan' as const, version: 1 },
     lane: 'full-sdd' as const,
     base: 'main',
@@ -267,7 +349,8 @@ describe('approveWarningReply (SPW13, plan P4)', () => {
   it('a file the Plan read: the spec’s text, with the compare link and the restart', () => {
     expect(stale([{ path: 'src/index.ts', readers: ['own'] }])).toBe(
       '<!-- sdd-agent:approve-warning:p-1 -->\n' +
-        'Approved Plan v1. Since it was written (`9e1d0c2`), `main` changed `src/index.ts`, which it read ' +
+        `[Your \`/approve\`](${LINK}801) approved Plan v1. Since it was written (\`9e1d0c2\`), \`main\` changed ` +
+        '`src/index.ts`, which it read ' +
         `([compare](${URL})). The code is written from today's \`main\`, and the Coder is told which files ` +
         'changed. To write the Plan again instead, remove the `workflow: full-sdd` label and add it again.',
     );
@@ -305,7 +388,7 @@ describe('approveWarningReply (SPW13, plan P4)', () => {
           compareUrl: URL,
         },
       }),
-    ).toContain('Approved Spec v2. Since it was written (`9e1d0c2`)');
+    ).toContain('approved Spec v2. Since it was written (`9e1d0c2`)');
   });
 
   it('the comparison failed → the not-compared reply', () => {
@@ -315,7 +398,8 @@ describe('approveWarningReply (SPW13, plan P4)', () => {
         warning: { kind: 'not-compared', from: FROM },
       }).split('\n')[1],
     ).toBe(
-      "Approved Plan v1. The bot couldn't compare `9e1d0c2` with `main`, so it can't tell whether files it read have changed.",
+      `[Your \`/approve\`](${LINK}801) approved Plan v1. The bot couldn't compare \`9e1d0c2\` with \`main\`, so it ` +
+        "can't tell whether files it read have changed.",
     );
   });
 });

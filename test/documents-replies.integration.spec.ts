@@ -23,10 +23,12 @@ import {
   SPEC_TEXT,
   actionRows,
   commentNow,
+  commentUrl,
   documentRows,
   runAgain,
   specWritten,
   withMarker,
+  yours,
 } from './documents-helpers.js';
 import { HUMAN } from './fixtures/github/payloads.js';
 import { captureLogs, grillAnswer, laneAdded } from './grill-helpers.js';
@@ -88,7 +90,9 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     });
     expect(hints(issue)).toEqual([
       expect.objectContaining({
-        body: `${approveHintMarker(spec.id)}\nTo approve, comment exactly \`/approve\`, with nothing else.`,
+        body:
+          `${approveHintMarker(spec.id)}\n${yours('comment', 91, 9101)} isn't an approval: to approve, comment ` +
+          'exactly `/approve`, with nothing else.',
       }),
     ]);
     expect(await actionRows(t)).toEqual([
@@ -124,9 +128,9 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     expect(withMarker(t, issue, lateCommentMarker('9201'))).toEqual([
       expect.objectContaining({
         body:
-          `${lateCommentMarker('9201')}\n\`${HUMAN}\`, this comment was written while the bot was writing the ` +
-          "Spec, so the Spec doesn't include it. If it changes the Spec, someone with Write access can edit the " +
-          'Spec comment before `/approve`.',
+          `${lateCommentMarker('9201')}\n\`${HUMAN}\`, [your comment](${commentUrl(92, 9201)}) was ` +
+          "written while the bot was writing the Spec, so the Spec doesn't include it. If it changes the Spec, " +
+          'someone with Write access can edit the Spec comment before `/approve`.',
       }),
     ]);
     expect(await actionRows(t)).toMatchObject([
@@ -172,7 +176,9 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     });
     expect(refused(issue, 9401)).toEqual([
       expect.objectContaining({
-        body: `${approveRefusedMarker('9401')}\nThere's nothing to approve: this issue has no run. To start one, add a \`workflow:\` label.`,
+        body:
+          `${approveRefusedMarker('9401')}\n${yours('`/approve`', 94, 9401)} has nothing to approve: this issue ` +
+          'has no run. To start one, add a `workflow:` label.',
       }),
     ]);
     expect(await actionRows(t)).toEqual([
@@ -187,11 +193,11 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
   });
 
   it.each([
-    ['executing', 95, 'Nothing to approve: run 1 is writing the code.'],
+    ['executing', 95, 'has nothing to approve: run 1 is writing the code.'],
     [
       'in-review',
       195,
-      "Nothing to approve here: run 1's pull request is open; review it there.",
+      "has nothing to approve here: run 1's pull request is open; review it there.",
     ],
   ] as const)(
     '`/approve` in %s (status set in the test database) → its text',
@@ -203,7 +209,7 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
       await deliver(t, commentNow(number, commentId, '/approve'));
 
       expect(refused(issue, commentId)[0].body).toBe(
-        `${approveRefusedMarker(String(commentId))}\n${text}`,
+        `${approveRefusedMarker(String(commentId))}\n${yours('`/approve`', number, commentId)} ${text}`,
       );
       expect(await actionRows(t)).toMatchObject([{ result: status }]);
     },
@@ -222,8 +228,8 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     expect(refused(issue, 9602)).toEqual([
       expect.objectContaining({
         body:
-          `${approveRefusedMarker('9602')}\nRun 1 is stopped, so there's nothing to approve now. See the stop ` +
-          'comment for how to continue.',
+          `${approveRefusedMarker('9602')}\n${yours('`/approve`', 96, 9602)} has nothing to approve now: run 1 ` +
+          'is stopped. See the stop comment for how to continue.',
       }),
     ]);
     expect(await actionRows(t)).toMatchObject([{ result: 'stopped' }]);
@@ -240,7 +246,7 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     expect(withMarker(t, issue, 'sdd-agent:plan:')).toHaveLength(1);
     expect(refused(issue, 9702)).toHaveLength(1);
     expect(refused(issue, 9702)[0].body).toContain(
-      'This `/approve` was written before Plan v1 was posted',
+      `${yours('`/approve`', 97, 9702)} was written before Plan v1 was posted`,
     );
   });
 

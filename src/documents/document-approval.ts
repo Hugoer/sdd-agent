@@ -138,6 +138,7 @@ export class DocumentApprovals {
         sender: input.sender,
         replyBody: approveWarningReply({
           versionId: doc.id,
+          approve: input.comment,
           document: { kind: doc.kind as 'spec' | 'plan', version: doc.version },
           lane: context.run.lane,
           base: this.base,

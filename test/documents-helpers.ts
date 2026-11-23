@@ -6,7 +6,10 @@ import type {
   TaskDocument,
 } from '../src/generated/prisma/client.js';
 import type { TestApp } from './app.js';
-import { issueCommentCreated } from './fixtures/github/payloads.js';
+import {
+  TARGET_REPO,
+  issueCommentCreated,
+} from './fixtures/github/payloads.js';
 import { botComments, grillAnswer, laneAdded } from './grill-helpers.js';
 import { deliver, seedIssue } from './router-helpers.js';
 
@@ -75,6 +78,14 @@ export async function specWritten(
  * Plan P23: a comment on issue `number` created now (the payload fixture's default date is before every document, so
  * every `/approve` would count as written before it); `secondsAgo` moves it back.
  */
+/** The link the fixture's comment payload carries (`html_url`). */
+export const commentUrl = (number: number, commentId: number) =>
+  `https://github.com/${TARGET_REPO}/issues/${number}#issuecomment-${commentId}`;
+
+/** Plan P39: a reply's subject, "[Your `/approve`](…)", links the comment it answers. */
+export const yours = (what: string, number: number, commentId: number) =>
+  `[Your ${what}](${commentUrl(number, commentId)})`;
+
 export function commentNow(
   number: number,
   commentId: number,

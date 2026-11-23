@@ -25,6 +25,7 @@ import {
   scriptReads,
   specWritten,
   withMarker,
+  yours,
 } from './documents-helpers.js';
 import { HUMAN } from './fixtures/github/payloads.js';
 import {
@@ -312,7 +313,7 @@ describe('The last approval before code: the warning reply and the `workspace` s
     await t.app.close();
   });
 
-  it('Plan v1 approved after a file it read changed → ONE "Approved Plan v1. Since it was written …" reply with the compare link, then the stop at `workspace`', async () => {
+  it('Plan v1 approved after a file it read changed → ONE "[Your `/approve`](…) approved Plan v1. Since it was written …" reply with the compare link, then the stop at `workspace`', async () => {
     const issue = await planWaiting(71, [], ['src/w-plan.ts']);
     const [plan] = await rows('plan');
     t.repo.seedFile('main', 'src/w-plan.ts', 'export const p = 2;\n');
@@ -324,7 +325,8 @@ describe('The last approval before code: the warning reply and the `workspace` s
     expect(warnings(issue)).toEqual([
       expect.objectContaining({
         body:
-          `<!-- sdd-agent:approve-warning:${plan.id} -->\nApproved Plan v1. Since it was written ` +
+          `<!-- sdd-agent:approve-warning:${plan.id} -->\n${yours('`/approve`', 71, 7102)} approved Plan v1. ` +
+          'Since it was written ' +
           `(\`${plan.commit!.slice(0, 7)}\`), \`main\` changed \`src/w-plan.ts\`, which it read ` +
           `([compare](https://github.com/test-owner/test-repo/compare/${plan.commit}...${now})). The code is ` +
           "written from today's `main`, and the Coder is told which files changed. To write the Plan again " +
@@ -387,7 +389,7 @@ describe('The last approval before code: the warning reply and the `workspace` s
 
     expect(warnings(issue)).toHaveLength(1);
     expect(warnings(issue)[0].body).toContain(
-      'Approved Spec v1. Since it was written',
+      `${yours('`/approve`', 74, 7401)} approved Spec v1. Since it was written`,
     );
     expect(warnings(issue)[0].body).toContain(
       'To write the Spec again instead, remove the `workflow: spec-code` label and add it again.',

@@ -1,6 +1,7 @@
 // Spec 7 "The document comment": every marker and comment text of the documents, each built next to its marker.
 // English; a login in backticks without `@`. The document's own text arrives cleaned (`cleanDocument`). Pure.
 import type { Lane } from '../contracts/issue-provider.js';
+import type { TaskComment } from '../contracts/workflow-input.js';
 import { laneLabel } from '../github/labels.js';
 import { withNotes } from '../llm/prompt.js';
 import { namedFiles, type FlaggedFile, type Reader } from './commit-check.js';
@@ -8,6 +9,17 @@ import { DOCUMENT_END, DOCUMENT_START } from './document-text.js';
 import type { DocumentKind } from './documents.store.js';
 
 const marker = (key: string): string => `<!-- sdd-agent:${key} -->`;
+
+/** A person's comment a reply answers: its id names the reply's marker, its link is the reply's subject (plan P39). */
+export type AnsweredComment = Pick<TaskComment, 'id' | 'url'>;
+
+/** Plan P39: the answered comment as a link; plain text when the event has no link (spec 2's signed test requests). */
+function linked(text: string, url: string | undefined): string {
+  return url ? `[${text}](${url})` : text;
+}
+
+const yourApprove = (comment: Pick<TaskComment, 'url'>): string =>
+  linked('Your `/approve`', comment.url);
 
 export const specMarker = (versionId: string): string =>
   marker(`spec:${versionId}`);
@@ -136,25 +148,26 @@ export type ApproveRefusal =
 
 /** Spec "`/approve`", the verdict table: one reply per refused `/approve` comment, naming the waiting document. */
 export function approveRefusedReply(
-  commentId: string,
+  comment: AnsweredComment,
   refusal: ApproveRefusal,
   document: RepliedDocument,
   lane: Lane,
 ): string {
   const name = documentName(document);
+  const yours = yourApprove(comment);
   const text = {
-    'already-approved': `${capital(name)} is already approved (by \`${document.approvedBy ?? 'someone'}\`), so this \`/approve\` changes nothing.`,
+    'already-approved': `${yours} changes nothing: ${name} is already approved (by \`${document.approvedBy ?? 'someone'}\`).`,
     'before-document':
-      `This \`/approve\` was written before ${name} was posted, so it didn't count. Read ` +
+      `${yours} was written before ${name} was posted, so it didn't count. Read ` +
       `${document.url ? `[${name}](${document.url})` : name}, then comment \`/approve\` again.`,
     deleted:
-      `${capital(name)} was deleted, so there's nothing to approve. Comment \`/restore\` to get it back, or remove ` +
+      `${yours} has nothing to approve: ${name} was deleted. Comment \`/restore\` to get it back, or remove ` +
       `the \`${laneLabel(lane)}\` label and add it again to start over.`,
     empty:
-      `${capital(name)}'s comment has no text left between its markers, so there's nothing to approve. Edit the ` +
+      `${yours} has nothing to approve: ${name}'s comment has no text left between its markers. Edit the ` +
       `comment to put the ${kindName(document.kind)} back, then comment \`/approve\`.`,
   }[refusal];
-  return `${approveRefusedMarker(commentId)}\n${text}`;
+  return `${approveRefusedMarker(comment.id)}\n${text}`;
 }
 
 /** "Spec v1", "Plan v2", "the **Ready to code** comment" (the go-signal has no version a person sees). */
@@ -166,10 +179,6 @@ function documentName({ kind, version }: RepliedDocument): string {
 
 function kindName(kind: DocumentKind): string {
   return kind === 'plan' ? 'Plan' : 'Spec';
-}
-
-function capital(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export const approveWarningMarker = (versionId: string): string =>
@@ -188,6 +197,8 @@ export type ApproveWarning =
 
 export interface ApproveWarningInput {
   versionId: string;
+  /** The `/approve` comment the reply answers (plan P39). */
+  approve: Pick<TaskComment, 'url'>;
   /** The last document before code: `spec-code`'s Spec or `full-sdd`'s Plan. */
   document: { kind: 'spec' | 'plan'; version: number };
   lane: Lane;
@@ -203,11 +214,12 @@ export function approveWarningReply(input: ApproveWarningInput): string {
   const { document, warning, base } = input;
   const name = `${kindName(document.kind)} v${document.version}`;
   const from = `\`${warning.from.slice(0, 7)}\``;
+  const approved = `${yourApprove(input.approve)} approved ${name}.`;
   const text =
     warning.kind === 'not-compared'
-      ? `Approved ${name}. The bot couldn't compare ${from} with \`${base}\`, so it can't tell whether files it read ` +
+      ? `${approved} The bot couldn't compare ${from} with \`${base}\`, so it can't tell whether files it read ` +
         'have changed.'
-      : `Approved ${name}. Since it was written (${from}), \`${base}\` changed ${readFiles(warning.flagged, warning.complete)} ` +
+      : `${approved} Since it was written (${from}), \`${base}\` changed ${readFiles(warning.flagged, warning.complete)} ` +
         `([compare](${warning.compareUrl})). The code is written from today's \`${base}\`, and the Coder is told ` +
         `which files changed. To write the ${kindName(document.kind)} again instead, remove the ` +
         `\`${laneLabel(input.lane)}\` label and add it again.`;
@@ -254,19 +266,28 @@ export const approveHintMarker = (versionId: string): string =>
   marker(`approve-hint:${versionId}`);
 
 /** Spec "`/approve please`": once per waiting document. */
-export function approveHintReply(versionId: string): string {
-  return `${approveHintMarker(versionId)}\nTo approve, comment exactly \`/approve\`, with nothing else.`;
+export function approveHintReply(
+  versionId: string,
+  comment: Pick<TaskComment, 'url'>,
+): string {
+  return (
+    `${approveHintMarker(versionId)}\n${linked('Your comment', comment.url)} isn't an approval: to approve, comment ` +
+    'exactly `/approve`, with nothing else.'
+  );
 }
 
 export const lateCommentMarker = (commentId: string): string =>
   marker(`late-comment:${commentId}`);
 
 /** SP12: a comment written while the bot wrote the Spec, which Grill Me never read; names its author (no `@`). */
-export function lateCommentReply(commentId: string, author: string): string {
+export function lateCommentReply(
+  comment: AnsweredComment,
+  author: string,
+): string {
   return (
-    `${lateCommentMarker(commentId)}\n\`${author}\`, this comment was written while the bot was writing the Spec, so ` +
-    "the Spec doesn't include it. If it changes the Spec, someone with Write access can edit the Spec comment before " +
-    '`/approve`.'
+    `${lateCommentMarker(comment.id)}\n\`${author}\`, ${linked('your comment', comment.url)} was written while the ` +
+    "bot was writing the Spec, so the Spec doesn't include it. If it changes the Spec, someone with Write access can " +
+    'edit the Spec comment before `/approve`.'
   );
 }
 
@@ -275,17 +296,17 @@ export type NothingWaits =
   'no-run' | 'starting' | 'executing' | 'in-review' | 'stopped';
 
 export function approveNothingWaitsReply(
-  commentId: string,
+  comment: AnsweredComment,
   situation: NothingWaits,
   run: number | null,
 ): string {
   const text = {
     'no-run':
-      "There's nothing to approve: this issue has no run. To start one, add a `workflow:` label.",
-    starting: `Run ${run} is just starting, so there's nothing to approve yet.`,
-    executing: `Nothing to approve: run ${run} is writing the code.`,
-    'in-review': `Nothing to approve here: run ${run}'s pull request is open; review it there.`,
-    stopped: `Run ${run} is stopped, so there's nothing to approve now. See the stop comment for how to continue.`,
+      'has nothing to approve: this issue has no run. To start one, add a `workflow:` label.',
+    starting: `has nothing to approve yet: run ${run} is just starting.`,
+    executing: `has nothing to approve: run ${run} is writing the code.`,
+    'in-review': `has nothing to approve here: run ${run}'s pull request is open; review it there.`,
+    stopped: `has nothing to approve now: run ${run} is stopped. See the stop comment for how to continue.`,
   }[situation];
-  return `${approveRefusedMarker(commentId)}\n${text}`;
+  return `${approveRefusedMarker(comment.id)}\n${yourApprove(comment)} ${text}`;
 }

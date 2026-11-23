@@ -91,7 +91,7 @@ export class DocumentsHandler implements StepHandler {
         action: 'approve-refused',
         result: situation,
         replyBody: approveNothingWaitsReply(
-          comment.id,
+          comment,
           situation,
           context.run.number,
         ),
@@ -124,7 +124,7 @@ export class DocumentsHandler implements StepHandler {
             documentId: first.id,
             action: 'late-comment',
             result: 'late',
-            replyBody: lateCommentReply(comment.id, context.input.sender),
+            replyBody: lateCommentReply(comment, context.input.sender),
           },
           `late comment ${comment.id} answered`,
         );
@@ -148,7 +148,7 @@ export class DocumentsHandler implements StepHandler {
         documentId: waiting.id,
         action: 'approve-hint',
         result: 'hint',
-        replyBody: approveHintReply(waiting.id),
+        replyBody: approveHintReply(waiting.id, comment),
       },
       `/approve hint (comment ${comment.id})`,
     );

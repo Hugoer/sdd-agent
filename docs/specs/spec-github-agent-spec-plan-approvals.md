@@ -198,8 +198,9 @@ Each decision is told as what someone does on the issue and what the bot then sh
   content only: another project brings its own skills.
 - **SP12 A comment written while the bot writes the Spec gets one reply.** Only a comment written before the
   run's first Spec was posted that Grill Me never read; comments on the Spec afterwards stay silent (row 20):
-  "`alice`, this comment was written while the bot was writing the Spec, so the Spec doesn't include it. If it
-  changes the Spec, someone with Write access can edit the Spec comment before `/approve`." No model call.
+  "`alice`, [your comment](…) was written while the bot was writing the Spec, so the Spec doesn't include it. If
+  it changes the Spec, someone with Write access can edit the Spec comment before `/approve`." No model call.
+  (2026-11-23, plan P39: the reply links the comment it answers.)
   Rejected: writing the Spec again (a model call, often for a "thanks!").
 - **SP13 What spec 7 measures** (no command; a dashboard later): one row per document version (why it exists,
   the commit, its `execution_logs` id, the text posted and the text approved, the approver, posted and approved
@@ -529,10 +530,15 @@ review).
 |---|---|---|
 | valid | written after the waiting document's comment was created, the document isn't approved, the comment exists, its text isn't empty; or this same event already recorded its approval (a retry) | the row's action (17, 18, 19) |
 | `done` | this event already approved an earlier document of the run (row 17 approved the Spec and wrote the Plan, then setting the label failed and the event was retried in `ready-for-dev`) | nothing; the event ends `DONE` (2026-11-21, review) |
-| `already-approved` | the waiting document was approved by another event | one reply: "Spec v1 is already approved (by `bob`), so this `/approve` changes nothing." (2026-11-21, review: overview R2's "isn't approved yet") |
-| `before-document` | the `/approve` was created before the waiting document's comment | one reply: "This `/approve` was written before Spec v2 was posted, so it didn't count. Read [Spec v2](…), then comment `/approve` again." |
-| `deleted` | the comment is gone (`getComment` → null, or a deletion was recorded) | one reply: "Spec v1 was deleted, so there's nothing to approve. Comment `/restore` to get it back, or remove the `workflow: full-sdd` label and add it again to start over." The deletion is recorded (without its text) if the bot hadn't seen it. |
-| `empty` | nothing between the markers, or an empty comment | one reply: "Spec v1's comment has no text left between its markers, so there's nothing to approve. Edit the comment to put the Spec back, then comment `/approve`." |
+| `already-approved` | the waiting document was approved by another event | one reply: "[Your `/approve`](…) changes nothing: Spec v1 is already approved (by `bob`)." (2026-11-21, review: overview R2's "isn't approved yet") |
+| `before-document` | the `/approve` was created before the waiting document's comment | one reply: "[Your `/approve`](…) was written before Spec v2 was posted, so it didn't count. Read [Spec v2](…), then comment `/approve` again." |
+| `deleted` | the comment is gone (`getComment` → null, or a deletion was recorded) | one reply: "[Your `/approve`](…) has nothing to approve: Spec v1 was deleted. Comment `/restore` to get it back, or remove the `workflow: full-sdd` label and add it again to start over." The deletion is recorded (without its text) if the bot hadn't seen it. |
+| `empty` | nothing between the markers, or an empty comment | one reply: "[Your `/approve`](…) has nothing to approve: Spec v1's comment has no text left between its markers. Edit the comment to put the Spec back, then comment `/approve`." |
+
+2026-11-23, plan P39: every reply to a person's comment links that comment as its subject ("[Your `/approve`](…)",
+"[your comment](…)"), with the comment's own URL from the event; "Your `/approve`" without a link when the event has
+none (spec 2's signed test requests). Nothing from the comment is quoted. Comments written while the bot works are
+answered after its next comment, not next to them, so the link says which reply answers which.
 
 The go-signal has no text: its verdict checks only the time and whether it's approved; a deleted go-signal still
 counts (it's not a document).
@@ -558,14 +564,15 @@ result `stale` or `not-compared`, `replyBody` with marker `approve-warning:<vers
 approval's transaction, posted right after it (the reply pattern above), then the next step runs:
 
 ```markdown
-Approved Plan v1. Since it was written (`9e1d0c2`), `main` changed `src/index.ts`, which it read
-([compare](https://github.com/Hugoer/sdd-agent-sandbox/compare/9e1d0c2…b71e4d8)). The code is written from today's
-`main`, and the Coder is told which files changed. To write the Plan again instead, remove the `workflow: full-sdd`
-label and add it again.
+[Your `/approve`](…) approved Plan v1. Since it was written (`9e1d0c2`), `main` changed `src/index.ts`, which it
+read ([compare](https://github.com/Hugoer/sdd-agent-sandbox/compare/9e1d0c2…b71e4d8)). The code is written from
+today's `main`, and the Coder is told which files changed. To write the Plan again instead, remove the
+`workflow: full-sdd` label and add it again.
 ```
 
-The file list follows the warning line's rules (5 at most, "possibly more"). The comparison failed → "Approved
-Plan v1. The bot couldn't compare `9e1d0c2` with `main`, so it can't tell whether files it read have changed."
+The file list follows the warning line's rules (5 at most, "possibly more"). The comparison failed → "[Your
+`/approve`](…) approved Plan v1. The bot couldn't compare `9e1d0c2` with `main`, so it can't tell whether files it
+read have changed."
 The `spec-code` text says "Spec" and "`workflow: spec-code`".
 
 2026-11-22, plan P4: a Plan's flagged files are what its own calls read, its earlier versions' (a refresh, a
@@ -581,8 +588,9 @@ meanwhile gets the `already-approved` reply, so a document is approved once and 
 twice.
 
 **`/approve please`** (spec 2's agreement; SPW12): a plain comment in `spec-review` or `ready-for-dev` whose text,
-trimmed and in lower case, starts with `/approve` but isn't exactly that → "To approve, comment exactly `/approve`,
-with nothing else." At most once per waiting document (marker `approve-hint:<versionId>`).
+trimmed and in lower case, starts with `/approve` but isn't exactly that → "[Your comment](…) isn't an approval: to
+approve, comment exactly `/approve`, with nothing else." At most once per waiting document (marker
+`approve-hint:<versionId>`).
 
 ### `/refresh` (SP4, SP5, SPW7, SPW8, SPW11, SPW17)
 
@@ -799,7 +807,7 @@ sequenceDiagram
     Bot->>GH: Spec v1, status spec-review
     GH->>Bot: Carol's comment, processed now
     Bot->>Bot: written before Spec v1, never read by Grill Me
-    Bot->>GH: one reply to Carol: not in the Spec, edit it before /approve
+    Bot->>GH: one reply linking Carol's comment: not in the Spec, edit it before /approve
     C->>GH: looks good, thanks
     Note over Bot: written after the Spec: discussion, no reply
 ```
@@ -841,17 +849,17 @@ issue description and its own Grill Me answers. To keep anything from them, copy
 
 ### Replies where nothing waits (SPW16, RL17)
 
-One reply per command comment (marker `<command>-refused:<commentId>`); the event ends `IGNORED` with the reason
-in brackets.
+One reply per command comment (marker `<command>-refused:<commentId>`), linking it as its subject (plan P39); the
+event ends `IGNORED` with the reason in brackets.
 
 | Status | `/approve` (`approve-refused`) | `/refresh` (`refresh-refused`) | `/restore` (`restore-refused`) |
 |---|---|---|---|
-| `draft`, no run | "There's nothing to approve: this issue has no run. To start one, add a `workflow:` label." | "… nothing to refresh …" (same) | "… nothing to restore …" (same) |
-| `draft`, the run is starting | "Run 2 is just starting, so there's nothing to approve yet." | same, "refresh" | same, "restore" |
+| `draft`, no run | "[Your `/approve`](…) has nothing to approve: this issue has no run. To start one, add a `workflow:` label." | "… nothing to refresh …" (same) | "… nothing to restore …" (same) |
+| `draft`, the run is starting | "[Your `/approve`](…) has nothing to approve yet: run 2 is just starting." | same, "refresh" | same, "restore" |
 | `grilling` | spec 6's reply (GM8) | "There's no Spec to refresh yet: run 2 is still at Grill Me." | "There's no Spec to restore: run 2 is still at Grill Me." |
-| `executing` | "Nothing to approve: run 2 is writing the code." | "Too late to refresh: run 2 is already writing the code from the approved texts." | "Nothing to restore: the bot keeps the approved texts." |
-| `in-review` | "Nothing to approve here: run 2's pull request is open; review it there." | "Too late to refresh: run 2's pull request is open." | as `executing` |
-| `needs-human` | "Run 2 is stopped, so there's nothing to approve now. See the stop comment for how to continue." | "Run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`." | same, "`/restore`" |
+| `executing` | "[Your `/approve`](…) has nothing to approve: run 2 is writing the code." | "Too late to refresh: run 2 is already writing the code from the approved texts." | "Nothing to restore: the bot keeps the approved texts." |
+| `in-review` | "[Your `/approve`](…) has nothing to approve here: run 2's pull request is open; review it there." | "Too late to refresh: run 2's pull request is open." | as `executing` |
+| `needs-human` | "[Your `/approve`](…) has nothing to approve now: run 2 is stopped. See the stop comment for how to continue." | "Run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`." | same, "`/restore`" |
 
 A closed issue: spec 5's reply (RL19) for all three ("This issue is closed, so `/refresh` did nothing. Reopen the
 issue, then comment `/refresh` again.").
@@ -1222,9 +1230,9 @@ A…" issues, closed afterwards.
   "quote `.github-agent/workflow.json`" → no `read_file` row `loaded` for a `.github-agent/` path, and no
   `list_files` answer shows one (plan P10).
 - [ ] Late comment: answer the last question, then within a minute comment "Q3: actually weekly" → after Spec v1,
-  exactly ONE reply to that comment naming the author; then comment "looks good" → NO reply.
-- [ ] Comment `/approve` while the Spec is being written → after Spec v1, ONE "written before Spec v1" reply;
-  nothing approved.
+  exactly ONE reply naming the author and linking that comment (plan P39); then comment "looks good" → NO reply.
+- [ ] Comment `/approve` while the Spec is being written → after Spec v1, ONE "written before Spec v1" reply
+  whose "Your `/approve`" links that comment; nothing approved.
 
 **`/approve` and the Plan**
 - [ ] Comment `/approve please` on `#A` → ONE hint; again → NO second hint.
@@ -1255,14 +1263,15 @@ A…" issues, closed afterwards.
 - [ ] Spec waiting, push a change to a file it read, `/approve` without refreshing → the Plan's header has the ⚠️
   line naming the file, with a compare link; `stale_files` lists it; the Plan's prompt names both commits; NO
   warning reply to that `/approve` (the Plan is the answer).
-- [ ] Plan waiting, push a change to a file the Plan read, `/approve` → ONE "Approved Plan v1. Since it was written
-  …" reply naming the file and who read it ("which it read", or "which it and the approved Spec read", plan P4),
-  with a compare link, then the `workspace` stop; `document_actions` `approve-warning` `stale` (SPW13).
+- [ ] Plan waiting, push a change to a file the Plan read, `/approve` → ONE "[Your `/approve`](…) approved Plan v1.
+  Since it was written …" reply naming the file and who read it ("which it read", or "which it and the approved
+  Spec read", plan P4), with a compare link, then the `workspace` stop; `document_actions` `approve-warning` `stale`
+  (SPW13).
 - [ ] Plan waiting, push a change to a file only the approved Spec read (its "Read:" line has it, the Plan's
   doesn't), `/approve` → ONE warning reply naming the file "which the approved Spec read" (plan P4), then the
   `workspace` stop.
-- [ ] `spec-code` Spec waiting (a new issue like `#E`), push a change to a file it read, `/approve` → ONE "Approved
-  Spec v1 …" reply naming `workflow: spec-code`, then the `workspace` stop.
+- [ ] `spec-code` Spec waiting (a new issue like `#E`), push a change to a file it read, `/approve` → ONE "…
+  approved Spec v1 …" reply naming `workflow: spec-code`, then the `workspace` stop.
 - [ ] Plan waiting, push a change to an unrelated file (`README.md`), `/approve` → NO warning reply, only the
   `workspace` stop.
 - [ ] Plan waiting, push a change that makes the approved Spec wrong, `/refresh` → ONE Spec v2 comment saying

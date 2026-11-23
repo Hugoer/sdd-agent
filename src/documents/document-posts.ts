@@ -8,6 +8,7 @@ import {
   ISSUE_PROVIDER,
   type IssueProvider,
 } from '../contracts/issue-provider.js';
+import type { TaskComment } from '../contracts/workflow-input.js';
 import type {
   DocumentAction,
   TaskDocument,
@@ -127,7 +128,7 @@ export class DocumentPosts {
         action: 'approve-refused',
         result: refusal,
         replyBody: approveRefusedReply(
-          comment.id,
+          comment,
           refusal,
           {
             kind: waiting.kind as DocumentKind,
@@ -162,7 +163,7 @@ function markerOf(body: string): string {
 }
 
 /** The human comment the event carries (a command or a plain comment). */
-function commentOf(context: PostContext): { id: string } {
+function commentOf(context: PostContext): TaskComment {
   const { input } = context;
   if (!('comment' in input))
     throw new Error(`a reply needs a comment, got a ${input.type} event`);

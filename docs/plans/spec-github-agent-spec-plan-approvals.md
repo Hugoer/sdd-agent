@@ -51,7 +51,7 @@ run test:integration` green.
 
 Each told as what happens on GitHub. P1–P5 change something you can see: to ask one at a time. P6–P11 and P33 change
 nothing on GitHub but have a real choice: to ask after them. P12–P32 and P34–P38 follow from a rule named in their
-row. P33–P38 come from the review (2026-11-22).
+row. P33–P38 come from the review (2026-11-22); P39 from Checkpoint 3 (2026-11-23).
 
 | # | On GitHub | My guess (and the alternative) | Spec lines it changes |
 |---|---|---|---|
@@ -93,6 +93,7 @@ row. P33–P38 come from the review (2026-11-22).
 | P36 | No difference. | **decide()'s no-run reply** is a new action `{ kind: 'reply-without-run' }`: the router calls the gate (P7) and ends the event `IGNORED` with the command's `-refused` reason. | — |
 | P37 | No difference. | **The go-signal's row:** `text` is empty (it has no document; the column is NOT NULL); `approved_text` is the title, a blank line, then the description as written, `redact()`ed. | — |
 | P38 | No difference. | **One hint per waiting document** is enforced in code under the session lease (one job per issue, R3), not by a partial index (Prisma's schema can't hold one, and a raw one would show as drift). | — |
+| P39 | `alice` comments "Q3: actually weekly" and `/approve` while the bot writes the Spec. Both replies come after Spec v1, below it, so neither is next to the comment it answers (#53, Checkpoint 3). | **Confirmed 2026-11-23. Every reply to a person's comment links that comment, as its subject:** "[Your `/approve`](…) was written before Spec v1 was posted, so it didn't count. …", "`alice`, [your comment](…) was written while the bot was writing the Spec …", "[Your comment](…) isn't an approval: to approve, comment exactly `/approve` …", "[Your `/approve`](…) approved Plan v1. Since it was written …". The link is the comment's own URL from the event; nothing from the comment is quoted (no repeated mentions, no echoed human text, D32). Spec 2's signed test requests carry no URL: "Your `/approve`" without a link. The `/refresh` and `/restore` replies (T18–T22) follow the same rule. *Alternative:* the link plus a quote of the comment's first line (rejected: it repeats human text). | SP12; "`/approve`" (the verdict table, the warning reply, the hint); "A comment written while the bot writes the Spec"; "Replies where nothing waits"; the matrix's warning-reply rows |
 
 ## Existing tests this plan changes (grep, 2026-11-22)
 
@@ -769,6 +770,8 @@ One paste-ready block.
 date, both up to date, already written at that commit, already approved, deleted → `/restore`, P5's empty, P32's
 frame line), and the "Replies where nothing waits" texts for `/refresh` and `/restore` in every status of the spec's
 table (`draft` with no run and starting, `grilling`, `executing`, `in-review`, `needs-human`, `code-only`).
+P39 (2026-11-23): every reply to a command links that comment as its subject ("[Your `/refresh`](…) …"); the
+spec's `/refresh` and `/restore` reply examples are reworded the same way in this task.
 
 **Acceptance criteria:**
 - [ ] The schema: `upToDate` with changes or a document → refused; changed with a blank document or no change line →
@@ -901,7 +904,7 @@ reads it. decide(): row 34 (`spec-review`, `ready-for-dev` `full-sdd`) → `docu
 (spec table): deleted, seen → a new row with the same version (`restored`, `based_on_id`, the trigger comment) from
 `deleted_text`; deleted, missed (`getComment` → null) → the deletion recorded, the bot's own `text` and the
 lost-edits line; still there → the reply with its link; approved → the already-approved reply. No model call; P12,
-P24.
+P24. Its replies link the `/restore` comment as their subject (P39).
 
 **Acceptance criteria:**
 - [ ] `/restore` → ONE "**Spec v1** (restored for `alice`'s `/restore`)" comment with the edited line; `/approve`
@@ -1017,7 +1020,11 @@ as the spec says.
 
 ### Checkpoint 6 — Complete
 - [ ] Every acceptance criterion above is met
-- [ ] You review and commit
+- [x] You review and commit (`972453c`, 2026-11-23)
+- [x] After it (P39): every reply links the comment it answers (2026-11-23, my instance, #55 like #53: "Q3:
+  actually weekly" and `/approve` during the Spec call → after Spec v1, "`Hugoer`, [your comment](…)" and "[Your
+  `/approve`](…) was written before Spec v1 …", each link to its own comment; `/approve please` → "[Your
+  comment](…) isn't an approval …")
 
 ---
 
@@ -1041,6 +1048,9 @@ as the spec says.
 - (Checkpoint 3, 2026-11-23) #50's Spec was read at `abf8f2d`; the `plan` skill commit changed two `.github-agent/`
   files before its approval, so `changed_paths` holds them and the Plan's prompt paragraph lists their names (never
   their text). P10 leaves `.github-agent/` out of the read tools only. To decide (see the Checkpoint 3 report).
+- (P39, 2026-11-23) Earlier specs' replies don't link the comment they answer either: spec 5's `/retry` refusals
+  ("This `/retry` was written before run 1 stopped …") and closed-issue reply, spec 6's `/approve` and answer
+  replies. P39 covers spec 7's replies only; the others keep their texts.
 
 ## Risks and mitigations
 

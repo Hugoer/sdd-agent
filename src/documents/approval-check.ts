@@ -72,7 +72,7 @@ export class DocumentsGate implements ApprovalGate {
         documentId: null,
         action: 'approve-refused',
         result: 'no-run',
-        replyBody: approveNothingWaitsReply(input.comment.id, 'no-run', null),
+        replyBody: approveNothingWaitsReply(input.comment, 'no-run', null),
       },
       '/approve refused (no-run)',
     );
