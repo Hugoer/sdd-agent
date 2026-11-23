@@ -22,7 +22,9 @@
 > order) · amended 2026-11-23 (D33, decided by the user during spec 7's build, after sandbox issue #55: a new
 > spec 13 `bot-feedback`, to interview; §1 row 13 and the build order) · amended 2026-11-23 (D34, decided by the
 > user during spec 7's Checkpoint 4, after sandbox issue #60: a new spec 14 `up-to-date-approvals`, to interview;
-> §1 row 14 and the build order)
+> §1 row 14 and the build order) · amended 2026-11-23 with spec 14's draft (interview UA1–UA7, write-time UAW5: D34
+> annotated; §1 row 14; §3 R2 and rows 17–19; §5 `APPROVAL_LARGE_CHANGE_FILES`; §6), approved with that spec on
+> 2026-11-23
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -259,6 +261,12 @@ comments, without acting under the developer's identity or touching their checko
   files, skills, `AGENTS.md`); one ask per version, or again when `main` moves after the ask; whether the Plan keeps
   its ⚠️ line; busy repositories; how it fits spec 13's quick signal. Built right after spec 7, while its approval
   code is fresh, and before spec 8 makes an approval lead to real work.
+  2026-11-23 (spec 14, approved): resolved by `docs/specs/spec-github-agent-up-to-date-approvals.md`. Every file
+  the document read counts, its step skill's included (`/refresh` then follows a changed method, UA1); after a
+  question the next `/approve` asks again only about changes since it (UA2); a failed comparison asks too (UA3); the
+  Plan loses its ⚠️ line (UA4); only an `/approve` written after the question counts as "again" (UA5); no quick
+  signal or label for the question (UA6, spec 13); one `document_actions` row per question (UA7); and more changed
+  files than `APPROVAL_LARGE_CHANGE_FILES` (15–150, default 15) ask even when none was read (UAW5).
 
 ## Contradictions found in the idea doc
 
@@ -298,7 +306,7 @@ Numbers are IDs, not build order.
 | 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
 | 12 | `bot-data-protection` (2026-11-22, D32; id to confirm at its interview) | to decide at its interview | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code) | to decide |
 | 13 | `bot-feedback` (2026-11-23, D33; id to confirm at its interview) | to decide at its interview | A quick visible signal that the bot got a human action and is working on it (D33): a reaction on the triggering comment and a label while it works, removed in code when the work ends, also after a crash; `status: plan-review` while the Plan waits, `ready-for-dev` only after the last approval | 3, 5, 6, 7 (changes to their code) | to decide |
-| 14 | `up-to-date-approvals` (2026-11-23, D34; id to confirm at its interview) | `DocumentsModule` · `src/documents` (extends spec 7's module) | An `/approve` on a Spec or a Plan asks first when files it read changed on `main` (D34): one reply with the files and a compare link, `/refresh` or `/approve` again; replaces spec 7's warning after the approval | 7 (changes to its code) | to decide |
+| 14 | `up-to-date-approvals` (2026-11-23, D34; id confirmed at its interview) | `DocumentsModule` · `src/documents` (extends spec 7's module) | An `/approve` on a Spec or a Plan asks first when files it read changed on `main` (D34): one reply with the files and a compare link, `/refresh` or `/approve` again; replaces spec 7's warning after the approval. 2026-11-23 (spec 14): the step skill's files count, `/refresh` follows a changed method; a failed comparison or more changed files than `APPROVAL_LARGE_CHANGE_FILES` ask too; the `before-question` reply; `asked_commit`, `approved_from_commit`, the question rows | 7 (changes to its code); 1 (a config variable) | high |
 
 **Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → 14 → ~~8~~ 12 → 13 → 8 → 9 → 10 (2026-11-18: spec 11
 added, D27; 2026-11-22: spec 12 added, D32; 2026-11-23: spec 13 added, D33; 2026-11-23: spec 14 added,
@@ -421,7 +429,8 @@ event without a label (the label was deleted from the repo); invalid payloads; a
   is the run's current version (not superseded); its comment must still be there and hold text between its
   markers (the go-signal checks only the time and the approval). An invalid `/approve` gets one reply with the
   reason (row 20); an event that already approved an earlier document of the run (retried after the next step
-  started) ends with no reply.
+  started) ends with no reply. **2026-11-23 (spec 14, UA5):** and, while the bot's last question about that document
+  is open, written after that question was posted; an `/approve` written before it gets one reply (row 20).
 - **R3 One job per task:** while a job holds the lease, the task's other events wait, then run against the new
   state.
 - **R4 Failures:** after bounded retries, any step failure becomes `FAILED(cause)`: invalid `workflow.json`,
@@ -458,9 +467,9 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 14 | ↳ Grill outcome | `LIMIT` (max rounds, below threshold) | One summary comment (confidence + gaps; 2026-11-17, spec 6 GM9: plus three numbered steps to continue, which replace the generic restart line) | needs-human |
 | 15 | grilling | `COMMENT` | Grill round with the merged answer (every comment since the last question). 2026-11-17 (spec 6 GM4, GM6, GM12): every answer comment not read yet, also those written while the run was stopped; a comment already read → nothing; nothing new to ask while questions are open → 👀 on the comments, keep waiting (no round) | rows 12–14, or grilling |
 | 16 | grilling | `APPROVE`, `SKIP_ADDED` | ~~Ignored (force continue is Future)~~ 2026-11-17 (spec 6 GM8): `APPROVE` → one reply (nothing to approve yet, the open questions, how to stop them); `SKIP_ADDED` → close the Grill session (`STOPPED`) + one comment → generate and post the Spec, only while the label is still on (GM15; ~~otherwise ignored~~ otherwise read like a `COMMENT`, row 15, which usually finds nothing new: 2026-11-17, spec 6 plan P1). A `COMMENT` with `grill: skip` on the issue takes this path too. Once Grill Me has ended, a later Grill call of the run posts its missing closing comment and goes on to the Spec without a model call (spec 6 plan P1) | grilling (`APPROVE`), spec-review (`SKIP_ADDED`) |
-| 17 | spec-review (`full-sdd`) | valid `APPROVE` | Snapshot the approved Spec → generate and post the Plan | ready-for-dev |
-| 18 | spec-review (`spec-code`) | valid `APPROVE` | Snapshot the approved Spec → claim the workspace. 2026-11-22 (spec 7, SPW13): files it read changed on the base branch → one warning reply first | rows 21–23 |
-| 19 | ready-for-dev | valid `APPROVE` | `full-sdd`: snapshot the approved Plan (2026-11-22, spec 7 SPW13: with row 18's warning reply). Then claim the workspace | rows 21–23 |
+| 17 | spec-review (`full-sdd`) | valid `APPROVE` | Snapshot the approved Spec → generate and post the Plan. 2026-11-23 (spec 14): files it read changed on the base branch since its starting point, more files changed than `APPROVAL_LARGE_CHANGE_FILES`, or the bot can't compare → one question instead, nothing else changes | ready-for-dev (unchanged after a question) |
+| 18 | spec-review (`spec-code`) | valid `APPROVE` | Snapshot the approved Spec → claim the workspace. ~~2026-11-22 (spec 7, SPW13): files it read changed on the base branch → one warning reply first~~ 2026-11-23 (spec 14): row 17's question instead, nothing else changes | rows 21–23 (unchanged after a question) |
+| 19 | ready-for-dev | valid `APPROVE` | `full-sdd`: snapshot the approved Plan (~~2026-11-22, spec 7 SPW13: with row 18's warning reply~~ 2026-11-23, spec 14: row 17's question instead, nothing else changes). Then claim the workspace | rows 21–23 (unchanged after a question) |
 | 20 | spec-review, ready-for-dev | `COMMENT`, `SKIP_ADDED`, invalid `APPROVE` | ~~Ignored~~ 2026-11-21 (spec 7): invalid `APPROVE` → one reply with the reason (R2); a near-miss `/approve` → one hint per document; a comment written while the bot wrote the run's first Spec → one reply (SP12); anything else ignored | unchanged |
 | 21 | ↳ workspace claim | `WS_BUSY` | Approval recorded; event marked `WAITING_WORKSPACE`; one "queued" comment. Retried oldest first through the whole pipeline once the workspace is free | unchanged |
 | 22 | ↳ workspace claim | `WS_DIRTY` | Comment; release the workspace lease | needs-human |
@@ -782,6 +791,7 @@ needs a new variable adds it here first.
 | `GRILL_CONFIDENCE_THRESHOLD` | `95` | integer 1–100 | 6 |
 | `SKILL_DISCOVERY_MAX_LOADS` | `10` | integer 1–50; files the model may ask for per call (2026-11-20) | 11 |
 | `SKILL_DISCOVERY_MAX_BYTES` | `204800` | integer 1,024–1,048,576; bytes loaded on demand per call (2026-11-20) | 11 |
+| `APPROVAL_LARGE_CHANGE_FILES` | `15` | integer 15–150; more files changed on the base branch since a document's starting point → its `/approve` asks first, even if it read none of them (2026-11-23, spec 14 UAW5) | 14 |
 | `WORKSPACE_REPO_PATH` | required | absolute path to a git repo (startup check) | 8 |
 | `WORKSPACE_WORKTREE_PATH` | required | absolute path outside `WORKSPACE_REPO_PATH`; created at startup if missing | 8 |
 | `WORKSPACE_SETUP_COMMAND` | empty (install by hand) | one command, no shell operators | 8 |
@@ -815,8 +825,8 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, ~~the merged answer, confidence before/after, gaps,~~ comment IDs, post state. 2026-11-17 (spec 6): numbered questions with guesses, the earlier ones still open, its full text, the `ExecutionLog` id; answers and confidence live in the two tables below | — |
 | `GrillEvaluation` | 6 | One per model evaluation (2026-11-17, spec 6): what the bot did with it (`ASKED`, `CLEAR`, `LIMIT`, `WAITING`, `SUPERSEDED`), confidence, open questions, gaps, model, `ExecutionLog` id; the lines under its comment's rule, so a retried post is the same (2026-11-17, spec 6 plan P2) | — |
 | `GrillAnswer` | 6 | One per comment read as an answer (2026-11-17, spec 6): author, text as written, link, when read, 👀 added | — |
-| `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time. 2026-11-21 (spec 7): one row per version (written, refreshed or restored; superseded), the go-signal too; the commit it read, the comparison at approval (files flagged), the deleted text, the line counts of people's edits | — |
-| `DocumentAction` | 7 | One row per answered action on a document (2026-11-21, spec 7): refused or hinted `/approve`, the warning reply, a late comment, `/refresh` and `/restore` with their result, a deletion; the reply and its post state | — |
+| `TaskDocument` | 7 | Spec and Plan per run: the LLM's text, comment ID, approved text, approver and time. 2026-11-21 (spec 7): one row per version (written, refreshed or restored; superseded), the go-signal too; the commit it read, the comparison at approval (files flagged), the deleted text, the line counts of people's edits. 2026-11-23 (extended by 14): `askedCommit` (where the next `/approve` compares from after a question), `approvedFromCommit` (the start of the range an approval stored) | — |
+| `DocumentAction` | 7 | One row per answered action on a document (2026-11-21, spec 7): refused or hinted `/approve`, the warning reply, a late comment, `/refresh` and `/restore` with their result, a deletion; the reply and its post state. 2026-11-23 (extended by 14): the question before an approval (`approve-asked`: why, the files and who read them, the two commits, how many changed), `before-question`, the reply's posting time; no new warning replies | — |
 | `Workspace` | 8 | The single coding-job lease (holder task, expiry) | — |
 | `AgentPullRequest` | 9 | The bot's PR per run: branch, number, base; written before the PR is opened | — |
 | `QualityGateRun` | 10 | One per Quality Gate run: head SHA, verdict, comment ID, check-run ID | — |

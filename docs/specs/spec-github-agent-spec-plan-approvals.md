@@ -9,7 +9,10 @@
 > `docs/plans/spec-github-agent-spec-plan-approvals.md`, approved 2026-11-22; its decisions P1–P14, P20, P21 and
 > P31–P33 are written into this spec, each marked "plan Pn", with two of the plan review's fixes (a `/refresh`
 > while the Plan waits checks the Plan first; the `/approve` diagram picks the waiting document by status) and the
-> verification rows P1, P3, P4, P5 and P10 change or add
+> verification rows P1, P3, P4, P5 and P10 change or add · amended 2026-11-23 by spec 14 (`up-to-date-approvals`,
+> approved, not built; `docs/specs/spec-github-agent-up-to-date-approvals.md`): an `/approve` asks first when files the document read changed; SP3's "never
+> blocks", SPW13, SPW22 and the Plan's ⚠️ line are replaced (dated notes below). This spec stays as built until
+> spec 14 is built.
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -119,7 +122,10 @@ Each decision is told as what someone does on the issue and what the bot then sh
     change affects the Spec, comment `/refresh`."
   - The Plan's prompt gets both commits and the list: the behavior comes from the approved Spec, the facts about
     the code from the code as it is now.
-  - It **never blocks**: the `/approve` counts, nothing is rewritten.
+  - It **never blocks**: the `/approve` counts, nothing is rewritten. 2026-11-23 (spec 14, UA1–UA3): replaced:
+    files it read changed (its step skill's included), more changed files than `APPROVAL_LARGE_CHANGE_FILES`, or a
+    failed comparison → the `/approve` doesn't count yet and one question offers `/refresh` or `/approve` again; the
+    Plan's header loses the line above (UA4).
   - Reason: time between Spec and Plan is normal; people must see when the Spec relied on code that changed.
 - **SP4 `/refresh` brings a document up to date with `main`, without a restart** (the whole comment, like
   `/approve` and `/retry`). It keeps the run, its Grill answers and its number.
@@ -256,7 +262,8 @@ Each decision is told as what someone does on the issue and what the bot then sh
   the document's `checkedCommit`; the next comparison (an `/approve`, another `/refresh`) starts from there, so
   people aren't warned twice about the same change.
 - **SPW12 The near-miss hint covers `/approve` only** (spec 2's agreement), not `/refresh` or `/restore`.
-- **SPW13 The last approval before code gets its own warning reply** (2026-11-22, write-time interview: the
+- **SPW13 The last approval before code gets its own warning reply** (2026-11-23, spec 14: replaced by the question
+  before the approval, UA1–UA3, UAW10) (2026-11-22, write-time interview: the
   developer chose this over "stored now, shown by spec 9's Coder comment").
   - An Approver comments `/approve` on `spec-code`'s Spec or `full-sdd`'s Plan, and `main` changed a file the
     document read since it was written. The bot answers that `/approve` with one reply naming the files, with a
@@ -287,7 +294,8 @@ Each decision is told as what someone does on the issue and what the bot then sh
   documents, in that rare case the mention's `@` is dropped instead (`alice`), so nobody is notified and the code
   stays. Fenced blocks (```` ``` ```` and `~~~`) and inline code are left as written.
 - **SPW21 The approved and the deleted text pass `redact()` before they're stored,** like the posted text (L17).
-- **SPW22 A failed comparison never blocks.** If GitHub can't compare the two commits (the old one is gone after
+- **SPW22 A failed comparison never blocks.** (2026-11-23, spec 14 UA3: replaced, it asks too.) If GitHub can't
+  compare the two commits (the old one is gone after
   a force-push), the approval counts and the warning line says "the bot couldn't compare `4f2c1ab` with `main`".
   A temporary GitHub error is retried by the worker as usual. 2026-11-22, plan P32: only GitHub's "unknown
   commit" (404, 422) counts as not compared, at an approval and at a `/refresh`; a 401 or 403 is a failure
@@ -480,7 +488,9 @@ To change it, edit this comment. When it's right, an Approver (Write access) com
 coding from the approved Spec and this Plan as it reads then. `/refresh` checks both against today's `main`.
 ```
 
-The warning line appears only when flagged files exist (SP3). More than 5 → the first 5 and "and N more". The host
+2026-11-23 (spec 14, UA4): the ⚠️ line goes, in both forms; when the Spec's approval couldn't compare, the Plan's
+prompt says the bot couldn't list the changed files (spec 14 UAW3). The warning line appears only when flagged files
+exist (SP3). More than 5 → the first 5 and "and N more". The host
 cut the list (more than 300 changed files) → "… and possibly more". The comparison failed (SPW22) → "⚠️ The bot
 couldn't compare `4f2c1ab` with `main`, so it can't tell whether the Spec is out of date."
 
@@ -525,6 +535,9 @@ flowchart TD
     wr --> next
 ```
 
+2026-11-23 (spec 14): the "files it read changed" branch becomes a question before the approval, for every Spec
+and Plan; spec 14's flowchart replaces this one's last two steps.
+
 **The waiting document:** in `spec-review`, the run's current Spec (the version that isn't superseded); in
 `ready-for-dev`, the current Plan (`full-sdd`) or the go-signal (`code-only`). It may already be approved: after
 a `/retry` that is still to re-run its `/approve`, or (spec 8) while an approval waits for the workspace. An
@@ -562,10 +575,12 @@ counts (it's not a document).
    `linesRemoved`.
 4. Store: `approvedText`, `approvedBy`, `approvedAt`, the event and comment ids, `approvedCommit`, `staleFiles`,
    `changedFiles`, `changedComplete`, the counts.
-5. Nothing is posted: the next step is the answer (the Plan, or spec 8's step; until spec 8, spec 5's
+5. (2026-11-23, spec 14: step 2's findings now ask before anything is stored; no warning reply) Nothing is
+   posted: the next step is the answer (the Plan, or spec 8's step; until spec 8, spec 5's
    `step-not-built` stop comment). One exception, the **warning reply** (SPW13, below).
 
-**The warning reply** (SPW13): only for the last document before code (`spec-code`'s Spec, `full-sdd`'s Plan),
+**The warning reply** (SPW13; 2026-11-23, spec 14 UAW10: no longer posted, replaced by the question): only for the
+last document before code (`spec-code`'s Spec, `full-sdd`'s Plan),
 only when step 2 flagged files or the comparison failed (SPW22). Its `document_actions` row (`approve-warning`,
 result `stale` or `not-compared`, `replyBody` with marker `approve-warning:<versionId>`) is written in the
 approval's transaction, posted right after it (the reply pattern above), then the next step runs:
@@ -1044,7 +1059,7 @@ No command. What a dashboard can read (provider-neutral; tokens stay in `executi
 |---|---|
 | How often do people change the Spec or the Plan before approving, and how much? | `task_documents.lines_added`, `lines_removed` (0 and 0 = approved as written) |
 | How long does a document wait for a human? | `approved_at − posted_at` |
-| How often does `main` make a document stale, and does `/refresh` change anything? | `stale_files`, `changed_files` at approval; `document_actions` `approve-warning` and `refresh` by `result` |
+| How often does `main` make a document stale, and does `/refresh` change anything? | `stale_files`, `changed_files` at approval; `document_actions` `approve-warning` and `refresh` by `result` (2026-11-23: from spec 14 on, `approve-asked`, spec 14 "Usage data") |
 | What does each document cost? | `execution_logs` by `log_id` → `call_id` (every turn), `step` `spec` / `plan` |
 | Do Spec and Plan read the code, and how much? | `context_loads` with `tool` `read_file` / `list_files`, by `call_id` |
 | How many versions does a document go through? | `task_documents` per `run_id`, `kind`, by `origin` |
@@ -1292,6 +1307,8 @@ A…" issues, closed afterwards.
   before Spec v2" reply.
 - [x] Push a change to an unrelated file (`README.md`), `/refresh` → ONE "still up to date" reply (or a Spec v3
   whose "What changed" says why); after "up to date", `checked_commit` = the new commit.
+2026-11-23: the next five rows (the ⚠️ line and the warning reply) hold for spec 7 as built; spec 14's matrix
+replaces them once it is built.
 - [x] Spec waiting, push a change to a file it read, `/approve` without refreshing → the Plan's header has the ⚠️
   line naming the file, with a compare link; `stale_files` lists it; the Plan's prompt names both commits; NO
   warning reply to that `/approve` (the Plan is the answer).
@@ -1395,7 +1412,8 @@ live; test once that it can fail, e.g. with a wrong issue list)
   - commits them as files (SP8): the `documents` key in `workflow.json` (its check at run start), the file name
     `<issue>-<slug>.md`, in the Coder's first commit;
   - gets the flagged files of the last approval as data (spec 7 already answered that `/approve` with them,
-    SPW13), without the paths the read tools hide (plan P41);
+    SPW13; 2026-11-23, spec 14: an Approver chose to approve after the bot's question), without the paths the read
+    tools hide (plan P41);
   - must stop the Coder from changing those files (or restore them before the push).
 - **Spec 10 (`quality-gate`):** reviews against the approved texts; the files are in the PR's diff too.
 - **Dashboard (no spec yet):** reads the two tables ("Usage data").
@@ -1408,6 +1426,7 @@ live; test once that it can fail, e.g. with a wrong issue list)
   right after this spec):** an `/approve` on a Spec or a Plan asks first when `main` changed files it read: the
   approval doesn't count yet, one reply offers `/refresh` or `/approve` again. It replaces this spec's "it never
   blocks" (SP3) and the warning reply after the last approval (SPW13); until then they stay as built.
+  2026-11-23: approved as `docs/specs/spec-github-agent-up-to-date-approvals.md`.
 - **Spec 13 (`bot-feedback`, overview D33; added 2026-11-23 after sandbox issue #55, to interview):** a quick
   signal when the bot gets a human action (a reaction on the comment, a label while it works). From spec 7: an
   `/approve` or `/refresh` that leads to a model call (minutes), and a comment that waits while the Spec call holds

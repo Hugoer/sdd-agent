@@ -419,7 +419,7 @@ loader's own spec build the scanner with test values for the two secrets it read
 - [x] `npm run github:smoke` on the sandbox: the compare check passes (2026-11-22, issue #11, run by you: the
   classifier blocked me; every line PASS, `changedFiles main with itself: 86cf3e3 → no paths, complete` and its
   compare URL)
-- [ ] You review and commit
+- [x] You review and commit (`0f4f27f`, 2026-11-22)
 
 ---
 
@@ -1122,7 +1122,7 @@ plan's checks, the docs of T25, the sandbox's skills, notice and README).
 - [x] Loose ends you asked to close (2026-11-23): spec 11's invariant script (above, "Noticed"); the sandbox's `main`
   back to `c8f58d7`'s files except the README (`cf0e08c`, with `gh` as you: `LIBRARY_NAME` again, `CHANGELOG.md`
   and `NOTES.md` gone, the Spec/Plan line and a "Current state" after spec 7)
-- [ ] You review and commit
+- [x] You review and commit (`6603de5`, 2026-11-23)
 
 ---
 
