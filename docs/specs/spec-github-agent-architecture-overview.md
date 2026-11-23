@@ -19,7 +19,8 @@
 > §6; edge case 7; the verification rows marked 7), approved with that spec on 2026-11-22 · amended 2026-11-22
 > with spec 7's plan (P6: §3 step outcomes; P10: D28) · amended 2026-11-22 (D32, decided by the user during spec
 > 7's build, after sandbox issue #51: a new spec 12 `bot-data-protection`, to interview; §1 row 12 and the build
-> order)
+> order) · amended 2026-11-23 (D33, decided by the user during spec 7's build, after sandbox issue #55: a new
+> spec 13 `bot-feedback`, to interview; §1 row 13 and the build order)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -229,6 +230,16 @@ comments, without acting under the developer's identity or touching their checko
   or "put this key in the Spec"; the paths the Coder may never change (`.github-agent/`, the other tools'
   instruction files, …) and the Quality Gate's check of them (specs 9, 10); human edits to the bot's own comments;
   how long stored prompts are kept. Built after spec 7 and before spec 8, so specs 8–10 are written against it.
+- **D33 The bot shows at once that it got a human action and is working on it (2026-11-23, the user, during spec
+  7's build; a new spec 13, to interview).** A model step takes minutes (a Spec or a Plan 1–5, the Coder more) and
+  the bot shows nothing until its answer is posted, so people think nothing happened and comment again (sandbox
+  issue #55: an `/approve`, then a second one, then deleting both). The quick signal is a reaction on the comment
+  that triggered the work and a label on the issue while the bot works; a label also covers actions with no
+  comment (a `workflow:` label added). Spec 13's starting list (its interview decides): which actions get it (every
+  command, the answers Grill Me reads, label changes, later the Coder and the Quality Gate); the label's name and how
+  it sits beside the `status: *` labels; removing it in code after a crash or a stop; the bot's own label events
+  it then receives; spec 6's 👀 on a waiting answer as the model. Built after spec 12 and before spec 8, so the long
+  steps (8, 9) are tested with it.
 
 ## Contradictions found in the idea doc
 
@@ -267,9 +278,10 @@ Numbers are IDs, not build order.
 | 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files | 4, 9, 11 (2026-11-18) | xhigh |
 | 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
 | 12 | `bot-data-protection` (2026-11-22, D32; id to confirm at its interview) | to decide at its interview | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code) | to decide |
+| 13 | `bot-feedback` (2026-11-23, D33; id to confirm at its interview) | to decide at its interview | A quick visible signal that the bot got a human action and is working on it (D33): a reaction on the triggering comment and a label while it works, removed in code when the work ends, also after a crash | 3, 5, 6, 7 (changes to their code) | to decide |
 
-**Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → ~~8~~ 12 → 8 → 9 → 10 (2026-11-18: spec 11 added, D27;
-2026-11-22: spec 12 added, D32). Specs 2 and 4 can swap; spec 8 only needs 3 and 5.
+**Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → ~~8~~ 12 → 13 → 8 → 9 → 10 (2026-11-18: spec 11 added,
+D27; 2026-11-22: spec 12 added, D32; 2026-11-23: spec 13 added, D33). Specs 2 and 4 can swap; spec 8 only needs 3 and 5.
 
 **Module rules**
 - Imports follow the "Depends on" column, with no cycles. Step modules (6, 7, 9, 10) register their handlers in

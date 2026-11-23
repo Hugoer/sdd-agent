@@ -868,10 +868,12 @@ event ends `IGNORED` with the reason in brackets.
 
 2026-11-23, plan P40: no run, yet a `workflow:` label is on (the bot missed the event that added it: it wasn't
 running, or the delivery failed) → the reply names the label instead of asking to add one: "[Your `/approve`](…) has
-nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it (it probably missed when the label was
-added). Remove the label and add it again to start one." Several lane labels: "… are on, … Keep one `workflow:`
-label, then remove it and add it again to start a run." The labels are the ones the router read for this event (no
-extra call). `/refresh` and `/restore` the same.
+nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it yet. If none starts within a few
+minutes, remove the label and add it again." Several lane labels: "… are on, but the bot has no run for them yet.
+If none starts within a few minutes, keep one `workflow:` label, then remove it and add it again." The labels are
+the ones the router read for this event (no extra call). `/refresh` and `/restore` the same. "Yet": GitHub doesn't
+keep the order of its deliveries, so the label's event may only be late (sandbox #56: it came 6 seconds after the
+`/approve`).
 
 A closed issue: spec 5's reply (RL19) for all three ("This issue is closed, so `/refresh` did nothing. Reopen the
 issue, then comment `/refresh` again.").
@@ -1384,6 +1386,11 @@ live; test once that it can fail, e.g. with a wrong issue list)
   plan P10) and `redact()` before a document is stored or posted (SPW21) are code already; the issue text, the
   Grill answers and the approved Spec reach the model unredacted and are stored as sent in `execution_logs`
   (spec 4), which spec 12 decides. Spec 7 changes nothing for it.
+- **Spec 13 (`bot-feedback`, overview D33; added 2026-11-23 after sandbox issue #55, to interview):** a quick
+  signal when the bot gets a human action (a reaction on the comment, a label while it works). From spec 7: an
+  `/approve` or `/refresh` that leads to a model call (minutes), and a comment that waits while the Spec call holds
+  the issue (its late-comment reply comes only after the Spec); the replies without a model call come within
+  seconds. Spec 7 adds no signal (its plan P42 was moved there).
 
 ## Open questions
 

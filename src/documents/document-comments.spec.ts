@@ -220,7 +220,7 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
       ]).split('\n')[1],
     ).toBe(
       `[Your \`/approve\`](${LINK}602) has nothing to approve: \`workflow: full-sdd\` is on, but the bot has no ` +
-        'run for it (it probably missed when the label was added). Remove the label and add it again to start one.',
+        'run for it yet. If none starts within a few minutes, remove the label and add it again.',
     );
     expect(
       approveNothingWaitsReply(answered('603'), 'no-run', null, [
@@ -229,8 +229,8 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
       ]).split('\n')[1],
     ).toBe(
       `[Your \`/approve\`](${LINK}603) has nothing to approve: \`workflow: full-sdd\` and \`workflow: code-only\` ` +
-        'are on, but the bot has no run for them (it probably missed when they were added). Keep one ' +
-        '`workflow:` label, then remove it and add it again to start a run.',
+        'are on, but the bot has no run for them yet. If none starts within a few minutes, keep one `workflow:` ' +
+        'label, then remove it and add it again.',
     );
   });
 });
