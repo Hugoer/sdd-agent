@@ -412,6 +412,11 @@ Approved Spec (v1, approved by `bob`):   [untrusted: key spec-<versionId>, label
 paragraph is built from PostgreSQL, also after a `/retry` hours later, with one compare per approval; it spans the
 Spec's commit to the approval's commit.
 
+2026-11-23, plan P41: the paragraph leaves out every path the read tools hide (SPW1, plan P10: `.github-agent/`,
+other tools' instruction files), so the model never sees even their names; none left → no paragraph. The stored
+`changedPaths` and the lines people read (the ⚠️ line, the warning reply) keep them. Every model-facing list of
+changed paths follows the same rule (the refresh frame; spec 9's Coder).
+
 ### The read tools (SP2, SPW1–SPW4)
 
 Offered with spec 11's `load_skill` and `load_file` in the Spec, Plan and refresh calls only (`LlmCall.repoFiles`;
@@ -860,6 +865,13 @@ event ends `IGNORED` with the reason in brackets.
 | `executing` | "[Your `/approve`](…) has nothing to approve: run 2 is writing the code." | "Too late to refresh: run 2 is already writing the code from the approved texts." | "Nothing to restore: the bot keeps the approved texts." |
 | `in-review` | "[Your `/approve`](…) has nothing to approve here: run 2's pull request is open; review it there." | "Too late to refresh: run 2's pull request is open." | as `executing` |
 | `needs-human` | "[Your `/approve`](…) has nothing to approve now: run 2 is stopped. See the stop comment for how to continue." | "Run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`." | same, "`/restore`" |
+
+2026-11-23, plan P40: no run, yet a `workflow:` label is on (the bot missed the event that added it: it wasn't
+running, or the delivery failed) → the reply names the label instead of asking to add one: "[Your `/approve`](…) has
+nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it (it probably missed when the label was
+added). Remove the label and add it again to start one." Several lane labels: "… are on, … Keep one `workflow:`
+label, then remove it and add it again to start a run." The labels are the ones the router read for this event (no
+extra call). `/refresh` and `/restore` the same.
 
 A closed issue: spec 5's reply (RL19) for all three ("This issue is closed, so `/refresh` did nothing. Reopen the
 issue, then comment `/refresh` again.").
@@ -1363,7 +1375,7 @@ live; test once that it can fail, e.g. with a wrong issue list)
   - commits them as files (SP8): the `documents` key in `workflow.json` (its check at run start), the file name
     `<issue>-<slug>.md`, in the Coder's first commit;
   - gets the flagged files of the last approval as data (spec 7 already answered that `/approve` with them,
-    SPW13);
+    SPW13), without the paths the read tools hide (plan P41);
   - must stop the Coder from changing those files (or restore them before the push).
 - **Spec 10 (`quality-gate`):** reviews against the approved texts; the files are in the PR's diff too.
 - **Dashboard (no spec yet):** reads the two tables ("Usage data").

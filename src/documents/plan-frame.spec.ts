@@ -53,6 +53,36 @@ describe('planFrame (spec "Writing the Plan")', () => {
       }),
     ).toContain('the ones the Spec read: a.ts, and possibly more.');
   });
+
+  it('P41: paths the read tools hide (P10) are never named; only hidden ones → no paragraph', () => {
+    const changes = (paths: string[]) => ({
+      specCommit: SPEC_COMMIT,
+      paths,
+      read: [],
+      complete: true,
+    });
+    const frame = planFrame({
+      commit: COMMIT,
+      changes: changes([
+        '.github-agent/skills/plan/SKILL.md',
+        '.GITHUB-AGENT/workflow.json',
+        'src/CLAUDE.md',
+        'src/index.ts',
+      ]),
+    });
+
+    expect(frame).toContain('the ones the Spec read: src/index.ts. Where');
+    expect(frame).not.toMatch(/github-agent|CLAUDE/i);
+    expect(
+      planFrame({
+        commit: COMMIT,
+        changes: changes([
+          '.github-agent/skills/THIRD-PARTY-NOTICES.md',
+          '.github-agent/skills/plan/SKILL.md',
+        ]),
+      }),
+    ).not.toContain('The Spec was written at commit');
+  });
 });
 
 describe('planTurns (SP1)', () => {

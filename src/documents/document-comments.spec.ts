@@ -212,6 +212,27 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
       );
     },
   );
+
+  it('P40: no run, but a `workflow:` label is on → names it and how to start a run', () => {
+    expect(
+      approveNothingWaitsReply(answered('602'), 'no-run', null, [
+        'full-sdd',
+      ]).split('\n')[1],
+    ).toBe(
+      `[Your \`/approve\`](${LINK}602) has nothing to approve: \`workflow: full-sdd\` is on, but the bot has no ` +
+        'run for it (it probably missed when the label was added). Remove the label and add it again to start one.',
+    );
+    expect(
+      approveNothingWaitsReply(answered('603'), 'no-run', null, [
+        'full-sdd',
+        'code-only',
+      ]).split('\n')[1],
+    ).toBe(
+      `[Your \`/approve\`](${LINK}603) has nothing to approve: \`workflow: full-sdd\` and \`workflow: code-only\` ` +
+        'are on, but the bot has no run for them (it probably missed when they were added). Keep one ' +
+        '`workflow:` label, then remove it and add it again to start a run.',
+    );
+  });
 });
 
 describe('approveHintReply and lateCommentReply (P39: the answered comment linked)', () => {

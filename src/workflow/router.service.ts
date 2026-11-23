@@ -360,6 +360,7 @@ export class RouterService {
           task: { id: job.lease.taskId, ref: job.ref },
           input: job.input,
           lease: job.lease,
+          lanes: routing.state.lanesOnIssue,
         });
         this.logger.log(`${job.tag} ignored ${reason} (no run)`);
         return ignored(reason);

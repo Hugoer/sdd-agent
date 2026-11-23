@@ -61,7 +61,7 @@ export class DocumentsGate implements ApprovalGate {
    * run, counted with the other wasted actions.
    */
   async replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason> {
-    const { input } = context;
+    const { input, lanes } = context;
     if (input.type !== 'APPROVE')
       throw new Error(
         `approval gate: no reply without a run for ${input.type}`,
@@ -72,7 +72,12 @@ export class DocumentsGate implements ApprovalGate {
         documentId: null,
         action: 'approve-refused',
         result: 'no-run',
-        replyBody: approveNothingWaitsReply(input.comment, 'no-run', null),
+        replyBody: approveNothingWaitsReply(
+          input.comment,
+          'no-run',
+          null,
+          lanes,
+        ),
       },
       '/approve refused (no-run)',
     );

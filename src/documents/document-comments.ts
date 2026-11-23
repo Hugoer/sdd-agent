@@ -299,14 +299,30 @@ export function approveNothingWaitsReply(
   comment: AnsweredComment,
   situation: NothingWaits,
   run: number | null,
+  /** `no-run` only: the `workflow:` labels on the issue (plan P40). */
+  lanes: readonly Lane[] = [],
 ): string {
   const text = {
-    'no-run':
-      'has nothing to approve: this issue has no run. To start one, add a `workflow:` label.',
+    'no-run': `has nothing to approve: ${noRun(lanes)}`,
     starting: `has nothing to approve yet: run ${run} is just starting.`,
     executing: `has nothing to approve: run ${run} is writing the code.`,
     'in-review': `has nothing to approve here: run ${run}'s pull request is open; review it there.`,
     stopped: `has nothing to approve now: run ${run} is stopped. See the stop comment for how to continue.`,
   }[situation];
   return `${approveRefusedMarker(comment.id)}\n${yourApprove(comment)} ${text}`;
+}
+
+/**
+ * Plan P40: no run, yet a `workflow:` label is on: the bot missed the event that added it (it wasn't running, or the
+ * delivery failed), so the reply names the label and how to start a run instead of asking to add one.
+ */
+function noRun(lanes: readonly Lane[]): string {
+  if (lanes.length === 0)
+    return 'this issue has no run. To start one, add a `workflow:` label.';
+  const labels = lanes.map((lane) => `\`${laneLabel(lane)}\``);
+  return lanes.length === 1
+    ? `${labels[0]} is on, but the bot has no run for it (it probably missed when the label was added). Remove ` +
+        'the label and add it again to start one.'
+    : `${labels.join(' and ')} are on, but the bot has no run for them (it probably missed when they were added). ` +
+        'Keep one `workflow:` label, then remove it and add it again to start a run.';
 }

@@ -51,7 +51,7 @@ run test:integration` green.
 
 Each told as what happens on GitHub. P1–P5 change something you can see: to ask one at a time. P6–P11 and P33 change
 nothing on GitHub but have a real choice: to ask after them. P12–P32 and P34–P38 follow from a rule named in their
-row. P33–P38 come from the review (2026-11-22); P39 from Checkpoint 3 (2026-11-23).
+row. P33–P38 come from the review (2026-11-22); P39–P41 from Checkpoint 3 (2026-11-23).
 
 | # | On GitHub | My guess (and the alternative) | Spec lines it changes |
 |---|---|---|---|
@@ -94,6 +94,8 @@ row. P33–P38 come from the review (2026-11-22); P39 from Checkpoint 3 (2026-11
 | P37 | No difference. | **The go-signal's row:** `text` is empty (it has no document; the column is NOT NULL); `approved_text` is the title, a blank line, then the description as written, `redact()`ed. | — |
 | P38 | No difference. | **One hint per waiting document** is enforced in code under the session lease (one job per issue, R3), not by a partial index (Prisma's schema can't hold one, and a raw one would show as drift). | — |
 | P39 | `alice` comments "Q3: actually weekly" and `/approve` while the bot writes the Spec. Both replies come after Spec v1, below it, so neither is next to the comment it answers (#53, Checkpoint 3). | **Confirmed 2026-11-23. Every reply to a person's comment links that comment, as its subject:** "[Your `/approve`](…) was written before Spec v1 was posted, so it didn't count. …", "`alice`, [your comment](…) was written while the bot was writing the Spec …", "[Your comment](…) isn't an approval: to approve, comment exactly `/approve` …", "[Your `/approve`](…) approved Plan v1. Since it was written …". The link is the comment's own URL from the event; nothing from the comment is quoted (no repeated mentions, no echoed human text, D32). Spec 2's signed test requests carry no URL: "Your `/approve`" without a link. The `/refresh` and `/restore` replies (T18–T22) follow the same rule. *Alternative:* the link plus a quote of the comment's first line (rejected: it repeats human text). | SP12; "`/approve`" (the verdict table, the warning reply, the hint); "A comment written while the bot writes the Spec"; "Replies where nothing waits"; the matrix's warning-reply rows |
+| P40 | Labels added while the bot wasn't running (#52, Checkpoint 3): `workflow: full-sdd` is on, but the bot never got its event, so there's no run. `bob` comments `/approve`. | **Confirmed 2026-11-23. The no-run reply names the label:** "[Your `/approve`](…) has nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it (it probably missed when the label was added). Remove the label and add it again to start one." Several lane labels: "Keep one `workflow:` label, then remove it and add it again to start a run." The router already read the labels for this event (`NoRunContext.lanes`), so no extra call; `/refresh` and `/restore` the same (T18). *Alternative:* start the run from the comment (rejected: changes spec 5's rows). | "Replies where nothing waits" (one paragraph) |
+| P41 | #50's Spec was read before a commit that changed two `.github-agent/` files (Checkpoint 3); the Plan's prompt listed their names. | **Confirmed 2026-11-23. Model-facing lists of changed paths leave out what the read tools hide (P10):** the Plan's "files changed" paragraph now (only hidden ones → no paragraph), the refresh frame (T18), spec 9's Coder later. The stored `changed_paths` and the people-facing lines (⚠️ line, warning reply) keep them: people can see the repository. *Alternative:* leave it to spec 12 (rejected: the names reach the model meanwhile). | "Writing the Plan" (one paragraph); "Agreed for later specs" (spec 9, one line) |
 
 ## Existing tests this plan changes (grep, 2026-11-22)
 
@@ -771,7 +773,9 @@ date, both up to date, already written at that commit, already approved, deleted
 frame line), and the "Replies where nothing waits" texts for `/refresh` and `/restore` in every status of the spec's
 table (`draft` with no run and starting, `grilling`, `executing`, `in-review`, `needs-human`, `code-only`).
 P39 (2026-11-23): every reply to a command links that comment as its subject ("[Your `/refresh`](…) …"); the
-spec's `/refresh` and `/restore` reply examples are reworded the same way in this task.
+spec's `/refresh` and `/restore` reply examples are reworded the same way in this task. P40: their no-run replies
+name the `workflow:` labels on the issue. P41: the refresh frame's changed paths leave out what the read tools
+hide (`isHiddenPath`).
 
 **Acceptance criteria:**
 - [ ] The schema: `upToDate` with changes or a document → refused; changed with a blank document or no change line →
@@ -1025,6 +1029,10 @@ as the spec says.
   actually weekly" and `/approve` during the Spec call → after Spec v1, "`Hugoer`, [your comment](…)" and "[Your
   `/approve`](…) was written before Spec v1 …", each link to its own comment; `/approve please` → "[Your
   comment](…) isn't an approval …")
+- [x] P40 and P41 (2026-11-23): P40 on the sandbox (#56 opened with `workflow: full-sdd` while my instance was
+  down, then `/approve` → "[Your `/approve`](…) has nothing to approve: `workflow: full-sdd` is on, but the bot has
+  no run for it …"; #52 and #56 closed); P41 by tests only (it needs a `.github-agent/` commit between a Spec and its
+  approval)
 
 ---
 
@@ -1047,7 +1055,7 @@ as the spec says.
 - (Checkpoint 2) A root listing logs as `list_files  → loaded` (an empty folder name): cosmetic.
 - (Checkpoint 3, 2026-11-23) #50's Spec was read at `abf8f2d`; the `plan` skill commit changed two `.github-agent/`
   files before its approval, so `changed_paths` holds them and the Plan's prompt paragraph lists their names (never
-  their text). P10 leaves `.github-agent/` out of the read tools only. To decide (see the Checkpoint 3 report).
+  their text). P10 leaves `.github-agent/` out of the read tools only. Decided 2026-11-23: P41.
 - (P39, 2026-11-23) Earlier specs' replies don't link the comment they answer either: spec 5's `/retry` refusals
   ("This `/retry` was written before run 1 stopped …") and closed-issue reply, spec 6's `/approve` and answer
   replies. P39 covers spec 7's replies only; the others keep their texts.

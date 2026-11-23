@@ -192,6 +192,24 @@ describe('Replies: the hint, the late comment, `/approve` where nothing waits (s
     expect(logs).toContain('#94 documents: /approve refused (no-run)');
   });
 
+  it('P40: `/approve` with no run while `workflow: full-sdd` is on (its event missed) → the reply names the label', async () => {
+    const issue = seedIssue(t, 190, {
+      labels: ['workflow: full-sdd', 'grill: skip'],
+    });
+
+    await deliver(t, commentNow(190, 19001, '/approve'));
+
+    expect(refused(issue, 19001)[0].body).toBe(
+      `${approveRefusedMarker('19001')}\n${yours('`/approve`', 190, 19001)} has nothing to approve: ` +
+        '`workflow: full-sdd` is on, but the bot has no run for it (it probably missed when the label was added). ' +
+        'Remove the label and add it again to start one.',
+    );
+    expect(await actionRows(t)).toMatchObject([
+      { runId: null, result: 'no-run' },
+    ]);
+    expect(await t.prisma.run.count()).toBe(0);
+  });
+
   it.each([
     ['executing', 95, 'has nothing to approve: run 1 is writing the code.'],
     [

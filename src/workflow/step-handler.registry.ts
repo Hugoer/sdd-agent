@@ -67,8 +67,13 @@ export interface ApprovalGate {
   replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason>;
 }
 
-/** A command on an issue with no run: the issue, the event, the lease. */
-export type NoRunContext = Pick<StepContext, 'task' | 'input' | 'lease'>;
+/**
+ * A command on an issue with no run: the issue, the event, the lease, and the `workflow:` labels on the issue as this
+ * event read them (spec 7 plan P40: a label whose event the bot missed is named in the reply).
+ */
+export type NoRunContext = Pick<StepContext, 'task' | 'input' | 'lease'> & {
+  lanes: Lane[];
+};
 
 /** What the gate reads: the run, its status, the `/approve` event and the lease of this job. */
 export type GateContext = Pick<

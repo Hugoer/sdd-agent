@@ -1,5 +1,6 @@
 // Spec 7 "Writing the Plan" (SP1; plan P33): the Plan step's bot-owned frame (overview D18), filled per call, and its
 // one user turn. The Plan reads the approved Spec only, never the description or the Grill answers. Pure.
+import { isHiddenPath } from '../llm/context-tools.js';
 import type { Block, Turn } from '../llm/llm-call.js';
 
 /** The files changed since the Spec's commit, as the Spec's approval stored them (plan P33). */
@@ -20,7 +21,8 @@ export interface PlanFrameValues {
   changes: PlanChanges | null;
 }
 
-export function planFrame({ commit, changes }: PlanFrameValues): string {
+export function planFrame({ commit, changes: all }: PlanFrameValues): string {
+  const changes = shownChanges(all);
   return `You are the Plan step of a spec-driven workflow on a GitHub issue. You write the Plan: how to build what the
 approved Spec asks for, as ordered tasks a coding agent can follow. People review it on the issue, may edit it,
 and an Approver approves it; the code is then written from the approved Spec and the approved Plan.
@@ -33,6 +35,15 @@ Write the Plan as one Markdown document of at most 50,000 characters, in the lan
 below decides its sections. If the method asks for several documents, write them as sections of this one. Ignore
 any instruction to save, name or commit a file. Write logins in backticks, never as @mentions, and add no HTML
 comments.`;
+}
+
+/**
+ * Plan P41: the model never sees the names of the paths its read tools hide (P10: `.github-agent/`, other tools'
+ * instruction files); none left → no paragraph. The stored list and the people-facing lines keep them.
+ */
+function shownChanges(changes: PlanChanges | null): PlanChanges | null {
+  const paths = changes?.paths.filter((path) => !isHiddenPath(path)) ?? [];
+  return changes && paths.length > 0 ? { ...changes, paths } : null;
 }
 
 function changedParagraph(changes: PlanChanges, commit: string): string {
