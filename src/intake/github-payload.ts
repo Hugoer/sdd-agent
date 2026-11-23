@@ -16,6 +16,7 @@ import {
 import { isApproveCommand } from './approve-command.js';
 import type { IgnoreReason } from './ignore-reason.js';
 import { isRefreshCommand } from './refresh-command.js';
+import { isRestoreCommand } from './restore-command.js';
 import { isRetryCommand } from './retry-command.js';
 
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
@@ -81,6 +82,8 @@ const commentPayload = z.object({
     body: z.string(),
     created_at: z.iso.datetime({ offset: true }),
     html_url: z.url().optional(), // spec 6: spec 2's signed test requests send none
+    // Spec 7 (D30): who wrote it, for a deletion; spec 2's signed test requests send none.
+    user: z.object({ login: z.string() }).optional(),
   }),
 });
 
@@ -146,7 +149,7 @@ export function classifyGitHubEvent(
   };
   if (eventName === 'issues') return classifyIssues(env, payload, common);
   if (eventName === 'issue_comment')
-    return classifyComment(env, payload, common);
+    return classifyComment(env, payload, common, isSelf);
   return classifyPullRequest(env, payload, common, isSelf);
 }
 
@@ -221,17 +224,20 @@ function classifyLabel(
   return ignored('other-label'); // also an unknown `workflow: *` or `model: *`
 }
 
-/** The `issue_comment` rows. The body is the text as it was created; later edits are ignored. */
+/**
+ * The `issue_comment` rows. The body is the text as it was created; later edits are ignored. Spec 7 (D30): a deleted
+ * comment the bot wrote is `BOT_COMMENT_DELETED`, with its last text (edits included) and who deleted it.
+ */
 function classifyComment(
   env: Envelope,
   payload: unknown,
   common: Common,
+  isSelf: (login: string) => boolean,
 ): Classified {
   switch (env.action) {
     case 'edited':
       return ignored('comment-edited');
     case 'deleted':
-      return ignored('comment-deleted');
     case 'created':
       break;
     default:
@@ -249,6 +255,14 @@ function classifyComment(
     createdAt: new Date(raw.created_at),
     ...(raw.html_url && { url: raw.html_url }),
   };
+  if (env.action === 'deleted')
+    return raw.user && isSelf(raw.user.login)
+      ? candidate(
+          { ...common, type: 'BOT_COMMENT_DELETED', task, comment },
+          'participant',
+          task,
+        )
+      : ignored('comment-deleted'); // spec 2: anyone else's comment, or a signed request's
   if (isApproveCommand(raw.body))
     return candidate(
       { ...common, type: 'APPROVE', task, comment },
@@ -262,10 +276,16 @@ function classifyComment(
       'participant',
       task,
     );
-  // Spec 7 (SPW9): `/refresh` needs a Participant, like `/retry`.
+  // Spec 7 (SPW9): `/refresh` and `/restore` need a Participant, like `/retry`.
   if (isRefreshCommand(raw.body))
     return candidate(
       { ...common, type: 'REFRESH', task, comment },
+      'participant',
+      task,
+    );
+  if (isRestoreCommand(raw.body))
+    return candidate(
+      { ...common, type: 'RESTORE', task, comment },
       'participant',
       task,
     );

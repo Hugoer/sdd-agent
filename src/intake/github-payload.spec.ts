@@ -559,6 +559,17 @@ describe('classifyGitHubEvent: issue_comment', () => {
     },
   );
 
+  it.each(['/restore', '  /RESTORE '])(
+    'created %j → RESTORE; Participant (spec 7, SPW9)',
+    (body) => {
+      expect(classify(issueCommentCreated({ body }))).toMatchObject({
+        outcome: 'candidate',
+        input: { type: 'RESTORE', comment: { body } },
+        needs: 'participant',
+      });
+    },
+  );
+
   it.each(['please /refresh', '/refresh now', '/refreshed'])(
     'created %j → COMMENT (spec 7)',
     (body) => {
@@ -625,6 +636,45 @@ describe('classifyGitHubEvent: issue_comment', () => {
       outcome: 'ignored',
       reason: 'comment-deleted',
     });
+  });
+
+  it('deleted, a comment the bot wrote → BOT_COMMENT_DELETED with its last text and who deleted it; a Participant (spec 7, D30)', () => {
+    expect(
+      classify(
+        issueCommentDeleted({
+          author: BOT_LOGIN,
+          body: '<!-- sdd-agent:spec:v-1 -->\n**Spec v1** …',
+          commentId: 901,
+        }),
+      ),
+    ).toMatchObject({
+      outcome: 'candidate',
+      input: {
+        type: 'BOT_COMMENT_DELETED',
+        sender: HUMAN,
+        task: task(),
+        comment: {
+          id: '901',
+          body: '<!-- sdd-agent:spec:v-1 -->\n**Spec v1** …',
+        },
+      },
+      needs: 'participant',
+    });
+  });
+
+  it("deleted: the bot's comment on a pull request → pr-comment; no author (a signed request) → comment-deleted", () => {
+    expect(
+      classify(issueCommentDeleted({ author: BOT_LOGIN, onPullRequest: true })),
+    ).toEqual({ outcome: 'ignored', reason: 'pr-comment' });
+    expect(
+      classify(
+        withField(
+          issueCommentDeleted({ author: BOT_LOGIN }),
+          'comment.user',
+          undefined,
+        ),
+      ),
+    ).toEqual({ outcome: 'ignored', reason: 'comment-deleted' });
   });
 
   it('another action → unsupported-event', () => {

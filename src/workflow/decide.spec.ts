@@ -705,22 +705,88 @@ describe('decide(): spec 7 seam (plan T7)', () => {
     ).toEqual({ kind: 'set-status', status: 'spec-review' });
   });
 
-  it('RESTORE, BOT_COMMENT_DELETED on an open issue → ignored no-transition until their tasks', () => {
-    const statuses = ['spec-review', 'ready-for-dev', 'grilling'] as const;
-    for (const input of [ev.restore(), ev.deleted()]) {
-      expect(act(state(), input)).toEqual(ignored('no-transition'));
-      for (const status of statuses)
-        expect(act(running({ status }), input)).toEqual(
-          ignored('no-transition'),
-        );
-    }
+  it('a deleted bot comment on a closed issue → ignored issue-closed (plan P21)', () => {
+    expect(
+      act(running({ status: 'spec-review', open: false }), ev.deleted()),
+    ).toEqual(ignored('issue-closed'));
+  });
+});
+
+describe('decide(): a deleted bot comment (spec 7 row 33, D30)', () => {
+  const deleted = {
+    kind: 'steps',
+    calls: [{ handler: 'documents', op: 'deleted' }],
+    statusFirst: null,
+    statusAfter: null,
+  };
+
+  it('spec-review, ready-for-dev, needs-human → the documents handler checks it', () => {
+    for (const status of [
+      'spec-review',
+      'ready-for-dev',
+      'needs-human',
+    ] as const)
+      expect(act(running({ status }), ev.deleted())).toEqual(deleted);
   });
 
-  it('… and on a closed issue → ignored issue-closed', () => {
-    for (const input of [ev.restore(), ev.deleted()])
-      expect(
-        act(running({ status: 'spec-review', open: false }), input),
-      ).toEqual(ignored('issue-closed'));
+  it('grilling, executing, in-review, draft, no run → no-transition; a closed issue → issue-closed (plan P21)', () => {
+    for (const status of [
+      'grilling',
+      'executing',
+      'in-review',
+      'draft',
+    ] as const)
+      expect(act(running({ status }), ev.deleted())).toEqual(
+        ignored('no-transition'),
+      );
+    expect(act(state(), ev.deleted())).toEqual(ignored('no-transition'));
+    expect(
+      act(running({ status: 'spec-review', open: false }), ev.deleted()),
+    ).toEqual(ignored('issue-closed'));
+  });
+});
+
+describe('decide(): /restore (spec 7 rows 5, 34, 35; RL19)', () => {
+  const calls = (handler: string, op: string) => ({
+    kind: 'steps',
+    calls: [{ handler, op }],
+    statusFirst: null,
+    statusAfter: null,
+  });
+
+  it('row 34: spec-review (any lane), ready-for-dev full-sdd → the documents handler restores', () => {
+    expect(act(running({ status: 'spec-review' }), ev.restore())).toEqual(
+      calls('documents', 'restore'),
+    );
+    expect(act(running({ status: 'ready-for-dev' }), ev.restore())).toEqual(
+      calls('documents', 'restore'),
+    );
+  });
+
+  it('row 35: grilling, code-only ready-for-dev, executing, in-review, needs-human, draft with a run → one reply', () => {
+    for (const status of [
+      'grilling',
+      'executing',
+      'in-review',
+      'needs-human',
+      'draft',
+    ] as const)
+      expect(act(running({ status }), ev.restore())).toEqual(
+        calls('documents', 'reply'),
+      );
+    expect(
+      act(
+        running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })),
+        ev.restore(),
+      ),
+    ).toEqual(calls('documents', 'reply'));
+  });
+
+  it("row 5: no run → the gate; a closed issue → spec 5's reply", () => {
+    expect(act(state(), ev.restore())).toEqual({ kind: 'reply-without-run' });
+    expect(
+      act(running({ status: 'spec-review', open: false }), ev.restore()),
+    ).toEqual({ kind: 'reply-closed', command: { kind: 'restore' } });
   });
 });
 

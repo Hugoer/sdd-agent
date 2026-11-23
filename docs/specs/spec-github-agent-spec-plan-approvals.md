@@ -172,8 +172,9 @@ Each decision is told as what someone does on the issue and what the bot then sh
 - **SP9 A deleted document can be restored with `/restore`.** The bot watches one comment: the document waiting
   for approval.
   - Deleted → at once one explanation: "The Spec comment (v1) was deleted by `bob`, so there's nothing to approve.
-    To get it back, comment `/restore` … To start over instead, remove the `workflow: full-sdd` label and add it
-    again." GitHub's deletion event carries the comment's last text, edits included; the bot stores it.
+    To get it back, comment `/restore`: the bot posts it again as it read when it was deleted. To start over
+    instead, remove the `workflow: full-sdd` label and add it again." GitHub's deletion event carries the comment's
+    last text, edits included; the bot stores it.
   - `/restore` (a Participant or Approver, the whole comment) posts it again as it read when deleted ("**Spec v1**
     (restored)"), with no model call; `/approve` counts after that comment. If the bot missed the deletion (app
     stopped), it posts its own last version and says people's edits are lost.
@@ -1019,7 +1020,7 @@ version (`refresh`, `restore`).
 | `runId` | uuid, nullable, FK | null when the issue has no run |
 | `documentId` | uuid, nullable, FK | the document concerned, or the version a refresh or a restore made |
 | `action` | text | `approve-refused`, `approve-hint`, `approve-warning`, `late-comment`, `refresh`, `refresh-refused`, `deleted`, `restore`, `restore-refused` |
-| `result` | text | `approve-refused`: `already-approved`, `before-document`, `deleted`, `empty`, `no-run`, `starting`, `executing`, `in-review`, `stopped`; `approve-warning`: `stale`, `not-compared`; `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, `deleted`, `already-approved`, `empty` (2026-11-22, plan P5); `restore`: `restored`, `restored-last-version`, `nothing-deleted`, `approved`; the `-refused` ones: the status |
+| `result` | text | `approve-refused`: `already-approved`, `before-document`, `deleted`, `empty`, `no-run`, `starting`, `executing`, `in-review`, `stopped`; `approve-warning`: `stale`, `not-compared`; `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, `deleted`, `already-approved`, `empty` (2026-11-22, plan P5); `deleted`: the document's kind, `spec` or `plan` (2026-11-23, plan T21); `restore`: `restored`, `restored-last-version`, `nothing-deleted`, `approved`; the `-refused` ones: the status |
 | `eventId` | uuid | the webhook event |
 | `sourceCommentId` | text | the human comment answered, or the deleted comment; unique with `action` (`approve-hint`: at most one per `documentId` as well) |
 | `sender` | text | |

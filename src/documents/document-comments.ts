@@ -4,6 +4,7 @@ import type { Lane } from '../contracts/issue-provider.js';
 import type { TaskComment } from '../contracts/workflow-input.js';
 import { laneLabel } from '../github/labels.js';
 import { withNotes } from '../llm/prompt.js';
+import type { RunEnd } from '../workflow/workflow-comments.js';
 import { namedFiles, type FlaggedFile, type Reader } from './commit-check.js';
 import {
   DIFF_BLOCK_MAX_COMMENT_CHARS,
@@ -655,4 +656,85 @@ function changedSentence(from: string, changed: ChangedCount | null): string {
 
 function versionName({ kind, version }: NamedVersion): string {
   return `${kindName(kind)} v${version}`;
+}
+
+export const documentDeletedMarker = (commentId: string): string =>
+  marker(`doc-deleted:${commentId}`);
+
+export interface DeletedDocument {
+  kind: 'spec' | 'plan';
+  version: number;
+  /** Who deleted it (the event's sender), in backticks. */
+  by: string;
+  lane: Lane;
+  /** The run stopped while the document waited (`needs-human`): its number, so the line says to continue it. */
+  stoppedRun: number | null;
+}
+
+/**
+ * SP9: the waiting document's comment was deleted: who did it, `/restore` to post it again as it read when deleted,
+ * or start over; a stopped run is continued first (2026-11-21, review).
+ */
+export function documentDeletedComment(
+  commentId: string,
+  doc: DeletedDocument,
+): string {
+  const text =
+    `The ${kindName(doc.kind)} comment (v${doc.version}) was deleted by \`${doc.by}\`, so there's nothing to approve. ` +
+    'To get it back, comment `/restore`: the bot posts it again as it read when it was deleted. To start over ' +
+    `instead, remove the \`${laneLabel(doc.lane)}\` label and add it again.`;
+  const stopped =
+    doc.stoppedRun === null
+      ? ''
+      : `\n\nRun ${doc.stoppedRun} is stopped: continue it first (see the stop comment), then comment \`/restore\`.`;
+  return `${documentDeletedMarker(commentId)}\n${text}${stopped}`;
+}
+
+export const restoreMarker = (commentId: string): string =>
+  marker(`restore:${commentId}`);
+
+/** The spec's `/restore` table: the waiting document is still on the issue (with its link), or already approved. */
+export function restoreRefusedReply(
+  comment: AnsweredComment,
+  refusal: 'nothing-deleted' | 'approved',
+  document: NamedVersion & { url: string | null },
+): string {
+  const name = versionName(document);
+  const text =
+    refusal === 'approved'
+      ? `has nothing to restore: ${name} is already approved; the bot keeps the approved text.`
+      : `has nothing to restore: ${name} is still on the issue${document.url ? ` ([link](${document.url}))` : ''}.`;
+  return `${restoreMarker(comment.id)}\n${linked('Your `/restore`', comment.url)} ${text}`;
+}
+
+export interface EndedRunDocuments {
+  run: number;
+  end: RunEnd;
+  /** The run's current Spec and Plan (not superseded, not deleted, approved or not), in that order. */
+  documents: (NamedVersion & { url: string | null })[];
+}
+
+/**
+ * SPW10: the line spec 7 adds to spec 5's run-ended comment, after spec 6's answers block: the ended run's documents,
+ * linked, no longer count, and how to keep something from them. None (ended during Grill Me, or `code-only`) → null.
+ */
+export function runEndedLine({
+  run,
+  end,
+  documents,
+}: EndedRunDocuments): string | null {
+  if (documents.length === 0) return null;
+  const one = documents.length === 1;
+  const links = documents
+    .map((doc) =>
+      doc.url ? `[${versionName(doc)}](${doc.url})` : versionName(doc),
+    )
+    .join(' and ');
+  const them = one ? 'it' : 'them';
+  const next = end.kind === 'replaced' ? `Run ${end.by.number}` : 'A new run';
+  return (
+    `${links} belonged to run ${run} and no longer ${one ? 'counts' : 'count'}. ${next} doesn't use ${them}: it ` +
+    `works from the issue description and its own Grill Me answers. To keep anything from ${them}, copy it into the ` +
+    'description.'
+  );
 }

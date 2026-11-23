@@ -113,11 +113,13 @@ export interface CommentOptions extends IssueOptions {
   createdAt?: string;
   /** The comment is on a pull request (its `issue` carries `pull_request`). */
   onPullRequest?: boolean;
+  /** Spec 7: who wrote the comment, when not the sender (the bot's comment someone deleted). */
+  author?: string;
 }
 
 function comment(action: string, options: CommentOptions) {
   const payload = base(action, options);
-  const login = options.sender ?? HUMAN;
+  const login = options.author ?? options.sender ?? HUMAN;
   const number = options.number ?? 7;
   const issueWithPr = options.onPullRequest
     ? {

@@ -47,6 +47,12 @@ export function approvalVerdict(
   return documentText(comment.body) === '' ? 'empty' : 'valid';
 }
 
+const COMMANDS = {
+  APPROVE: 'approve',
+  REFRESH: 'refresh',
+  RESTORE: 'restore',
+} as const;
+
 /** The gate DocumentsModule registers with spec 5's registry (plan P7, P26). */
 @Injectable()
 export class DocumentsGate implements ApprovalGate {
@@ -57,16 +63,20 @@ export class DocumentsGate implements ApprovalGate {
   ) {}
 
   /**
-   * Row 5 (plan P7, P36): an `/approve` or a `/refresh` on an issue with no run gets one reply, and a
+   * Row 5 (plan P7, P36): an `/approve`, `/refresh` or `/restore` on an issue with no run gets one reply, and a
    * `document_actions` row with no run, counted with the other wasted actions.
    */
   async replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason> {
     const { input, lanes } = context;
-    if (input.type !== 'APPROVE' && input.type !== 'REFRESH')
+    if (
+      input.type !== 'APPROVE' &&
+      input.type !== 'REFRESH' &&
+      input.type !== 'RESTORE'
+    )
       throw new Error(
         `approval gate: no reply without a run for ${input.type}`,
       );
-    const command = input.type === 'APPROVE' ? 'approve' : 'refresh';
+    const command = COMMANDS[input.type];
     const action = `${command}-refused` as const;
     await this.posts.answer(
       context,

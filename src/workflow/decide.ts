@@ -271,6 +271,8 @@ function onClosedIssue(state: RouterState, event: IssueEvent): Action {
       return { kind: 'reply-closed', command: { kind: 'approve' } };
     case 'REFRESH':
       return { kind: 'reply-closed', command: { kind: 'refresh' } };
+    case 'RESTORE':
+      return { kind: 'reply-closed', command: { kind: 'restore' } };
     default:
       return ignore('issue-closed');
   }
@@ -321,6 +323,7 @@ function withoutRun(state: RouterState, event: IssueEvent): Action {
       return { kind: 'reply-retry', refusal: { kind: 'no-run' } };
     case 'APPROVE':
     case 'REFRESH':
+    case 'RESTORE':
       return { kind: 'reply-without-run' }; // row 5 (spec 7)
     default:
       return ignore('no-transition');
@@ -363,8 +366,10 @@ function byStatus(
       return whileGrilling(state, event);
     case 'spec-review':
       if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, a late comment, or nothing
+      if (event.type === 'BOT_COMMENT_DELETED') return documentDeleted(); // row 33
       if (event.type === 'REFRESH')
         return steps([{ handler: 'spec', op: 'refresh' }], null); // row 32
+      if (event.type === 'RESTORE') return documentRestore(); // row 34
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
       if (state.approval !== 'valid') return approvalAnswer(state.approval);
       return run.lane === 'full-sdd'
@@ -384,6 +389,7 @@ function byStatus(
           ); // row 18
     case 'ready-for-dev':
       if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, or nothing
+      if (event.type === 'BOT_COMMENT_DELETED') return documentDeleted(); // row 33
       if (event.type === 'REFRESH')
         // Row 32: the Spec first, then the Plan (D3: two calls, no step calls another); `code-only`: row 35.
         return run.lane === 'full-sdd'
@@ -395,6 +401,9 @@ function byStatus(
               null,
             )
           : documentsReply();
+      if (event.type === 'RESTORE')
+        // Row 34 (`full-sdd`: the Plan waits); `code-only`: row 35.
+        return run.lane === 'full-sdd' ? documentRestore() : documentsReply();
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
       if (state.approval !== 'valid') return approvalAnswer(state.approval);
       // Row 19.
@@ -410,9 +419,17 @@ function byStatus(
       );
     default:
       // Row 27 (in-review, needs-human); also `draft` before the first step and `executing`: nothing to do, but
-      // an `/approve` gets one reply why (spec 7 row 36), and a `/refresh` too (row 35).
-      return event.type === 'APPROVE' || event.type === 'REFRESH'
-        ? documentsReply()
+      // an `/approve` gets one reply why (spec 7 row 36), and a `/refresh` too (row 35). Row 33: a run stopped while a
+      // document waited still records its deletion.
+      if (
+        event.type === 'APPROVE' ||
+        event.type === 'REFRESH' ||
+        event.type === 'RESTORE'
+      )
+        return documentsReply();
+      return event.type === 'BOT_COMMENT_DELETED' &&
+        state.status === 'needs-human'
+        ? documentDeleted()
         : ignore('no-transition');
   }
 }
@@ -426,6 +443,19 @@ function approvalAnswer(verdict: ApprovalVerdict | null): Action {
     throw new Error('decide: an APPROVE in review without the gate’s verdict');
   if (verdict === 'done') return steps([], null);
   return documentsReply();
+}
+
+/**
+ * Row 33 (spec 7, D30): the `documents` handler checks whether the deleted bot comment is the waiting document's;
+ * anything else ends `no-transition`.
+ */
+function documentDeleted(): Action {
+  return steps([{ handler: 'documents', op: 'deleted' }], null);
+}
+
+/** Row 34 (spec 7, D30): `/restore` of the waiting document, by the `documents` handler (no model call). */
+function documentRestore(): Action {
+  return steps([{ handler: 'documents', op: 'restore' }], null);
 }
 
 /** Spec 7: the `documents` handler answers (or, for a comment that needs nothing, ends it `no-transition`). */
@@ -546,6 +576,7 @@ function whileGrilling(state: RouterState, event: IssueEvent): Action {
     case 'APPROVE':
       return steps([{ handler: 'grill', op: 'approve' }], null);
     case 'REFRESH':
+    case 'RESTORE':
       return documentsReply(); // row 35: no Spec yet
     default:
       return ignore('no-transition');

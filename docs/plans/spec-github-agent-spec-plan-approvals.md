@@ -915,16 +915,16 @@ replaced was approved. 1,472 unit and 360 integration tests.
 sentence in `needs-human`); anything else → `IGNORED` `no-transition`.
 
 **Acceptance criteria:**
-- [ ] Edit Spec v1, delete it → ONE explanation naming who deleted it; `deleted_text` has the edit
-- [ ] Deleting the explanation, a human comment, an older version, the approved Spec while the Plan waits, the
+- [x] Edit Spec v1, delete it → ONE explanation naming who deleted it; `deleted_text` has the edit
+- [x] Deleting the explanation, a human comment, an older version, the approved Spec while the Plan waits, the
   go-signal → nothing posted
-- [ ] `/approve` after the deletion → the `deleted` reply; `/refresh` → SPW23's reply; deleted while stopped → the
+- [x] `/approve` after the deletion → the `deleted` reply; `/refresh` → SPW23's reply; deleted while stopped → the
   explanation with the stopped sentence
-- [ ] The `deleted` `document_actions` row and the log line (`documents: spec v1 deleted by bob`); the job run again →
+- [x] The `deleted` `document_actions` row and the log line (`documents: spec v1 deleted by bob`); the job run again →
   one explanation (P34); a deleted bot comment on a pull request → `pr-comment`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-restore.integration.spec.ts`)
 
 **Dependencies:** T11, T19
@@ -932,6 +932,10 @@ sentence in `needs-human`); anything else → `IGNORED` `no-transition`.
 (+ spec), `src/documents/documents.handler.ts`, `src/documents/document-comments.ts`, `src/documents/documents.store.ts`,
 `test/documents-restore.integration.spec.ts`
 **Scope:** M
+
+**Built 2026-11-23:** the `deleted` row's result is the document's kind (`spec`, `plan`; in the spec); the
+explanation's middle sentence, which the spec left as "…", says what `/restore` does. 1,478 unit and 366 integration
+tests.
 
 ### Task 22: `/restore`
 
@@ -944,24 +948,29 @@ lost-edits line; still there → the reply with its link; approved → the alrea
 P24. Its replies link the `/restore` comment as their subject (P39).
 
 **Acceptance criteria:**
-- [ ] `/restore` → ONE "**Spec v1** (restored for `alice`'s `/restore`)" comment with the edited line; `/approve`
+- [x] `/restore` → ONE "**Spec v1** (restored for `alice`'s `/restore`)" comment with the edited line; `/approve`
   after it → counts (the Plan follows)
-- [ ] `/restore` again → ONE reply with the link; the restored comment deleted again → a new explanation; a missed
+- [x] `/restore` again → ONE reply with the link; the restored comment deleted again → a new explanation; a missed
   deletion → the bot's last version and the lost-edits line
-- [ ] `/restore` while grilling, in `code-only`, in `needs-human`, `executing`, `in-review`, `draft` with a starting
+- [x] `/restore` while grilling, in `code-only`, in `needs-human`, `executing`, `in-review`, `draft` with a starting
   run, with no run → one reply each, the spec's texts; a closed issue → spec 5's reply
-- [ ] Each result has its `restore` row (`restored`, `restored-last-version`, `nothing-deleted`, `approved`) and the
+- [x] Each result has its `restore` row (`restored`, `restored-last-version`, `nothing-deleted`, `approved`) and the
   log line (`/restore → spec v1 restored (as deleted)`); a retried `/restore` after its Tx2 → no "still on the issue"
   reply, no second comment (P34)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T15, T21
 **Files:** `src/intake/restore-command.ts` (+ spec), `src/intake/github-payload.ts`, `src/workflow/decide.ts` (+ spec),
 `src/workflow/workflow-comments.ts` (+ spec), `src/documents/documents.handler.ts`, `src/documents/document-comments.ts`,
 `test/documents-restore.integration.spec.ts`, `test/closed-issue.integration.spec.ts`
 **Scope:** M
+
+**Built 2026-11-23:** the `documents` handler's `restore` op. Chosen while building: the restored text is cleaned
+like model text (`cleanDocument`), so a mention someone typed into the deleted comment isn't posted again by the bot
+as a live `@mention`; a deletion that left no text restores the bot's own last version with the lost-edits line;
+the restore replies' marker is `restore:<commentId>`. 1,492 unit and 376 integration tests.
 
 ### Task 23: The run-ended line (SPW10)
 
@@ -971,12 +980,12 @@ doesn't use them" for a replacement; the singular for one document); none, or on
 the rows only, with no write, so a second call gives the same line. After spec 6's block (P3).
 
 **Acceptance criteria:**
-- [ ] Spec v1 waiting, the lane removed → the run-ended comment has the line; switch to `spec-code` with a Plan
+- [x] Spec v1 waiting, the lane removed → the run-ended comment has the line; switch to `spec-code` with a Plan
   waiting → both linked, run 2 named; during Grill Me → no line
-- [ ] The hook called twice → the same line; the documents' comments unchanged
+- [x] The hook called twice → the same line; the documents' comments unchanged
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-run-end.integration.spec.ts`)
 
 **Dependencies:** T13
@@ -984,10 +993,29 @@ the rows only, with no write, so a second call gives the same line. After spec 6
 `test/documents-run-end.integration.spec.ts`
 **Scope:** S
 
+**Built 2026-11-23:** `DocumentsHandler.onCancel` and `runEndedLine`. 1,495 unit and 380 integration tests.
+
 ### Checkpoint 5 — Deletions, `/restore` and the run's end on the sandbox
-- [ ] Matrix "Deleted documents and `/restore`": every row (the missed deletion: I stop my instance, delete with `gh`,
-  start it again)
-- [ ] Matrix "When the run ends": every row
+- [x] Matrix "Deleted documents and `/restore`": every row (the missed deletion: I stop my instance, delete with `gh`,
+  start it again) (2026-11-23, my instance, `gh` as you, #64–#68; the Google account's credits ran out after #64's
+  and #65's Specs: #66 and #68 stopped at `grill`, #67 at `spec`, `credits-exhausted`, spec 5's stop comment each.
+  Passed without a model call: #64 Spec v1 edited then deleted → ONE explanation naming `Hugoer`, `deleted_text` with
+  the added line; the explanation and an own comment deleted → no bot comment (`no-transition`, `comment-deleted`);
+  `/approve` → the "deleted" reply; `/restore` → "**Spec v1** (restored for [`Hugoer`'s `/restore`](…))" with "Restored
+  as it read when it was deleted." and the added line; `/restore` again → "still on the issue ([link](…))". #65
+  missed deletion → its last version with the lost-edits line, `restored-last-version`. After you added credits and
+  `/retry`: #64 `/approve` → the restored Spec approved (the added line in `approved_text`), Plan v1; the approved
+  Spec's comment deleted while the Plan waits → no reply; `/restore` → "already approved; the bot keeps the approved
+  text")
+- [x] Matrix "When the run ends": every row (2026-11-23: #65, the restored Spec v1 edited, the label removed → ONE
+  run-ended comment ending with "[Spec v1](…) belonged to run 1 and no longer counts. A new run doesn't use it: …",
+  the Spec comment unchanged; #68, no Spec (stopped at `grill` by the credits, not asking), the label removed → no
+  documents line; checked again on #69 at your request: Grill Me asking (session `ASKING`, round 1 posted), the
+  label removed → the run-ended comment with no documents line, the session `CANCELLED`, no document rows. After the
+  credits: #66 three answers →
+  Spec v1, edited, the label removed → spec 6's answers block, then the line; #67 Plan waiting, switched to
+  `spec-code` without `grill: skip` → "replaced by run 2", Spec v1 and Plan v1 linked, "Run 2 doesn't use them",
+  run 2 grilling)
 - [ ] You review and commit
 
 ---

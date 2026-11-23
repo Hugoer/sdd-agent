@@ -3,12 +3,15 @@ import {
   approveHintReply,
   approveRefusedReply,
   approveWarningReply,
+  documentDeletedComment,
   goSignalComment,
   lateCommentReply,
   nothingWaitsReply,
   refreshNothingChangedReply,
   refreshRefusedReply,
   refreshUpToDateReply,
+  restoreRefusedReply,
+  runEndedLine,
   planComment,
   planMarker,
   specComment,
@@ -830,5 +833,105 @@ describe('no text of spec 7 notifies anyone: every login in backticks', () => {
     ];
     for (const text of texts)
       expect(text.replace(/`[^`]*`/g, '')).not.toContain('@');
+  });
+});
+
+describe('documentDeletedComment (SP9)', () => {
+  it('who deleted it, /restore, or start over with the lane label', () => {
+    expect(
+      documentDeletedComment('77', {
+        kind: 'spec',
+        version: 1,
+        by: 'bob',
+        lane: 'full-sdd',
+        stoppedRun: null,
+      }),
+    ).toBe(
+      '<!-- sdd-agent:doc-deleted:77 -->\n' +
+        "The Spec comment (v1) was deleted by `bob`, so there's nothing to approve. To get it back, comment " +
+        '`/restore`: the bot posts it again as it read when it was deleted. To start over instead, remove the ' +
+        '`workflow: full-sdd` label and add it again.',
+    );
+  });
+
+  it('a stopped run: continue it first', () => {
+    expect(
+      documentDeletedComment('78', {
+        kind: 'plan',
+        version: 2,
+        by: 'bob',
+        lane: 'full-sdd',
+        stoppedRun: 2,
+      }),
+    ).toContain('The Plan comment (v2) was deleted by `bob`');
+    expect(
+      documentDeletedComment('78', {
+        kind: 'plan',
+        version: 2,
+        by: 'bob',
+        lane: 'full-sdd',
+        stoppedRun: 2,
+      }).endsWith(
+        '\n\nRun 2 is stopped: continue it first (see the stop comment), then comment `/restore`.',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("restoreRefusedReply (the spec's `/restore` table)", () => {
+  it('still there → its link; approved → the bot keeps the approved text', () => {
+    expect(
+      restoreRefusedReply(answered('930'), 'nothing-deleted', {
+        kind: 'spec',
+        version: 1,
+        url: 'https://c/1',
+      }),
+    ).toBe(
+      '<!-- sdd-agent:restore:930 -->\n' +
+        `[Your \`/restore\`](${LINK}930) has nothing to restore: Spec v1 is still on the issue ([link](https://c/1)).`,
+    );
+    expect(
+      restoreRefusedReply(answered('931'), 'approved', {
+        kind: 'spec',
+        version: 2,
+        url: null,
+      }).split('\n')[1],
+    ).toBe(
+      `[Your \`/restore\`](${LINK}931) has nothing to restore: Spec v2 is already approved; the bot keeps the approved text.`,
+    );
+  });
+});
+
+describe('runEndedLine (SPW10)', () => {
+  const SPEC = { kind: 'spec' as const, version: 1, url: 'https://c/s1' };
+  const PLAN = { kind: 'plan' as const, version: 1, url: 'https://c/p1' };
+
+  it('a replacement: both linked, the new run named', () => {
+    expect(
+      runEndedLine({
+        run: 1,
+        end: { kind: 'replaced', by: { number: 2, lane: 'spec-code' } },
+        documents: [SPEC, PLAN],
+      }),
+    ).toBe(
+      "[Spec v1](https://c/s1) and [Plan v1](https://c/p1) belonged to run 1 and no longer count. Run 2 doesn't " +
+        'use them: it works from the issue description and its own Grill Me answers. To keep anything from them, ' +
+        'copy it into the description.',
+    );
+  });
+
+  it('a cancel with one document: "A new run", the singular', () => {
+    expect(
+      runEndedLine({ run: 3, end: { kind: 'cancelled' }, documents: [SPEC] }),
+    ).toBe(
+      "[Spec v1](https://c/s1) belonged to run 3 and no longer counts. A new run doesn't use it: it works from the " +
+        'issue description and its own Grill Me answers. To keep anything from it, copy it into the description.',
+    );
+  });
+
+  it('no document → null', () => {
+    expect(
+      runEndedLine({ run: 1, end: { kind: 'cancelled' }, documents: [] }),
+    ).toBeNull();
   });
 });

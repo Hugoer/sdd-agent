@@ -301,6 +301,25 @@ export class DocumentsStore {
   }
 
   /**
+   * SP9: the waiting document's comment was deleted: when, by whom and its last text (between the markers,
+   * redacted), with the explanation's row, in one transaction.
+   */
+  recordDeletion(
+    lease: HeldLease,
+    id: string,
+    deletion: { deletedBy: string; deletedText: string },
+    action: ActionRecord,
+  ): Promise<DocumentAction> {
+    return this.write(lease, async (tx) => {
+      await tx.taskDocument.update({
+        where: { id },
+        data: { ...deletion, deletedAt: await dbNow(tx) },
+      });
+      return tx.documentAction.create({ data: actionData(lease, action) });
+    });
+  }
+
+  /**
    * Spec "Approving" step 4: one transaction stores the approval, with the event that made it (a retry knows it),
    * and (SPW13) the warning reply that answers it, stored before it is posted.
    */
