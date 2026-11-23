@@ -1,6 +1,7 @@
 # Implementation Plan — Spec #7: Spec, Plan and Approvals
 
-> **Created:** 2026-11-22 · **Status:** approved 2026-11-22, not built (fresh-context review 2026-11-22, its findings
+> **Created:** 2026-11-22 · **Status:** built and verified 2026-11-23 (Tasks 0–26, Checkpoints 1–6) · approved
+> 2026-11-22 (fresh-context review 2026-11-22, its findings
 > applied the same day: see "Review"; P1–P11 and P33 confirmed one at a time the same day, all as recommended; P4's
 > recommendation changed while explaining it: the approved Spec's reads count at the Plan's approval)
 >
@@ -544,7 +545,7 @@ commits and pushes both.
   `money-rules` (#49: model line `(max)`, its four `spec` rows `max`, Grill's `standard`; #51: the key is in
   neither the comment nor `text`, the Spec says it keeps credentials out; #48, #50: `load_skill money-rules` in the
   Spec call)
-- [ ] You review and commit
+- [x] You review and commit (`5ad9ff8`, 2026-11-22)
 
 ---
 
@@ -757,7 +758,19 @@ One paste-ready block.
   yet), so its `/approve` got ONE "this issue has no run" reply, a row with no run)
 - [x] Matrix "Failures": the injection added to the Spec comment (#49: spec 4's warning once, key
   `spec-<versionId>`; the Plan neither follows nor mentions it)
-- [ ] You review and commit
+- [x] You review and commit (`972453c`, 2026-11-23)
+- [x] After it (P39): every reply links the comment it answers (2026-11-23, my instance, #55 like #53: "Q3:
+  actually weekly" and `/approve` during the Spec call → after Spec v1, "`Hugoer`, [your comment](…)" and "[Your
+  `/approve`](…) was written before Spec v1 …", each link to its own comment; `/approve please` → "[Your
+  comment](…) isn't an approval …")
+- [x] P40 and P41 (2026-11-23): P40's reply on the sandbox (#56 opened while my instance was starting, then
+  `/approve` → "[Your `/approve`](…) has nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it
+  …"); but the label events weren't lost, only late (delivered 6 s after the `/approve`), so the run started and
+  wrote a Spec on #56 after I had closed it → the text now says "yet" and to wait first; #52 and #56 closed. P41 by
+  tests only (it needs a `.github-agent/` commit between a Spec and its approval)
+- [x] #55 (2026-11-23, your instance): `/approve` → Plan v1 95 s later; the wait looked like nothing happened (an
+  earlier `/approve` was sent while no instance ran, then deleted) → P42 (a 👀 on `/approve`) moved to a new spec 13
+  `bot-feedback` (overview D33), built after 12
 
 ---
 
@@ -1016,7 +1029,7 @@ the rows only, with no write, so a second call gives the same line. After spec 6
   Spec v1, edited, the label removed → spec 6's answers block, then the line; #67 Plan waiting, switched to
   `spec-code` without `grill: skip` → "replaced by run 2", Spec v1 and Plan v1 linked, "Run 2 doesn't use them",
   run 2 grilling)
-- [ ] You review and commit
+- [x] You review and commit (`4d2af87`, 2026-11-23)
 
 ---
 
@@ -1030,16 +1043,22 @@ api` GETs with your login, the issues as arguments, scoped to rows stored since 
 from the script, with `scripts/spec-plan-approvals-invariants.spec.mjs`.
 
 **Acceptance criteria:**
-- [ ] Each invariant has a fixture that breaks it → FAIL with the issue and row named; the clean fixture passes
-- [ ] The script never writes (no `INSERT`, `UPDATE`, `DELETE`, no `gh` method but GET)
+- [x] Each invariant has a fixture that breaks it → FAIL with the issue and row named; the clean fixture passes
+- [x] The script never writes (no `INSERT`, `UPDATE`, `DELETE`, no `gh` method but GET)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass (Vitest's `include` gains `scripts/**/*.spec.mjs`)
+- [x] `npm run typecheck && npm run lint && npm test` pass (Vitest's `include` gains `scripts/**/*.spec.mjs`)
 
 **Dependencies:** T22
 **Files:** `scripts/spec-plan-approvals-invariants.mjs`, `scripts/spec-plan-approvals-invariants.spec.mjs`,
 `vitest.config.ts`
 **Scope:** M
+
+**Built 2026-11-23:** the eight checks are pure functions over rows and comments; rows come from every issue
+since spec 7 went live, comments only from the issues given, so a wrong list fails. Chosen while building
+(invariant 1): a version whose comment went after it stopped counting (approved or superseded) may have none, and a
+comment people edited is matched by its marker, not its whole text. First run over #48–#69: all eight pass; with
+#48–#50 only, 1 and 2 fail. 13 tests in `scripts/spec-plan-approvals-invariants.spec.mjs`.
 
 ### Task 25: Setup guide, `AGENTS.md`, `README.md`, the sandbox README
 
@@ -1052,17 +1071,24 @@ README's "Spec / Plan" line → how editing, `/approve`, `/refresh` and `/restor
 spec's and this plan's status lines.
 
 **Acceptance criteria:**
-- [ ] Every item of the spec's "Setup & configuration" is in the guide; every query in it runs as written on the dev
+- [x] Every item of the spec's "Setup & configuration" is in the guide; every query in it runs as written on the dev
   database
-- [ ] `AGENTS.md` "State" says spec 7 is built and what the bot now does after Grill Me
+- [x] `AGENTS.md` "State" says spec 7 is built and what the bot now does after Grill Me
 
 **Verification:**
-- [ ] Manual: you read the diff (both repos)
+- [x] Manual: you read the diff (both repos)
 
 **Dependencies:** T24
 **Files:** `docs/guides/setup-github-agent-local.md`, `AGENTS.md`, `README.md`, the spec, this plan; in the sandbox
 clone: `README.md`
 **Scope:** S
+
+**Done 2026-11-23:** the guide (its header, the end state, section 3's real skills and the bad-model branch,
+the smoke test, the new ignore reasons, the too-long and `workspace` troubleshooting, the invariant script in
+"Tests", the two tables and five queries in "Usage data" (each run on the dev database), "When the bot writes a
+Spec and a Plan", who can do what); `AGENTS.md` State; the README; the sandbox README's Spec/Plan line (`9da762f`,
+with `gh` as you). The sandbox README's "Current state", which still described spec 1, was rewritten after
+Checkpoint 6 at your request (`cf0e08c`).
 
 ### Task 26: Run the verification matrix and the success criteria
 
@@ -1072,32 +1098,31 @@ then the success criteria. Rows the real model may never produce (a too-long ans
 as the spec says.
 
 **Acceptance criteria:**
-- [ ] Every matrix row ticked in the spec, or written down with why it can't pass and the test that covers it
-- [ ] Every invariant passes, scoped to rows stored since spec 7 went live; the wrong-list run fails
-- [ ] The success criteria hold; the spec and this plan say "built and verified <date>"
+- [x] Every matrix row ticked in the spec, or written down with why it can't pass and the test that covers it
+- [x] Every invariant passes, scoped to rows stored since spec 7 went live; the wrong-list run fails
+- [x] The success criteria hold; the spec and this plan say "built and verified <date>"
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T25
 **Files:** the spec (ticks, status), this plan (status)
 **Scope:** M
 
+**Done 2026-11-23:** the two rows left after Checkpoint 5 passed on the sandbox. The bad-model branch:
+`smoke/spec-7-bad-model` at `00ec718`, pushed by you; my instance with `TARGET_BASE_BRANCH` pointing at it; #70: Grill
+Me "no questions needed", then "Run 1 stopped at step `spec`: Google has no model `gemini-no-such-model` (HTTP 404
+…) (`unknown-model`)"; on `main` again, `/retry` → exactly ONE Spec v1. The no-access `/refresh`: your signed request
+from `octocat` on #70 → `IGNORED` `unauthorized`, no reply. The invariant script over #48–#70: all eight pass;
+with #57 only, 1 and 2 fail (exit 1). Every matrix row is ticked in the spec; the success criteria hold (this
+plan's checks, the docs of T25, the sandbox's skills, notice and README).
+
 ### Checkpoint 6 — Complete
-- [ ] Every acceptance criterion above is met
-- [x] You review and commit (`972453c`, 2026-11-23)
-- [x] After it (P39): every reply links the comment it answers (2026-11-23, my instance, #55 like #53: "Q3:
-  actually weekly" and `/approve` during the Spec call → after Spec v1, "`Hugoer`, [your comment](…)" and "[Your
-  `/approve`](…) was written before Spec v1 …", each link to its own comment; `/approve please` → "[Your
-  comment](…) isn't an approval …")
-- [x] P40 and P41 (2026-11-23): P40's reply on the sandbox (#56 opened while my instance was starting, then
-  `/approve` → "[Your `/approve`](…) has nothing to approve: `workflow: full-sdd` is on, but the bot has no run for it
-  …"); but the label events weren't lost, only late (delivered 6 s after the `/approve`), so the run started and
-  wrote a Spec on #56 after I had closed it → the text now says "yet" and to wait first; #52 and #56 closed. P41 by
-  tests only (it needs a `.github-agent/` commit between a Spec and its approval)
-- [x] #55 (2026-11-23, your instance): `/approve` → Plan v1 95 s later; the wait looked like nothing happened (an
-  earlier `/approve` was sent while no instance ran, then deleted) → P42 (a 👀 on `/approve`) moved to a new spec 13
-  `bot-feedback` (overview D33), built after 12
+- [x] Every acceptance criterion above is met
+- [x] Loose ends you asked to close (2026-11-23): spec 11's invariant script (above, "Noticed"); the sandbox's `main`
+  back to `c8f58d7`'s files except the README (`cf0e08c`, with `gh` as you: `LIBRARY_NAME` again, `CHANGELOG.md`
+  and `NOTES.md` gone, the Spec/Plan line and a "Current state" after spec 7)
+- [ ] You review and commit
 
 ---
 
@@ -1117,6 +1142,9 @@ as the spec says.
 - (Checkpoint 2, 2026-11-22) Spec 11's `scripts/skill-discovery-invariants.mjs` invariant 2 ("every Read: line lists
   exactly the call's loaded tool rows") only knows Grill evaluations, so it FAILs on every Spec comment; spec 7's own
   script (T24) doesn't check "Read:" lines. Not changed; to decide with T24.
+  Fixed 2026-11-23 (at your request, after Checkpoint 6): its check 2 matches a Spec or Plan comment to its version's
+  call (a restored version: the version it restores) and a `/refresh` reply to its row's last call, and leaves out
+  `list_files` listings; over #33–#70 all seven checks pass, 31 spec 7 comments included.
 - (Checkpoint 2) A root listing logs as `list_files  → loaded` (an empty folder name): cosmetic.
 - (Checkpoint 3, 2026-11-23) #50's Spec was read at `abf8f2d`; the `plan` skill commit changed two `.github-agent/`
   files before its approval, so `changed_paths` holds them and the Plan's prompt paragraph lists their names (never

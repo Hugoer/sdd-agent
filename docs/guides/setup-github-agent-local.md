@@ -21,13 +21,18 @@
 > `AGENTS.md` files and `money-rules` skill, `repoSkills`, a header on every skill, the six test branches, the two
 > `SKILL_DISCOVERY_*` variables, "How the bot uses your repo's skills and `AGENTS.md` files", `context_loads` in
 > "Usage data", the new setup errors, smoke checks 3, 6 and 9.
+> **Updated:** 2026-11-23 for spec #7 (`docs/specs/spec-github-agent-spec-plan-approvals.md`): the real `spec` and
+> `plan` skills, "When the bot writes a Spec and a Plan" (editing, `/approve`, `/refresh`, `/restore`, the replies),
+> the two document tables in "Usage data", the new ignore reasons, the bad-model test branch, the invariant script.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
 and accepted: `npm run db:events` shows the row `DONE`, the app log shows `accepted ISSUE_OPENED`, and the issue
 gets the `status: draft` label. A `workflow:` label starts a run. In `workflow: full-sdd` and `workflow: spec-code`
 its first step, Grill Me, works: the bot asks numbered questions in a comment, or says none are needed, and reads
-your answers ("When the bot asks questions"). The steps after it come with later specs, so a run then stops at the
-Spec (a `workflow: code-only` run at its first step) with `status: needs-human` and one comment saying so.
+your answers ("When the bot asks questions"). Then it writes the Spec, and in `full-sdd` after its `/approve` the
+Plan, as issue comments you can edit and approve ("When the bot writes a Spec and a Plan"); a `workflow: code-only`
+run posts one "**Ready to code**" comment instead. The code comes with later specs, so the last `/approve` stops the
+run at the `workspace` step with `status: needs-human` and one comment saying so.
 `npm run llm:smoke` (section 12) runs the model call once on a real issue with Gemini.
 
 **How the pieces connect:** GitHub sends a webhook → your ngrok static domain → the NestJS app on
@@ -198,11 +203,13 @@ The bot works only on this repo, never on the bot repo itself.
    ```
 
    `name` is the folder's name: lowercase letters, digits and hyphens. So the `qualityGate` step's folder is
-   `quality-gate`; a folder named `qualityGate` can never pass. Grill Me's skill is real (spec 6), adapted from
-   `interview-me` (MIT), with its notice
+   `quality-gate`; a folder named `qualityGate` can never pass. Three skills are real, adapted from
+   [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (MIT): `grill` from `interview-me` (spec
+   6), `spec` from `spec-driven-development` and `plan` from `planning-and-task-breakdown` (spec 7). Their notice,
    [`THIRD-PARTY-NOTICES.md`](https://github.com/Hugoer/sdd-agent-sandbox/blob/main/.github-agent/skills/THIRD-PARTY-NOTICES.md),
-   which sits outside the skill's folder so it never reaches the model. The others are placeholders until the
-   step's own spec writes the real one. Copy all five from the reference sandbox:
+   sits outside every skill's folder so it never reaches the model (the read tools never show `.github-agent/`
+   either). `code` and `quality-gate` are placeholders until their specs write them. Copy all five from the
+   reference sandbox:
 
    ```sh
    raw=https://raw.githubusercontent.com/Hugoer/sdd-agent-sandbox/main
@@ -254,6 +261,7 @@ The bot works only on this repo, never on the bot repo itself.
    | `smoke/spec-11-plain` | no `repoSkills` key | no repo skill is listed; `src/AGENTS.md` still is; smoke check 9 is skipped |
    | `smoke/spec-11-bad-skills` | a skill with no `description`, the `spec` skill named `Spec`, `money-rules` also under `.agents/skills` | every run stops: `invalid skills: …`, naming all three |
    | `smoke/spec-11-two-loads` | the `grill` skill asks for `money-rules` and then its `references/rounding.md` | two loads per evaluation, for the `SKILL_DISCOVERY_MAX_LOADS=1` row |
+   | `smoke/spec-7-bad-model` | `"spec": "gemini-no-such-model"` under `models.standard` | Grill Me works (its own model); the Spec stops: "Run N stopped at step `spec`: … `unknown-model`"; point `TARGET_BASE_BRANCH` back at `main`, restart, `/retry` → one Spec v1 |
 
    They are on the reference sandbox. Copy them into your clone and push them (they carry the reference
    sandbox's `main`):
@@ -468,14 +476,13 @@ LOG [GrillEvaluationService] #<n> run 1 grill: evaluation → ASKED (round 1, 3 
 LOG [RouterService] #<n> status: grilling
 ```
 
-The issue gets `status: grilling` and one comment "**Grill Me, round 1 of 5** …" with up to three numbered
-questions, each with a guess (for a complete issue, "**Grill Me: no questions needed.**" instead). Comment your
-answers (`Q1: …`): the bot posts the next round, puts 👀 on your comment while other questions are still open, or,
-once it is sure enough, goes on to the Spec, which isn't built yet: the row is `FAILED` with `step-not-built`, the
-issue shows `status: needs-human` and one comment ("Run 1 stopped at step `spec` …"), and `npm run db:runs` shows
-the run. Add `bug` → `IGNORED` / `other-label`; add `model: max-spec` → `IGNORED` / `model-label` (you're an
-Approver, so it stays). A comment on an issue with no run → `accepted COMMENT`, `IGNORED` / `no-transition`. The
-log never contains a comment's text.
+The issue gets `status: grilling` and one comment "**Grill Me, round 1 of 5** …" with up to three numbered questions,
+each with a guess (for a complete issue, "**Grill Me: no questions needed.**" instead). Comment your answers (`Q1:
+…`): the bot posts the next round, puts 👀 on your comment while other questions are still open, or, once it is sure
+enough, writes the Spec: one "**Spec v1**" comment and `status: spec-review` (a minute or two; "When the bot writes a
+Spec and a Plan"). `npm run db:runs` shows the run. Add `bug` → `IGNORED` / `other-label`; add `model: max-spec` →
+`IGNORED` / `model-label` (you're an Approver, so it stays). A comment on an issue with no run → `accepted COMMENT`,
+`IGNORED` / `no-transition`. The log never contains a comment's text.
 
 ## 9. Troubleshooting
 
@@ -525,7 +532,7 @@ GitHub never retries a failed delivery automatically. While the app is down, del
 | `skip-removed` | `grill: skip` was removed |
 | `pr-comment` | a comment on a pull request |
 | `comment-edited` | a comment was edited (the bot reads a comment as it was created) |
-| `comment-deleted` | a comment was deleted |
+| `comment-deleted` | a comment was deleted, except one the bot wrote (spec 7: a deleted bot comment is checked by the router) |
 | `not-bot-pr` | a pull request the bot didn't open |
 | `unauthorized` | the sender's level is too low; nothing was done |
 | `label-reverted` | a lane or skip label added with no access, or a model label added below Approver, was removed, with one comment per label |
@@ -539,7 +546,12 @@ From the router (spec 5), for an event intake accepted:
 | `no-transition` | nothing to do for this event in the issue's state (the log line names the status), e.g. a comment on a stopped run, or `please /retry` |
 | `lane-conflict` | the issue has two or more `workflow:` labels: nothing started; one reminder lists them (a new one only when the set changes) |
 | `retry-refused` | a `/retry` that did nothing, answered with one reply saying why |
-| `issue-closed` | the issue is closed: nothing starts or continues; a lane label added, `/retry` or `/approve` gets one reply |
+| `issue-closed` | the issue is closed: nothing starts or continues; a lane label added, `/retry`, `/approve`, `/refresh` or `/restore` gets one reply |
+| `approve-refused` | an `/approve` that didn't count, answered with one reply saying why (written before the document, already approved, deleted, empty, or nothing waits) |
+| `approve-hint` | a near miss such as `/approve please`, answered with the hint (once per document) |
+| `late-comment` | a comment written while the bot wrote the Spec, answered once (the Spec doesn't include it) |
+| `refresh-refused` | a `/refresh` that did nothing (deleted, emptied or approved document, or nothing waits), answered with one reply |
+| `restore-refused` | a `/restore` that did nothing (still on the issue, approved, or nothing waits), answered with one reply |
 | `stale` | received before the issue's latest run started (e.g. an older event retried late); nothing done |
 | `no-task` | a pull request event: mapping a bot pull request to its issue comes with a later spec |
 
@@ -560,7 +572,11 @@ prompt or the answer. Retried codes get 3 attempts (5 s, then 30 s, at least Goo
 | `answer-blocked` | no | Google blocked the prompt or the answer (safety, recitation, …) | Read the issue's text; change the content that triggers it |
 | `answer-cut` | no | The answer hit the model's output limit | Shorten the input, or use a step's model with a larger limit |
 | `bad-request` | no | Any other `4xx`, e.g. a prompt larger than the model's context | Read the message (status and Google's reason) |
-| `invalid-answer` | no | Three answers in a row without the required format (each one re-asked) | Read the rows' answers ("Usage data"); a stronger model or a clearer skill |
+| `invalid-answer` | no | Three answers in a row without the required format (each one re-asked) | Read the rows' answers ("Usage data"); a stronger model or a clearer skill. A Spec or Plan longer than 50,000 characters, three times: "model … answered with 71,200 characters, more than the 50,000 a document may have …": add `model: max-spec` (or `max-plan`) before `/retry`, or ask for a shorter document in the skill. A refresh that answered "changed" with no document: `/retry` (spec 7, Checkpoint 4) |
+
+**The `workspace` stop.** Until spec 8, the last `/approve` before code (a `full-sdd` Plan, a `spec-code` Spec, the
+"Ready to code" comment) stops the run at `workspace` with `step-not-built`. Expected: the approval is stored, and
+`/retry` only stops it again the same way.
 
 Setup errors (`StepConfigError`) are never retried; the message is safe to post on the issue:
 
@@ -612,7 +628,20 @@ npm run test:integration  # integration tests against the test database (GitHub 
 npm run db:test:down
 ```
 
-Before handing over a change, also run `npm run typecheck` and `npm run lint`.
+Before handing over a change, also run `npm run typecheck` and `npm run lint`. `npm test` also runs the unit
+tests of the invariant scripts (`scripts/**/*.spec.mjs`).
+
+**Spec 7's invariant check** (read-only: SELECTs on the dev database, `gh api` GETs with your own `gh` login) over
+every issue you tested on. Every version, reply and model call stored since spec 7 went live is checked against the
+comments of the issues you name, so a missing issue fails it:
+
+```sh
+node --env-file-if-exists=.env scripts/spec-plan-approvals-invariants.mjs 48 49 50   # every issue number
+```
+
+It prints PASS or FAIL for eight invariants (one comment per version, approvals after their version, at most one
+answer per command, the warning replies, the `CLAUDE.md` canary, the sizes, every Spec and Plan call owned by a row,
+no `workspace` step without an approval) and exits 1 on any FAIL.
 
 ## 11. Check the GitHub App with the smoke script
 
@@ -791,6 +820,56 @@ grill_of 14
   a round), `WAITING` (👀, waits for the open questions), `CLEAR`, `LIMIT`, or `SUPERSEDED` (thrown away: a comment
   arrived while the model was thinking, so the bot asked again with it).
 
+**Spec and Plan** (spec 7) keep two tables, with no tokens (those stay in `execution_logs`, joined by `log_id` →
+`call_id`): `task_documents` (one row per version of a Spec or a Plan, and per "Ready to code" comment: why it
+exists, the commit it read, the text posted and the text approved, who approved it and when, the lines people
+changed, the files that changed on `main` before the approval) and `document_actions` (one row per human action
+answered: a refused `/approve`, the hint, a late comment, a `/refresh` with each call's result, a deletion, a
+`/restore`, a warning reply). Every version and action of one issue, oldest first:
+
+```sh
+set -a; source .env; set +a
+docs_of() {   # docs_of <issue number>
+  docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT d.created_at::time(0) AS at, \
+    r.number AS run, d.kind, d.version AS v, d.origin, d.post_state AS posted, left(d.commit, 7) AS commit, \
+    left(d.checked_commit, 7) AS checked, d.approved_by, date_trunc('second', d.approved_at - d.posted_at) AS waited, \
+    d.lines_added AS added, d.lines_removed AS removed, d.stale_files, d.superseded_at IS NOT NULL AS superseded, \
+    d.deleted_at IS NOT NULL AS deleted FROM task_documents d JOIN runs r ON r.id = d.run_id \
+    JOIN tasks t ON t.id = d.task_id WHERE t.external_ref = '$TARGET_REPO#$1' ORDER BY d.created_at"
+}
+actions_of() {  # actions_of <issue number>
+  docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT a.created_at::time(0) AS at, \
+    r.number AS run, a.action, a.result, a.sender, a.source_comment_id AS comment, cardinality(a.log_ids) AS calls, \
+    a.reply_post_state AS reply FROM document_actions a LEFT JOIN runs r ON r.id = a.run_id \
+    JOIN tasks t ON t.id = a.task_id WHERE t.external_ref = '$TARGET_REPO#$1' ORDER BY a.created_at"
+}
+docs_of 14; actions_of 14
+```
+
+- `origin`: `written` (the model wrote it), `refreshed` (a `/refresh` changed it: the next number) or `restored`
+  (`/restore`: the same number). `checked`: the commit a refresh last found it up to date at. `waited`: from the
+  comment to its approval. `added` and `removed`: the lines people changed before `/approve` (0 and 0 = approved as
+  written). `stale_files`: files it read that changed on `main` before the approval.
+- `result` of a `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, or `deleted`, `empty`,
+  `already-approved` (nothing done); of a `restore`: `restored`, `restored-last-version`, `nothing-deleted`,
+  `approved`; of the `-refused` rows: the status. `calls`: the refresh's model calls (one or two).
+
+The questions spec 7 keeps these for, across every issue:
+
+```sh
+q() { docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "$1"; }
+# How often do people change a document before approving it, and how long does it wait?
+q "SELECT kind, count(*) AS approved, count(*) FILTER (WHERE lines_added = 0 AND lines_removed = 0) AS as_written, \
+  round(avg(lines_added + lines_removed), 1) AS avg_lines_changed, date_trunc('second', avg(approved_at - posted_at)) \
+  AS avg_wait FROM task_documents WHERE approved_at IS NOT NULL AND kind <> 'go-signal' GROUP BY kind"
+# The answers people got, and how often (wasted actions, refreshes and what they changed)
+q "SELECT action, result, count(*) FROM document_actions GROUP BY action, result ORDER BY action, count(*) DESC"
+# What each kind of document costs: its versions, its model requests and their tokens
+q "SELECT d.kind, d.origin, count(DISTINCT d.id) AS versions, count(e.id) AS requests, sum(e.input_tokens) AS input, \
+  sum(e.output_tokens) AS output FROM task_documents d JOIN execution_logs l ON l.id = d.log_id \
+  JOIN execution_logs e ON e.call_id = l.call_id GROUP BY d.kind, d.origin ORDER BY 1, 2"
+```
+
 ## When the bot asks questions
 
 A `workflow: full-sdd` or `workflow: spec-code` run starts with Grill Me (spec 6): the bot judges whether the
@@ -811,8 +890,8 @@ bot's guess. The questions are in the issue's language; the bot's own lines are 
     before: …" when some are still unanswered;
   - a 👀 reaction on your comment and nothing else: the bot read it and waits for the questions still open (the
     round counter doesn't move);
-  - nothing from Grill Me once it is sure enough: the Spec is the reply. Until spec 7, the run then stops at
-    `spec` (`step-not-built`).
+  - nothing from Grill Me once it is sure enough: the Spec is the reply ("When the bot writes a Spec and a
+    Plan").
 - **`/approve`** gets one reply listing the questions still open: there's nothing to approve before the Spec.
   **`/retry`** gets "Run N isn't stopped". Neither is read as an answer.
 - **To stop the questions,** add `grill: skip`: one comment "Grill Me stopped by `<you>` (`grill: skip` added) …",
@@ -838,6 +917,40 @@ The app log has one line per evaluation, never the issue's text:
 #14 run 1 grill: evaluation → CLEAR (confidence 96)
 #14 run 1 grill: evaluation → LIMIT (confidence 80)
 ```
+
+## When the bot writes a Spec and a Plan
+
+After Grill Me (or right away with `grill: skip`), the bot writes the **Spec** with the repo's `spec` skill: one
+comment "**Spec v1** · run 1 (`full-sdd`) · read at `main` @ `4f2c1ab`", then `status: spec-review`. The model reads
+the repo's code with two read-only tools (`list_files`, `read_file`) at that commit; it never sees `.github-agent/`
+or other tools' instruction files such as `CLAUDE.md`. Under the document, the model line and a "Read:" line name
+what it read.
+
+- **The document is the text between two hidden markers** in the comment. Change it by **editing the comment**:
+  whatever reads between the markers when someone comments `/approve` is what gets approved (the header and the
+  lines under the rule never count). A comment on the issue doesn't change the Spec; a comment written while the
+  bot was still writing it gets one reply saying so.
+- **`/approve`** (an Approver; the whole comment, spaces and case don't matter): in `full-sdd` the bot writes the
+  **Plan** from the approved text, with the `plan` skill (one comment "**Plan v1** … from the approved Spec v1",
+  then `status: ready-for-dev`, which until spec 13 also means the Plan waits for `/approve`). In `spec-code`, and
+  for the Plan, the next step is the code: until spec 8 the run stops at `workspace` (step 9, "The `workspace`
+  stop"). `/approve please` gets a hint once; an `/approve` written before the document was posted, on a document
+  that is gone or empty, or where nothing waits, gets one reply saying why. Every reply links the comment it answers.
+- **When `main` changed files a document read**, the bot says so but never blocks (until spec 14): the Plan's
+  header has a ⚠️ line naming the files with a compare link, and the last `/approve` before code gets one warning
+  reply naming them ("which it read", "which the approved Spec read"). The code is written from today's `main`.
+- **`/refresh`** (a Participant) checks the waiting document against today's `main`: nothing changed → one reply,
+  no model call; still right → "still up to date" (that commit becomes its starting point); otherwise **v2**, a new
+  comment that "replaces v1 above", with "What changed" and a folded diff. While the Plan waits, the approved Spec
+  is checked first: if it changes, Spec v2 sends the issue back to `spec-review` and the Plan no longer counts.
+- **A deleted Spec or Plan** (only the one waiting for `/approve`) gets one explanation naming who deleted it.
+  **`/restore`** (a Participant) posts it again as it read when deleted (or, if the bot missed the deletion, its own
+  last version, saying edits are lost); after that, `/approve` counts again. Any other deleted comment changes
+  nothing.
+- **`workflow: code-only`**: one "**Ready to code**" comment; `/approve` reads the issue's title and description as
+  they read then.
+- **When the run ends** (the label removed or switched), the run-ended comment links its Spec and Plan: they no
+  longer count, so copy anything you want to keep into the description.
 
 ## How the bot uses your repo's skills and `AGENTS.md` files
 
@@ -898,9 +1011,9 @@ backticks (e.g. `step-not-built`, `credits-exhausted`, `step-config`), and the w
 
 A stop that is a result of the work (e.g. the Grill round limit, "When the bot asks questions") can only be
 restarted: `/retry` gets a reply saying so. A `/retry` that can't do anything always gets one reply: no run on the
-issue, the run isn't stopped, or it was written before the run stopped (comment it again). Until the steps after
-Grill Me are built (spec 7 on), a run that gets past Grill Me stops at `spec` with `step-not-built` (a
-`workflow: code-only` run at its first step); `/retry` then stops it again the same way.
+issue, the run isn't stopped, or it was written before the run stopped (comment it again). Until spec 8, the last
+`/approve` before code stops the run at `workspace` with `step-not-built`; `/retry` then stops it again the same
+way.
 
 Every run, newest first (the last 20):
 
@@ -967,7 +1080,7 @@ The bot asks GitHub for the sender's role on the repo each time it processes an 
 
 | Level | GitHub role on the repo | May |
 |---|---|---|
-| **Participant** | Triage or higher | open an issue, add or remove a `workflow: *` label, add `grill: skip`, comment, comment `/retry` |
+| **Participant** | Triage or higher | open an issue, add or remove a `workflow: *` label, add `grill: skip`, comment, comment `/retry`, `/refresh` or `/restore` |
 | **Approver** | Write, Maintain or Admin | everything a Participant may, plus comment `/approve`, push to the bot's pull request, and add or remove a `model: max-*` label |
 | none | Read, or no role | nothing: the event is `IGNORED` / `unauthorized` |
 
@@ -977,8 +1090,10 @@ The bot asks GitHub for the sender's role on the repo each time it processes an 
 - A `model: max-*` label added by a Participant or someone with no access is removed again, with one comment per
   issue and label (`label-reverted`, the user without `@`). An Approver's stays (`model-label`); it switches only
   that step of that issue to the `max` model, the next time the step runs.
-- `/approve` counts only when it is the whole comment (spaces and case don't matter): `/approve thanks` or a
-  quoted `> /approve` is an ordinary comment.
+- `/approve`, `/refresh` and `/restore` count only when they are the whole comment (spaces and case don't matter):
+  `/approve thanks` or a quoted `> /approve` is an ordinary comment (`/approve please` gets a hint).
+- Anyone who deletes the waiting Spec or Plan gets the explanation (GitHub already requires Write, or Triage on an
+  organization repo, to delete someone else's comment).
 - **A personal repo has no Triage role:** every collaborator has Write, so everyone with access is an Approver.
   The Participant level only shows on a repo owned by an organization.
 

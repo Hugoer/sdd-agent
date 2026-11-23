@@ -140,7 +140,9 @@ console.log(
   );
 }
 
-// 2. Every "Read:" line lists exactly the call's loaded tool rows
+// 2. Every "Read:" line lists exactly the call's loaded tool rows. 2026-11-23 (spec 7, plan T24): a Spec or Plan comment
+// is matched to its version's call (a restored version: the version it restores), a /refresh reply to its row's last
+// call; a `list_files` listing is never named on the line.
 const byCall = new Map();
 for (const row of loads) {
   if (!byCall.has(row.call_id)) byCall.set(row.call_id, []);
@@ -154,7 +156,12 @@ function expectedFiles(callId) {
       ?.path ?? '';
   const stepDir = stepFile.replace(/SKILL\.md$/, '');
   return rows
-    .filter((row) => row.trigger === 'tool' && row.outcome === 'loaded')
+    .filter(
+      (row) =>
+        row.trigger === 'tool' &&
+        row.outcome === 'loaded' &&
+        row.kind !== 'listing',
+    )
     .map((row) => {
       if (row.kind === 'repo-skill') {
         const at = row.path.indexOf(`/${row.skill}/`);
@@ -195,9 +202,38 @@ function readFiles(line) {
   }
   return files.sort();
 }
+const documents = await q(
+  'SELECT id, log_id, based_on_id FROM task_documents WHERE created_at >= $1',
+  [live],
+);
+const refreshes = await q(
+  "SELECT source_comment_id, log_ids FROM document_actions WHERE action = 'refresh'",
+);
+const callOfLog = new Map(logs.map((log) => [log.id, log.call_id]));
+const docById = new Map(documents.map((doc) => [doc.id, doc]));
+/** The call behind a spec 7 comment's notes: a version's (or the one it restores), a /refresh reply's last; null else. */
+function documentCall(body) {
+  const version = /^<!-- sdd-agent:(spec|plan):([0-9a-f-]+) -->/.exec(body);
+  if (version) {
+    for (
+      let doc = docById.get(version[2]);
+      doc;
+      doc = doc.based_on_id ? docById.get(doc.based_on_id) : undefined
+    )
+      if (doc.log_id) return callOfLog.get(doc.log_id) ?? null;
+    return null;
+  }
+  const reply = /^<!-- sdd-agent:refresh:(\d+) -->/.exec(body);
+  if (!reply) return undefined;
+  const row = refreshes.find((r) => r.source_comment_id === reply[1]);
+  return row?.log_ids.length
+    ? (callOfLog.get(row.log_ids.at(-1)) ?? null)
+    : null;
+}
 {
   const failures = [];
   let withRead = 0;
+  let documentComments = 0;
   for (const e of evaluations) {
     const line = e.notes.find((note) => note.startsWith('Read: '));
     if (line) withRead++;
@@ -215,6 +251,19 @@ function readFiles(line) {
     const read = subs.find((sub) => sub.startsWith('Read: '));
     if (!read && !subs.some((sub) => sub.startsWith('Model: '))) continue;
     if (read) commentsWithRead++;
+    const documentCallId = documentCall(c.body);
+    if (documentCallId !== undefined) {
+      documentComments++;
+      const got = readFiles(read).join(' ');
+      const want = documentCallId
+        ? expectedFiles(documentCallId).join(' ')
+        : '';
+      if (got !== want)
+        failures.push(
+          `spec 7 comment ${c.id} on #${c.number}: notes [${got}] vs rows [${want}]`,
+        );
+      continue;
+    }
     const round = rounds.find((r) => r.comment_id === c.id);
     const candidates = round
       ? evaluations.filter((e) => e.id === round.evaluation_id)
@@ -241,7 +290,8 @@ function readFiles(line) {
   check(
     '2 every "Read:" line lists exactly the call\'s loaded tool rows',
     failures,
-    `${evaluations.length} evaluations, ${withRead} with a Read line; ${commentsWithRead} comments with one`,
+    `${evaluations.length} evaluations, ${withRead} with a Read line; ${commentsWithRead} comments with one ` +
+      `(${documentComments} of spec 7)`,
   );
 }
 

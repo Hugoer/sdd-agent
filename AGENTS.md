@@ -48,7 +48,19 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   in memory for the latest commit. `LlmService.call()` has load turns: one `execution_logs` row per request
   (`call_id`, `turn`, three new sizes), one `context_loads` row per file given or asked for (outcome, reason,
   provider `tokens` from Gemini's `countTokens`, `estimatedTokens`). Comments get a "Read:" line, a looked-for line
-  and a limit line. Smoke check 9 loads a repo skill on the real model. Next: spec 7. Repo:
+  and a limit line. Smoke check 9 loads a repo skill on the real model. Spec 7 (`spec-plan-approvals`) built
+  2026-11-23: `DocumentsModule` (`src/documents`) writes the Spec after Grill Me and, in `full-sdd`, the Plan after
+  its `/approve`, as issue comments with the target repo's `spec` and `plan` skills (adapted from agent-skills, MIT);
+  the model reads the code with read-only `list_files` / `read_file` (never `.github-agent/` or other tools'
+  instruction files). People edit the comment; `/approve` approves the text between its markers (an Approver; the
+  `ApprovalGate` judges it: written before the document, already approved, deleted, empty); `/refresh` (a
+  Participant) checks a document against `main` (v2 with a diff, or "still up to date"); a deleted waiting document
+  gets one explanation and `/restore` brings it back; `code-only` posts "Ready to code". Approvals compare the
+  commit a document read with `main` (the Plan's ⚠️ line, a warning reply on the last approval). Every reply links
+  the comment it answers. Two tables, `task_documents` and `document_actions` (`DocumentsStore`); the run-ended
+  comment links the run's documents; `node scripts/spec-plan-approvals-invariants.mjs <issues>` checks eight
+  invariants. Until spec 8, the last `/approve` stops the run at `workspace`. Next: spec 14 (`up-to-date-approvals`),
+  then 12, 13, 8 (overview build order; 14, 12 and 13 to interview). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
