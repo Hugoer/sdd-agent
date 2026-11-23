@@ -104,7 +104,7 @@ function state(over: Partial<RouterState> = {}): RouterState {
     grillSkipOnIssue: false,
     open: true,
     laneConflictLanes: [],
-    approveValid: true,
+    approval: null,
     ...over,
   };
 }
@@ -175,17 +175,17 @@ describe('decide(): overview §3 rows 1–31', () => {
     ).toEqual({ kind: 'start-run', lane: 'full-sdd', grillSkip: false });
   });
 
-  it('row 5: draft, anything else → ignored', () => {
+  it('row 5: draft, anything else → ignored; an APPROVE → the gate’s reply without a run (spec 7, P36)', () => {
     const draft = state({ shownStatus: 'draft', runCount: 1 });
     for (const input of [
       ev.opened(), // a label already shown, or a run before (plan P6)
       ev.skip(),
       ev.comment(),
-      ev.approve(),
       ev.added('full-sdd'), // the label is gone again
       ev.removed('full-sdd'),
     ])
       expect(act(draft, input)).toEqual(ignored('no-transition'));
+    expect(act(draft, ev.approve())).toEqual({ kind: 'reply-without-run' });
   });
 
   it('row 6: run state, LANE_REMOVED of the run lane → cancel; one lane left → restart with it', () => {
@@ -367,8 +367,8 @@ describe('decide(): overview §3 rows 1–31', () => {
       statusFirst: null,
       statusAfter: null,
     });
-    // An Approver's /approve while asking is answered whatever approveValid says (spec "Agreed for later specs").
-    expect(act(running({ approveValid: false }), ev.approve())).toMatchObject({
+    // An Approver's /approve while asking is answered by Grill Me; spec 7's gate isn't asked (approval null).
+    expect(act(running({ approval: null }), ev.approve())).toMatchObject({
       calls: [{ handler: 'grill', op: 'approve' }],
     });
   });
@@ -395,7 +395,9 @@ describe('decide(): overview §3 rows 1–31', () => {
   });
 
   it('row 17: spec-review (full-sdd), valid APPROVE → snapshot the Spec, generate the Plan → ready-for-dev', () => {
-    expect(act(running({ status: 'spec-review' }), ev.approve())).toEqual({
+    expect(
+      act(running({ status: 'spec-review', approval: 'valid' }), ev.approve()),
+    ).toEqual({
       kind: 'steps',
       calls: [
         { handler: 'spec', op: 'approve' },
@@ -409,7 +411,10 @@ describe('decide(): overview §3 rows 1–31', () => {
   it('row 18: spec-review (spec-code), valid APPROVE → snapshot the Spec, claim the workspace', () => {
     expect(
       act(
-        running({ status: 'spec-review' }, runOf({ lane: 'spec-code' })),
+        running(
+          { status: 'spec-review', approval: 'valid' },
+          runOf({ lane: 'spec-code' }),
+        ),
         ev.approve(),
       ),
     ).toEqual({
@@ -424,7 +429,12 @@ describe('decide(): overview §3 rows 1–31', () => {
   });
 
   it('row 19: ready-for-dev, valid APPROVE → full-sdd: the Plan, code-only: the go-signal; then claim', () => {
-    expect(act(running({ status: 'ready-for-dev' }), ev.approve())).toEqual({
+    expect(
+      act(
+        running({ status: 'ready-for-dev', approval: 'valid' }),
+        ev.approve(),
+      ),
+    ).toEqual({
       kind: 'steps',
       calls: [
         { handler: 'plan', op: 'approve' },
@@ -435,7 +445,10 @@ describe('decide(): overview §3 rows 1–31', () => {
     });
     expect(
       act(
-        running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })),
+        running(
+          { status: 'ready-for-dev', approval: 'valid' },
+          runOf({ lane: 'code-only' }),
+        ),
         ev.approve(),
       ),
     ).toMatchObject({
@@ -446,18 +459,65 @@ describe('decide(): overview §3 rows 1–31', () => {
     });
   });
 
-  it('row 20: spec-review, ready-for-dev: COMMENT, SKIP_ADDED, invalid APPROVE → ignored', () => {
+  it('row 20: spec-review, ready-for-dev: SKIP_ADDED → ignored; a COMMENT and an invalid APPROVE → the documents reply (spec 7)', () => {
     for (const status of ['spec-review', 'ready-for-dev'] as const) {
-      expect(act(running({ status }), ev.comment())).toEqual(
-        ignored('no-transition'),
-      );
+      expect(act(running({ status }), ev.comment())).toEqual({
+        kind: 'steps',
+        calls: [{ handler: 'documents', op: 'reply' }],
+        statusFirst: null,
+        statusAfter: null,
+      });
       expect(act(running({ status }), ev.skip())).toEqual(
         ignored('no-transition'),
       );
       expect(
-        act(running({ status, approveValid: false }), ev.approve()),
-      ).toEqual(ignored('no-transition'));
+        act(running({ status, approval: 'before-document' }), ev.approve()),
+      ).toEqual({
+        kind: 'steps',
+        calls: [{ handler: 'documents', op: 'reply' }],
+        statusFirst: null,
+        statusAfter: null,
+      });
     }
+  });
+
+  describe('spec 7: the gate’s verdict on an APPROVE (R2, plan P27)', () => {
+    for (const verdict of [
+      'already-approved',
+      'before-document',
+      'deleted',
+      'empty',
+    ] as const) {
+      it(`${verdict} → one reply by the documents handler, no status change`, () => {
+        for (const status of ['spec-review', 'ready-for-dev'] as const)
+          expect(
+            act(running({ status, approval: verdict }), ev.approve()),
+          ).toEqual({
+            kind: 'steps',
+            calls: [{ handler: 'documents', op: 'reply' }],
+            statusFirst: null,
+            statusAfter: null,
+          });
+      });
+    }
+
+    it('done → steps with no calls: the event ends DONE, nothing posted (P27)', () => {
+      for (const status of ['spec-review', 'ready-for-dev'] as const)
+        expect(
+          act(running({ status, approval: 'done' }), ev.approve()),
+        ).toEqual({
+          kind: 'steps',
+          calls: [],
+          statusFirst: null,
+          statusAfter: null,
+        });
+    });
+
+    it('an APPROVE in review with no verdict is a wiring error', () => {
+      expect(() =>
+        act(running({ status: 'spec-review' }), ev.approve()),
+      ).toThrow('without the gate’s verdict');
+    });
   });
 
   it('row 21: workspace WS_BUSY → wait for the workspace (spec 8)', () => {
@@ -537,14 +597,22 @@ describe('decide(): overview §3 rows 1–31', () => {
     });
   });
 
-  it('row 27: in-review, needs-human: COMMENT, APPROVE, SKIP_ADDED → ignored (also executing)', () => {
+  it('row 27: in-review, needs-human: COMMENT, SKIP_ADDED → ignored; APPROVE → the documents reply (row 36; also executing, draft with a run)', () => {
     for (const s of [
       running({ status: 'in-review' }),
       stopped(),
       running({ status: 'executing' }),
-    ])
-      for (const input of [ev.comment(), ev.approve(), ev.skip()])
+      running({ status: 'draft', shownStatus: 'draft' }),
+    ]) {
+      for (const input of [ev.comment(), ev.skip()])
         expect(act(s, input)).toEqual(ignored('no-transition'));
+      expect(act(s, ev.approve())).toEqual({
+        kind: 'steps',
+        calls: [{ handler: 'documents', op: 'reply' }],
+        statusFirst: null,
+        statusAfter: null,
+      });
+    }
   });
 
   it('row 28: FAILED with a running run → needs-human, retryable, the step and cause', () => {

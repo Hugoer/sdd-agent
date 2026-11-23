@@ -36,6 +36,8 @@ import { StepConfigService } from './step-config.service.js';
     ExecutionLogService,
     // Spec 11 (SDW10): the two tools for specs 9 and 10's agent loops.
     ContextLoaderService,
+    // Spec 7 (plan P20): the files a document's calls read, for its approval's commit check.
+    ContextLoadService,
   ],
 })
 export class LlmModule {}

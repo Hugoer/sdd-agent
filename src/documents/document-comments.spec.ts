@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { specComment, specMarker } from './document-comments.js';
+import {
+  approveRefusedReply,
+  approveWarningReply,
+  goSignalComment,
+  planComment,
+  planMarker,
+  specComment,
+  specMarker,
+} from './document-comments.js';
 import { documentText } from './document-text.js';
 
 const COMMIT = '4f2c1ab'.padEnd(40, 'e');
@@ -75,5 +83,253 @@ describe('specComment (spec "The document comment")', () => {
 
     expect(body.startsWith(specMarker('v-3'))).toBe(true);
     expect(documentText(body)).toBe('# Spec\n\nAsk `@alice`.');
+  });
+});
+
+describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
+  const SPEC_V1 = {
+    kind: 'spec' as const,
+    version: 1,
+    url: 'https://github.com/o/r/issues/12#issuecomment-9',
+    approvedBy: 'bob',
+  };
+
+  it('already-approved names who approved it', () => {
+    expect(
+      approveRefusedReply('501', 'already-approved', SPEC_V1, 'full-sdd'),
+    ).toBe(
+      '<!-- sdd-agent:approve-refused:501 -->\n' +
+        'Spec v1 is already approved (by `bob`), so this `/approve` changes nothing.',
+    );
+  });
+
+  it('before-document links the waiting version', () => {
+    expect(
+      approveRefusedReply(
+        '502',
+        'before-document',
+        { ...SPEC_V1, version: 2, approvedBy: null },
+        'full-sdd',
+      ).split('\n')[1],
+    ).toBe(
+      "This `/approve` was written before Spec v2 was posted, so it didn't count. Read " +
+        '[Spec v2](https://github.com/o/r/issues/12#issuecomment-9), then comment `/approve` again.',
+    );
+  });
+
+  it('deleted points to /restore and to the lane label', () => {
+    expect(
+      approveRefusedReply('503', 'deleted', SPEC_V1, 'spec-code').split(
+        '\n',
+      )[1],
+    ).toBe(
+      "Spec v1 was deleted, so there's nothing to approve. Comment `/restore` to get it back, or remove the " +
+        '`workflow: spec-code` label and add it again to start over.',
+    );
+  });
+
+  it('empty asks to put the document back', () => {
+    expect(
+      approveRefusedReply(
+        '504',
+        'empty',
+        { ...SPEC_V1, kind: 'plan' },
+        'full-sdd',
+      ).split('\n')[1],
+    ).toBe(
+      "Plan v1's comment has no text left between its markers, so there's nothing to approve. Edit the comment " +
+        'to put the Plan back, then comment `/approve`.',
+    );
+  });
+
+  it('the go-signal is named by its comment', () => {
+    expect(
+      approveRefusedReply(
+        '505',
+        'already-approved',
+        { kind: 'go-signal', version: 1, url: null, approvedBy: 'bob' },
+        'code-only',
+      ).split('\n')[1],
+    ).toBe(
+      'The **Ready to code** comment is already approved (by `bob`), so this `/approve` changes nothing.',
+    );
+  });
+});
+
+describe('planComment (spec "The document comment")', () => {
+  const PLAN_COMMIT = '9e1d0c2'.padEnd(40, 'f');
+  const input = {
+    versionId: 'p-1',
+    version: 1,
+    run: { number: 2 },
+    base: 'main',
+    commit: PLAN_COMMIT,
+    specVersion: 1,
+    warning: null,
+    text: '# Plan',
+    notes: ['Model: `gemini-4-carbon` (standard)'],
+  };
+  const URL = `https://github.com/o/r/compare/${COMMIT}...${PLAN_COMMIT}`;
+
+  it('no warning: marker, header from the approved Spec, the coding line, the document, the notes', () => {
+    expect(planComment(input)).toBe(
+      [
+        '<!-- sdd-agent:plan:p-1 -->',
+        '**Plan v1** · run 2 (`full-sdd`) · from the approved Spec v1 · read at `main` @ `9e1d0c2`',
+        '',
+        "To change it, edit this comment. When it's right, an Approver (Write access) comments `/approve` and the " +
+          "bot starts coding from the approved Spec and this Plan as it reads then. `/refresh` checks both against today's `main`.",
+        '',
+        '<!-- sdd-agent:document -->',
+        '# Plan',
+        '<!-- sdd-agent:document-end -->',
+        '',
+        '---',
+        '<sub>Model: `gemini-4-carbon` (standard)</sub>',
+      ].join('\n'),
+    );
+    expect(planComment(input).startsWith(planMarker('p-1'))).toBe(true);
+  });
+
+  it('flagged files → the ⚠️ line with the compare link, before the coding line', () => {
+    const lines = planComment({
+      ...input,
+      warning: {
+        kind: 'stale',
+        from: COMMIT,
+        files: ['src/index.ts'],
+        complete: true,
+        compareUrl: URL,
+      },
+    }).split('\n');
+
+    expect(lines[3]).toBe(
+      `⚠️ Since the Spec was written (\`4f2c1ab\`), \`main\` changed \`src/index.ts\`, which it read ([compare](${URL})). ` +
+        'This Plan reads the current code. If the change affects the Spec, comment `/refresh`.',
+    );
+    expect(lines[5].startsWith('To change it')).toBe(true);
+  });
+
+  it('more than five files → the first five and "and N more"; a cut list → "possibly more"', () => {
+    const files = Array.from({ length: 7 }, (_, i) => `f${i}.ts`);
+    const warning = {
+      kind: 'stale' as const,
+      from: COMMIT,
+      files,
+      complete: true,
+      compareUrl: URL,
+    };
+
+    expect(planComment({ ...input, warning })).toContain(
+      'changed `f0.ts`, `f1.ts`, `f2.ts`, `f3.ts`, `f4.ts` and 2 more, which it read',
+    );
+    expect(
+      planComment({
+        ...input,
+        warning: { ...warning, files: ['a.ts'], complete: false },
+      }),
+    ).toContain('changed `a.ts` … and possibly more, which it read');
+  });
+
+  it('the comparison failed → the not-compared line', () => {
+    expect(
+      planComment({
+        ...input,
+        warning: { kind: 'not-compared', from: COMMIT },
+      }).split('\n')[3],
+    ).toBe(
+      "⚠️ The bot couldn't compare `4f2c1ab` with `main`, so it can't tell whether the Spec is out of date.",
+    );
+  });
+});
+
+describe('approveWarningReply (SPW13, plan P4)', () => {
+  const FROM = '9e1d0c2'.padEnd(40, '1');
+  const URL = 'https://github.com/o/r/compare/a...b';
+  const plan = {
+    versionId: 'p-1',
+    document: { kind: 'plan' as const, version: 1 },
+    lane: 'full-sdd' as const,
+    base: 'main',
+  };
+  const stale = (flagged: { path: string; readers: ('own' | 'spec')[] }[]) =>
+    approveWarningReply({
+      ...plan,
+      warning: {
+        kind: 'stale',
+        from: FROM,
+        flagged,
+        complete: true,
+        compareUrl: URL,
+      },
+    });
+
+  it('a file the Plan read: the spec’s text, with the compare link and the restart', () => {
+    expect(stale([{ path: 'src/index.ts', readers: ['own'] }])).toBe(
+      '<!-- sdd-agent:approve-warning:p-1 -->\n' +
+        'Approved Plan v1. Since it was written (`9e1d0c2`), `main` changed `src/index.ts`, which it read ' +
+        `([compare](${URL})). The code is written from today's \`main\`, and the Coder is told which files ` +
+        'changed. To write the Plan again instead, remove the `workflow: full-sdd` label and add it again.',
+    );
+  });
+
+  it('P4: who read each file is named', () => {
+    expect(stale([{ path: 'src/index.ts', readers: ['spec'] }])).toContain(
+      'changed `src/index.ts`, which the approved Spec read ([compare]',
+    );
+    expect(
+      stale([{ path: 'src/index.ts', readers: ['own', 'spec'] }]),
+    ).toContain('changed `src/index.ts`, which it and the approved Spec read');
+    expect(
+      stale([
+        { path: 'a.ts', readers: ['own'] },
+        { path: 'b.ts', readers: ['spec'] },
+        { path: 'c.ts', readers: ['own'] },
+      ]),
+    ).toContain(
+      'changed `a.ts` and `c.ts`, which it read, and `b.ts`, which the approved Spec read ([compare]',
+    );
+  });
+
+  it('spec-code: the Spec and its lane label', () => {
+    expect(
+      approveWarningReply({
+        ...plan,
+        document: { kind: 'spec', version: 2 },
+        lane: 'spec-code',
+        warning: {
+          kind: 'stale',
+          from: FROM,
+          flagged: [{ path: 'src/index.ts', readers: ['own'] }],
+          complete: true,
+          compareUrl: URL,
+        },
+      }),
+    ).toContain('Approved Spec v2. Since it was written (`9e1d0c2`)');
+  });
+
+  it('the comparison failed → the not-compared reply', () => {
+    expect(
+      approveWarningReply({
+        ...plan,
+        warning: { kind: 'not-compared', from: FROM },
+      }).split('\n')[1],
+    ).toBe(
+      "Approved Plan v1. The bot couldn't compare `9e1d0c2` with `main`, so it can't tell whether files it read have changed.",
+    );
+  });
+});
+
+describe('goSignalComment (spec "The go-signal")', () => {
+  it('its marker names the run; the coding line', () => {
+    expect(goSignalComment({ id: 'run-1', number: 1 })).toBe(
+      [
+        '<!-- sdd-agent:go-signal:run-1 -->',
+        '**Ready to code** · run 1 (`code-only`)',
+        '',
+        'The bot codes from the issue description, with no Spec or Plan. An Approver (Write access) comments ' +
+          '`/approve` to start; the bot reads the title and description as they read then.',
+      ].join('\n'),
+    );
   });
 });

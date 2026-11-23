@@ -11,7 +11,6 @@ import {
 import { ProviderError } from '../src/contracts/provider-error.js';
 import { injectionWarningMarker } from '../src/llm/injection-warning.service.js';
 import { WORKFLOW_CONFIG_PATH } from '../src/llm/workflow-config.js';
-import { StepHandlerRegistry } from '../src/workflow/step-handler.registry.js';
 import { resetDatabase } from './db.js';
 import { startApp, type TestApp } from './app.js';
 import { ScriptedStepHandler } from './fakes/scripted-step-handler.js';
@@ -181,8 +180,8 @@ describe('the dispatch loop with scripted handlers (spec 5, T14, plan P4)', () =
   const goSignal = new ScriptedStepHandler();
 
   beforeAll(async () => {
-    t = await startApp({ grill });
-    t.app.get(StepHandlerRegistry).register('go-signal', goSignal);
+    // Spec 7 plan P8: DocumentsModule registers `go-signal`, so the scripted one replaces it through startApp.
+    t = await startApp({ grill, documents: { 'go-signal': goSignal } });
   });
   beforeEach(async () => {
     await resetDatabase(t.prisma);

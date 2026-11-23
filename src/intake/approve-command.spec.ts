@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isApproveCommand } from './approve-command.js';
+import { isApproveCommand, isApproveNearMiss } from './approve-command.js';
 
 describe('isApproveCommand (spec 2 "What counts as /approve")', () => {
   it.each([
@@ -17,5 +17,21 @@ describe('isApproveCommand (spec 2 "What counts as /approve")', () => {
     ['/approve /approve', false],
   ])('%j → %s', (text, expected) => {
     expect(isApproveCommand(text)).toBe(expected);
+  });
+});
+
+describe('isApproveNearMiss (spec 7, SPW12)', () => {
+  it.each([
+    ['/approve please', true],
+    ['  /APPROVED\n', true],
+    ['/approve /approve', true],
+    ['/approve', false],
+    [' /Approve ', false],
+    ['please /approve', false],
+    ['> /approve', false],
+    ['approve', false],
+    ['', false],
+  ])('%j → %s', (text, expected) => {
+    expect(isApproveNearMiss(text)).toBe(expected);
   });
 });

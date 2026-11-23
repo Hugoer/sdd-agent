@@ -121,6 +121,13 @@ export class InMemoryIssueProvider implements IssueProvider {
     return this.addComment(task, comment.body, comment.byBot);
   }
 
+  /** Spec 7 (plan P23): a human edits a comment, also the bot's (not a provider method; not recorded). */
+  editComment(commentId: string, body: string): void {
+    const found = this.comments.find((comment) => comment.id === commentId);
+    if (!found) throw new Error(`no comment ${commentId} to edit`);
+    found.body = body;
+  }
+
   /** A human deletes a comment (not a provider method; not recorded). */
   deleteComment(commentId: string): void {
     const index = this.comments.findIndex(

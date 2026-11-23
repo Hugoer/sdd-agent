@@ -12,6 +12,9 @@ import type { WebhookEvent } from '../src/generated/prisma/client.js';
 import { GitHubClient } from '../src/github/github-client.js';
 import { GitHubIssueProvider } from '../src/github/github-issue.provider.js';
 import { GitHubRepoProvider } from '../src/github/github-repo.provider.js';
+import { DocumentsHandler } from '../src/documents/documents.handler.js';
+import { GoSignalHandler } from '../src/documents/go-signal.handler.js';
+import { PlanHandler } from '../src/documents/plan.handler.js';
 import { SpecHandler } from '../src/documents/spec.handler.js';
 import { GrillHandler } from '../src/grill/grill.handler.js';
 import { IntakeService } from '../src/intake/intake.service.js';
@@ -193,7 +196,12 @@ export interface StartOptions {
 export type DocumentHandler = 'spec' | 'plan' | 'go-signal' | 'documents';
 
 /** Spec 7 plan P8: each document handler's provider, replaced by default with an unbuilt step. */
-const DOCUMENT_HANDLERS = { spec: SpecHandler } as const;
+const DOCUMENT_HANDLERS = {
+  spec: SpecHandler,
+  plan: PlanHandler,
+  'go-signal': GoSignalHandler,
+  documents: DocumentsHandler,
+} as const;
 
 /** What the router did before a step existed (`step-not-built` at that step), with no cancel hook. */
 const notBuilt = (step: string): StepHandler => ({

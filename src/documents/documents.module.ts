@@ -5,7 +5,13 @@ import { LlmModule } from '../llm/llm.module.js';
 import { SecretScanModule } from '../secret-scan/secret-scan.module.js';
 import { StepHandlerRegistry } from '../workflow/step-handler.registry.js';
 import { WorkflowModule } from '../workflow/workflow.module.js';
+import { DocumentsGate } from './approval-check.js';
+import { DocumentApprovals } from './document-approval.js';
+import { DocumentPosts } from './document-posts.js';
+import { DocumentsHandler } from './documents.handler.js';
 import { DocumentsStore } from './documents.store.js';
+import { GoSignalHandler } from './go-signal.handler.js';
+import { PlanHandler } from './plan.handler.js';
 import { SpecHandler } from './spec.handler.js';
 
 /**
@@ -22,15 +28,32 @@ import { SpecHandler } from './spec.handler.js';
     GitHubModule,
     SecretScanModule,
   ],
-  providers: [DocumentsStore, SpecHandler],
+  providers: [
+    DocumentsStore,
+    DocumentPosts,
+    DocumentApprovals,
+    SpecHandler,
+    PlanHandler,
+    GoSignalHandler,
+    DocumentsHandler,
+    DocumentsGate,
+  ],
 })
 export class DocumentsModule implements OnModuleInit {
   constructor(
     private readonly registry: StepHandlerRegistry,
     private readonly spec: SpecHandler,
+    private readonly plan: PlanHandler,
+    private readonly goSignal: GoSignalHandler,
+    private readonly documents: DocumentsHandler,
+    private readonly gate: DocumentsGate,
   ) {}
 
   onModuleInit(): void {
     this.registry.register('spec', this.spec);
+    this.registry.register('plan', this.plan);
+    this.registry.register('go-signal', this.goSignal);
+    this.registry.register('documents', this.documents);
+    this.registry.registerGate(this.gate);
   }
 }

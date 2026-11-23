@@ -560,19 +560,19 @@ records the deletion without text when the bot hadn't seen it, then `IGNORED` `a
 stub for `documents`.
 
 **Acceptance criteria:**
-- [ ] decide() per verdict (one test each); the changed `decide.spec.ts` rows listed above pass
-- [ ] `/approve` written before Spec v1 was posted → ONE "written before Spec v1" reply, nothing approved, `IGNORED`
+- [x] decide() per verdict (one test each); the changed `decide.spec.ts` rows listed above pass
+- [x] `/approve` written before Spec v1 was posted → ONE "written before Spec v1" reply, nothing approved, `IGNORED`
   `approve-refused`; the job run again → no second reply
-- [ ] The Spec comment emptied between its markers → the `empty` reply; deleted (the bot missed it) → the `deleted`
+- [x] The Spec comment emptied between its markers → the `empty` reply; deleted (the bot missed it) → the `deleted`
   reply and `deleted_at` set, `deleted_text` empty; already approved (rows set directly, P23) → the `already-approved`
   reply
-- [ ] Each verdict is one `getComment` (no other GitHub read)
-- [ ] Each refusal has its `document_actions` row (`approve-refused`, its result, the reply `POSTED`) and the spec's
+- [x] Each verdict is one `getComment` (no other GitHub read)
+- [x] Each refusal has its `document_actions` row (`approve-refused`, its result, the reply `POSTED`) and the spec's
   log line (`documents: /approve refused (before-document)`); the job run again after a crash between Tx1 and the
   post → the reply posted once (P34)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-approve.integration.spec.ts`)
 
 **Dependencies:** T9
@@ -594,17 +594,17 @@ changed paths the document's calls loaded (P4's chain, P20's read method), and e
 not-compared line).
 
 **Acceptance criteria:**
-- [ ] An edited Spec approved: `approved_text` is the edited document without header or notes; `lines_added`,
+- [x] An edited Spec approved: `approved_text` is the edited document without header or notes; `lines_added`,
   `lines_removed` ≥ 1; an unchanged one → 0 and 0
-- [ ] `main` unchanged → no `changedFiles` call, `changed_files` null; a file the Spec read changed → in
+- [x] `main` unchanged → no `changedFiles` call, `changed_files` null; a file the Spec read changed → in
   `stale_files` and `changed_paths`; a changed file it didn't read → only in `changed_paths`; an unknown commit →
   `changed_complete` null, the approval counts; a `403` → the run stops (row 28)
-- [ ] A Plan's flagged files include the approved Spec's reads, each with who read it (P4); a restored or refreshed
-  version's chain reaches its first writer
-- [ ] The spec's log line (`spec: v1 approved by bob (2 files flagged, +3 −1 lines)`)
+- [x] A Plan's flagged files include the approved Spec's reads, each with who read it (P4); a restored or refreshed
+  version's chain reaches its first writer (the chain: `chainReads` unit tests and `readsOf`'s walk; a Plan end to end at T14)
+- [x] The spec's log line (`spec: v1 approved by bob (2 files flagged, +3 −1 lines)`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T3, T6, T11
 **Files:** `src/documents/spec.handler.ts`, `src/documents/commit-check.ts` (+ spec), `src/documents/documents.store.ts`,
@@ -622,19 +622,19 @@ flagged or the comparison failed, the edit and `/approve` lines). The `plan` han
 stub (P8).
 
 **Acceptance criteria:**
-- [ ] `full-sdd`: Grill Me clear → Spec v1 → edit (remove a requirement) → `/approve` → ONE Plan v1, `status:
+- [x] `full-sdd`: Grill Me clear → Spec v1 → edit (remove a requirement) → `/approve` → ONE Plan v1, `status:
   ready-for-dev`; the Plan's prompt holds the approved text and the title, never the description or the answers
-- [ ] Flagged files at the Spec's approval → the ⚠️ header line with the compare link; none → no line; more than 5 →
+- [x] Flagged files at the Spec's approval → the ⚠️ header line with the compare link; none → no line; more than 5 →
   "and N more"; the comparison failed → the not-compared line
-- [ ] Any changed path at the Spec's approval (P33, flagged or not) → the prompt's paragraph lists them, the Spec's
+- [x] Any changed path at the Spec's approval (P33, flagged or not) → the prompt's paragraph lists them, the Spec's
   read ones marked `*`; none → no paragraph
-- [ ] The Plan call fails → stop at `plan`; `/retry` → ONE Plan, the approval recorded once, no second Spec call
-- [ ] A crash after the Plan's Tx2 but before the status is written → the retried `/approve` (in `spec-review`, P15)
+- [x] The Plan call fails → stop at `plan`; `/retry` → ONE Plan, the approval recorded once, no second Spec call
+- [x] A crash after the Plan's Tx2 but before the status is written → the retried `/approve` (in `spec-review`, P15)
   ends in `ready-for-dev` with ONE Plan and no model call (review, 2026-11-22)
-- [ ] An injection in the approved Spec → spec 4's warning once (key `spec-<versionId>`)
+- [x] An injection in the approved Spec → spec 4's warning once (key `spec-<versionId>`)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-plan.integration.spec.ts`)
 
 **Dependencies:** T12
@@ -651,15 +651,15 @@ transaction and posted right after, then the router's `workspace` call stops the
 warning reply is posted by the same op when the event runs again.
 
 **Acceptance criteria:**
-- [ ] P4's case (only the approved Spec read the changed file) → ONE reply naming "which the approved Spec read"
-- [ ] Plan v1 approved with a flagged file → ONE "Approved Plan v1. Since it was written …" reply with the compare
+- [x] P4's case (only the approved Spec read the changed file) → ONE reply naming "which the approved Spec read"
+- [x] Plan v1 approved with a flagged file → ONE "Approved Plan v1. Since it was written …" reply with the compare
   link, then the stop at `workspace`; no flagged file → no reply, only the stop
-- [ ] `spec-code`: the Spec's approval with a flagged file → the reply names `workflow: spec-code`; NO Plan, ever
-- [ ] A crash between the approval and the reply → the retry posts it once; `/retry` of the `workspace` stop → the
+- [x] `spec-code`: the Spec's approval with a flagged file → the reply names `workflow: spec-code`; NO Plan, ever
+- [x] A crash between the approval and the reply → the retry posts it once; `/retry` of the `workspace` stop → the
   approval isn't recorded twice, no second reply, the same stop
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T13
 **Files:** `src/documents/plan.handler.ts`, `src/documents/spec.handler.ts`, `src/documents/commit-check.ts`,
@@ -675,13 +675,13 @@ counts). Registered,
 with its `startApp` stub; `run-start`'s suite passes its scripted one through `startApp` (P8).
 
 **Acceptance criteria:**
-- [ ] A `code-only` run → ONE "Ready to code" comment, `ready-for-dev`; `/approve` → the stop at `workspace`; the
+- [x] A `code-only` run → ONE "Ready to code" comment, `ready-for-dev`; `/approve` → the stop at `workspace`; the
   row's `approved_text` is the title and description as they read then
-- [ ] The go-signal comment deleted, then `/approve` → still approved
-- [ ] `test/run-start.integration.spec.ts:180–215` passes with the scripted go-signal
+- [x] The go-signal comment deleted, then `/approve` → still approved
+- [x] `test/run-start.integration.spec.ts:180–215` passes with the scripted go-signal
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T11
 **Files:** `src/documents/go-signal.handler.ts`, `src/documents/document-comments.ts`, `src/documents/documents.module.ts`,
@@ -699,19 +699,19 @@ hint once per waiting document (`approve-hint:<versionId>`, P38), `IGNORED` `app
 the row-36 texts by status (P14).
 
 **Acceptance criteria:**
-- [ ] `/approve please` twice → ONE hint; in another document's wait → a new hint
-- [ ] Late comment: the last answer, then a comment written before Spec v1 was posted → after Spec v1 ONE reply
+- [x] `/approve please` twice → ONE hint; in another document's wait → a new hint
+- [x] Late comment: the last answer, then a comment written before Spec v1 was posted → after Spec v1 ONE reply
   naming its author; a comment after → none; a comment Grill Me read → none
-- [ ] `/approve` with no run → ONE reply, a `document_actions` row with no run; in `needs-human` → "Run 2 is
+- [x] `/approve` with no run → ONE reply, a `document_actions` row with no run; in `needs-human` → "Run 2 is
   stopped"; in `executing` and `in-review` (status set in the test database) → their texts; on a closed issue →
   spec 5's reply, unchanged
-- [ ] `spec-code`, two `/approve` a second apart → the stop, then ONE "Run 1 is stopped" reply; `full-sdd`, the same
+- [x] `spec-code`, two `/approve` a second apart → the stop, then ONE "Run 1 is stopped" reply; `full-sdd`, the same
   on the Spec → ONE Plan, then ONE "written before Plan v1" reply
-- [ ] Every reply has its `document_actions` row (`approve-hint`, `late-comment`, `approve-refused` with the status as
+- [x] Every reply has its `document_actions` row (`approve-hint`, `late-comment`, `approve-refused` with the status as
   result) and the spec's log line; each job run again after a crash before the post → one reply (P34)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-replies.integration.spec.ts`)
 
 **Dependencies:** T11
@@ -728,22 +728,32 @@ read with the tools first), checkpoints, risks; a "When updating" section; dropp
 One paste-ready block.
 
 **Acceptance criteria:**
-- [ ] The skill passes the header check; nothing in it asks to save a file, enter plan mode or stop a turn
-- [ ] The notice lists what was kept, changed and dropped
+- [x] The skill passes the header check; nothing in it asks to save a file, enter plan mode or stop a turn
+- [x] The notice lists what was kept, changed and dropped
 
 **Verification:**
-- [ ] Manual: you read the diff, run the block; I check the push
+- [x] Manual: you read the diff, run the block; I check the push (2026-11-23: sandbox `main` at `c8f58d7`)
 
 **Dependencies:** T13 (the Plan frame); pushed before Checkpoint 3
 **Files:** in the sandbox clone: `.github-agent/skills/plan/SKILL.md`, `.github-agent/skills/THIRD-PARTY-NOTICES.md`
 **Scope:** S (sandbox only)
 
 ### Checkpoint 3 — `/approve` and the Plan on the sandbox
-- [ ] T17 is on the sandbox's `main`
-- [ ] Matrix "The Spec": the late comment; `/approve` while the Spec is being written
-- [ ] Matrix "`/approve` and the Plan": every row except `#F` (Checkpoint 4: its `/refresh` must come before its
-  `/approve`, which stops the run)
-- [ ] Matrix "Failures": the injection added to the Spec comment
+- [x] T17 is on the sandbox's `main` (`c8f58d7`)
+- [x] Matrix "The Spec": the late comment; `/approve` while the Spec is being written (2026-11-23, sandbox
+  `c8f58d7`, my instance: #53 with `grill: skip`, "Q3: actually weekly" and `/approve` written while the Spec call
+  ran → after Spec v1 ONE late-comment reply naming `Hugoer` and ONE "written before Spec v1" reply, nothing
+  approved; "looks good" after it → no reply)
+- [x] Matrix "`/approve` and the Plan": every row except `#F` (Checkpoint 4: its `/refresh` must come before its
+  `/approve`, which stops the run) (#48: `/approve please` twice → ONE hint; Spec v1 edited (the outer-spaces
+  requirement removed, one matrix row added) → `/approve` → Plan v1, `ready-for-dev`, `approved_text` the edited
+  document, `+2 −3`; the Plan names `src/split.ts`, `src/index.ts` and their tests, no task keeps names verbatim (one
+  risk row still mentions not trimming); its `/approve` → the `workspace` stop, then `/approve` → ONE "Run 1 is
+  stopped". #50: two `/approve` 2 s apart → ONE Plan v1, ONE "written before Plan v1". #54 `spec-code` → "starts
+  coding" line, `/approve` → the `workspace` stop, no Plan. #52: its label webhooks were lost (my instance wasn't up
+  yet), so its `/approve` got ONE "this issue has no run" reply, a row with no run)
+- [x] Matrix "Failures": the injection added to the Spec comment (#49: spec 4's warning once, key
+  `spec-<versionId>`; the Plan neither follows nor mentions it)
 - [ ] You review and commit
 
 ---
@@ -1028,6 +1038,9 @@ as the spec says.
   exactly the call's loaded tool rows") only knows Grill evaluations, so it FAILs on every Spec comment; spec 7's own
   script (T24) doesn't check "Read:" lines. Not changed; to decide with T24.
 - (Checkpoint 2) A root listing logs as `list_files  → loaded` (an empty folder name): cosmetic.
+- (Checkpoint 3, 2026-11-23) #50's Spec was read at `abf8f2d`; the `plan` skill commit changed two `.github-agent/`
+  files before its approval, so `changed_paths` holds them and the Plan's prompt paragraph lists their names (never
+  their text). P10 leaves `.github-agent/` out of the read tools only. To decide (see the Checkpoint 3 report).
 
 ## Risks and mitigations
 

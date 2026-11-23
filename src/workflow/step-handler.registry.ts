@@ -7,6 +7,7 @@ import type {
   ApprovalVerdict,
   HandlerName,
   HandlerOp,
+  RouterIgnoreReason,
   StepOutcome,
 } from './decide.js';
 import type { HeldLease } from './session-lease.service.js';
@@ -52,6 +53,29 @@ export interface CancelContext extends Omit<
   endEventReceivedAt: Date;
 }
 
+/**
+ * Spec 7 plan P7, P26: the documents' gate, which DocumentsModule registers. The router asks its verdict for an
+ * `/approve` in `spec-review` or `ready-for-dev` with a run, before decide() (R2), so WorkflowModule imports nothing
+ * from `src/documents`.
+ */
+export interface ApprovalGate {
+  verdict(context: GateContext): Promise<ApprovalVerdict>;
+  /**
+   * Plan P7, P36 (row 5): the one reply to a document command on an issue with no run; the reason the event then
+   * ends `IGNORED` with (the command's `-refused` reason).
+   */
+  replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason>;
+}
+
+/** A command on an issue with no run: the issue, the event, the lease. */
+export type NoRunContext = Pick<StepContext, 'task' | 'input' | 'lease'>;
+
+/** What the gate reads: the run, its status, the `/approve` event and the lease of this job. */
+export type GateContext = Pick<
+  StepContext,
+  'task' | 'run' | 'input' | 'lease' | 'status'
+>;
+
 export interface StepHandler {
   /**
    * Plan P4: an outcome of overview §3 goes back into decide(); a result of the work that stops the run carries
@@ -69,6 +93,24 @@ export interface StepHandler {
 @Injectable()
 export class StepHandlerRegistry {
   private readonly handlers = new Map<HandlerName, StepHandler>();
+  private approvalGate: ApprovalGate | null = null;
+
+  /** Spec 7 (plan P26): one gate, like a handler name; a second registration stops the app at startup. */
+  registerGate(gate: ApprovalGate): void {
+    if (this.approvalGate) {
+      throw new Error(
+        'StepHandlerRegistry: an approval gate is already registered; exactly one module may register it',
+      );
+    }
+    this.approvalGate = gate;
+  }
+
+  /** The registered gate; none is a wiring error (DocumentsModule is part of the app). */
+  gate(): ApprovalGate {
+    if (!this.approvalGate)
+      throw new Error('StepHandlerRegistry: no approval gate is registered');
+    return this.approvalGate;
+  }
 
   /** One handler per name; a second registration is a wiring error that stops the app at startup. */
   register(name: HandlerName, handler: StepHandler): void {

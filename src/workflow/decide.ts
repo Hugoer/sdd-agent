@@ -108,8 +108,11 @@ export interface RouterState {
   open: boolean;
   /** Plan Q3: the lanes the open lane-conflict reminder lists (`Task.laneConflictLanes`); empty = none open. */
   laneConflictLanes: Lane[];
-  /** R2, judged by the step that owns the document (spec 7); read only for `APPROVE` (rows 17–20). */
-  approveValid: boolean;
+  /**
+   * R2: the gate's verdict (spec 7, plan P7, P26), asked only for `APPROVE` in `spec-review` or `ready-for-dev` with a
+   * run (rows 17–20); null otherwise.
+   */
+  approval: ApprovalVerdict | null;
 }
 
 export type RouterIgnoreReason =
@@ -180,6 +183,11 @@ export type Action =
   | { kind: 'accept-retry' }
   /** Row 31, RL20: one reply; the event ends `IGNORED` `retry-refused`. */
   | { kind: 'reply-retry'; refusal: RetryRefusal }
+  /**
+   * Spec 7 row 5 (plan P36, P7): a document command on an issue with no run; the gate posts the one reply and the
+   * event ends `IGNORED` with the command's `-refused` reason.
+   */
+  | { kind: 'reply-without-run' }
   /** RL19: one reply; the event ends `IGNORED` `issue-closed`. */
   | { kind: 'reply-closed'; command: ClosedCommand }
   | { kind: 'ignore'; reason: RouterIgnoreReason }
@@ -309,6 +317,8 @@ function withoutRun(state: RouterState, event: IssueEvent): Action {
       return ignore(lanes.length >= 2 ? 'lane-conflict' : 'no-transition');
     case 'RETRY':
       return { kind: 'reply-retry', refusal: { kind: 'no-run' } };
+    case 'APPROVE':
+      return { kind: 'reply-without-run' }; // row 5 (spec 7)
     default:
       return ignore('no-transition');
   }
@@ -349,8 +359,9 @@ function byStatus(
     case 'grilling':
       return whileGrilling(state, event);
     case 'spec-review':
-      if (event.type !== 'APPROVE' || !state.approveValid)
-        return ignore('no-transition'); // row 20
+      if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, a late comment, or nothing
+      if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
+      if (state.approval !== 'valid') return approvalAnswer(state.approval);
       return run.lane === 'full-sdd'
         ? steps(
             [
@@ -367,8 +378,9 @@ function byStatus(
             null,
           ); // row 18
     case 'ready-for-dev':
-      if (event.type !== 'APPROVE' || !state.approveValid)
-        return ignore('no-transition'); // row 20
+      if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, or nothing
+      if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
+      if (state.approval !== 'valid') return approvalAnswer(state.approval);
       // Row 19.
       return steps(
         [
@@ -381,9 +393,28 @@ function byStatus(
         null,
       );
     default:
-      // Row 27 (in-review, needs-human); also `draft` before the first step and `executing`: nothing to do.
-      return ignore('no-transition');
+      // Row 27 (in-review, needs-human); also `draft` before the first step and `executing`: nothing to do, but
+      // an `/approve` gets one reply why (spec 7 row 36).
+      return event.type === 'APPROVE'
+        ? documentsReply()
+        : ignore('no-transition');
   }
+}
+
+/**
+ * Spec 7 "`/approve`": `done` (this event already approved an earlier document of the run) → nothing, the event
+ * ends DONE (plan P27); a refusal → one reply by the `documents` handler (row 20).
+ */
+function approvalAnswer(verdict: ApprovalVerdict | null): Action {
+  if (verdict === null)
+    throw new Error('decide: an APPROVE in review without the gate’s verdict');
+  if (verdict === 'done') return steps([], null);
+  return documentsReply();
+}
+
+/** Spec 7: the `documents` handler answers (or, for a comment that needs nothing, ends it `no-transition`). */
+function documentsReply(): Action {
+  return steps([{ handler: 'documents', op: 'reply' }], null);
 }
 
 /** Rows 30, 31 and RL20 (spec "`/retry`"). */

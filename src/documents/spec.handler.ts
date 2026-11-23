@@ -10,7 +10,6 @@ import {
   type Lane,
 } from '../contracts/issue-provider.js';
 import { LlmError } from '../contracts/llm-error.js';
-import type { TaskDocument } from '../generated/prisma/client.js';
 import { GrillService } from '../grill/grill.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StepConfigService } from '../llm/step-config.service.js';
@@ -21,7 +20,9 @@ import type {
   StepHandler,
 } from '../workflow/step-handler.registry.js';
 import { issueTag } from '../workflow/task.service.js';
-import { specComment, specMarker } from './document-comments.js';
+import { DocumentApprovals } from './document-approval.js';
+import { specComment } from './document-comments.js';
+import { APPROVE_REFUSED, DocumentPosts } from './document-posts.js';
 import { cleanDocument, DOCUMENT_MAX_CHARS } from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
 import { specFrame, specTurns } from './spec-frame.js';
@@ -38,6 +39,8 @@ export class SpecHandler implements StepHandler {
     private readonly llm: LlmService,
     private readonly grill: GrillService,
     private readonly scanner: SecretScanner,
+    private readonly posts: DocumentPosts,
+    private readonly approvals: DocumentApprovals,
     config: ConfigService<Env, true>,
   ) {
     this.base = config.get('TARGET_BASE_BRANCH', { infer: true });
@@ -48,6 +51,8 @@ export class SpecHandler implements StepHandler {
     switch (context.op) {
       case 'generate':
         return this.generate(context);
+      case 'approve':
+        return this.approve(context);
       default:
         throw new Error(`spec: no ${context.op} op`);
     }
@@ -112,27 +117,32 @@ export class SpecHandler implements StepHandler {
       context,
       `v1 written (${setup.commit.slice(0, 7)}, ${text.length.toLocaleString('en-US')} characters)`,
     );
-    await this.post(context, row);
+    await this.posts.postVersion(context, row);
+  }
+
+  /**
+   * Rows 17, 18 (spec "Approving"): the waiting Spec becomes the approved snapshot. This event's approval already
+   * recorded (a retried event, after a failure in the step that follows) → nothing more, so it is never recorded twice.
+   */
+  private async approve(context: StepContext): Promise<StepOutcome | void> {
+    const { run, status, statusBeforeStop, lease } = context;
+    const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
+    if (waiting?.kind !== 'spec')
+      throw new Error(`spec approve: no waiting Spec in ${status}`);
+    if (waiting.approveEventId === lease.eventId)
+      return this.approvals.postPendingWarning(context);
+    const approved = await this.approvals.approve(context, waiting, {
+      last: run.lane === 'spec-code',
+    });
+    if (!approved) return APPROVE_REFUSED;
   }
 
   /** A Spec stored by Tx1 but not posted (a crash before Tx2): find its marker, else post its body; then Tx2. */
   private async postPending(context: StepContext): Promise<void> {
     const pending = await this.store.pendingVersion(context.run.id);
     if (pending?.kind !== 'spec') return;
-    await this.post(context, pending);
+    await this.posts.postVersion(context, pending);
     this.log(context, `v${pending.version} posted (recovered)`);
-  }
-
-  private async post(context: StepContext, row: TaskDocument): Promise<void> {
-    const { ref } = context.task;
-    const comment =
-      (await this.issues.findCommentByMarker(ref, specMarker(row.id))) ??
-      (await this.issues.postComment(ref, row.body));
-    await this.store.markPosted(context.lease, row.id, {
-      commentId: comment.id,
-      commentUrl: comment.url,
-      postedAt: comment.createdAt,
-    });
   }
 
   private log(context: StepContext, message: string): void {

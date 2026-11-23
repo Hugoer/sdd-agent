@@ -27,6 +27,23 @@ describe('StepHandlerRegistry (spec "Step-handler registry")', () => {
     expect(registry.resolve('spec')).toBe(first);
   });
 
+  it('spec 7 (plan P26): one approval gate; a second registration throws, the first stays; none → an error', () => {
+    const registry = new StepHandlerRegistry();
+    const gate = {
+      verdict: () => Promise.resolve('valid' as const),
+      replyWithoutRun: () => Promise.resolve('approve-refused' as const),
+    };
+
+    expect(() => registry.gate()).toThrow('no approval gate is registered');
+    registry.registerGate(gate);
+
+    expect(registry.gate()).toBe(gate);
+    expect(() => registry.registerGate({ ...gate })).toThrow(
+      'an approval gate is already registered',
+    );
+    expect(registry.gate()).toBe(gate);
+  });
+
   it('an unregistered name → StepNotBuiltError, a StepConfigError (plan P1), with the spec message', () => {
     const registry = new StepHandlerRegistry();
 

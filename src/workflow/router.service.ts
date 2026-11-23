@@ -257,6 +257,7 @@ export class RouterService {
       run,
       description: details.description,
     };
+    routing.state.approval = await this.approvalOf(job, routing);
     const { action, laneConflict } = decide(routing.state, job.input);
     // RL8, plan Q3: a conflict that is over is recorded first (nothing to show), so a first step that fails
     // can't leave it open; a reminder is posted after the action, in the wording of what it left.
@@ -353,6 +354,16 @@ export class RouterService {
         return ignored(action.reason);
       case 'reply-closed':
         return this.replyClosed(job, action.command);
+      case 'reply-without-run': {
+        // Spec 7 row 5 (plan P7, P36): the gate answers a document command on an issue with no run.
+        const reason = await this.registry.gate().replyWithoutRun({
+          task: { id: job.lease.taskId, ref: job.ref },
+          input: job.input,
+          lease: job.lease,
+        });
+        this.logger.log(`${job.tag} ignored ${reason} (no run)`);
+        return ignored(reason);
+      }
       case 'wait-workspace':
         // Row 21: spec 8 adds it (the `WAITING_WORKSPACE` event status) with the workspace handler, the only
         // source of `WS_BUSY`; until then no handler can return it.
@@ -526,6 +537,28 @@ export class RouterService {
     );
   }
 
+  /**
+   * Spec 7 (R2, plan P26): the gate's verdict on an `/approve` in `spec-review` or `ready-for-dev` with a run, on an
+   * open issue (spec 5 answers a closed one first, RL19); null for every other event.
+   */
+  private async approvalOf(job: Job, routing: Routing) {
+    const { state, run } = routing;
+    if (
+      job.input.type !== 'APPROVE' ||
+      !run ||
+      !state.open ||
+      (state.status !== 'spec-review' && state.status !== 'ready-for-dev')
+    )
+      return null;
+    return this.registry.gate().verdict({
+      task: { id: job.lease.taskId, ref: job.ref },
+      run: stepRunOf(run),
+      input: job.input,
+      lease: job.lease,
+      status: state.status,
+    });
+  }
+
   /** One handler call (plan P4); an unregistered handler throws StepNotBuiltError (RL1). */
   private async callHandler(
     job: Job,
@@ -546,7 +579,7 @@ export class RouterService {
       lease: job.lease,
       status: routing.state.status,
       statusBeforeStop: run.statusBeforeStop as TaskStatus | null,
-      approval: null,
+      approval: routing.state.approval,
     });
     job.mark.step = waitingStep(routing.state.status, runLane(run));
     return outcome ?? null;
@@ -627,8 +660,8 @@ function stateOf(
     grillSkipOnIssue: issue.grillSkip,
     open: issue.open,
     laneConflictLanes: task.laneConflictLanes as Lane[],
-    // Decided at Checkpoint 2: spec 7 provides the check; until then every /approve counts.
-    approveValid: true,
+    // Asked of spec 7's gate only for an /approve in review (handle()).
+    approval: null,
   };
 }
 

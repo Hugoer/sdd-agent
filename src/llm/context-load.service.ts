@@ -103,6 +103,35 @@ export class ContextLoadService {
     await this.prisma.contextLoad.update({ where: { id }, data: { tokens } });
   }
 
+  /**
+   * Spec 7 (SP3, plan P20): the files the calls of these `execution_logs` rows loaded (outcome `loaded`, with a path;
+   * listings left out), each with the row it belongs to: what a document's approval compares with the changed files.
+   */
+  async loadedPaths(
+    logIds: string[],
+  ): Promise<{ logId: string; path: string }[]> {
+    if (logIds.length === 0) return [];
+    const logs = await this.prisma.executionLog.findMany({
+      where: { id: { in: logIds }, callId: { not: null } },
+      select: { id: true, callId: true },
+    });
+    const logOfCall = new Map(logs.map(({ id, callId }) => [callId!, id]));
+    const rows = await this.prisma.contextLoad.findMany({
+      where: {
+        callId: { in: [...logOfCall.keys()] },
+        outcome: 'loaded',
+        path: { not: null },
+        kind: { not: 'listing' },
+      },
+      select: { callId: true, path: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map(({ callId, path }) => ({
+      logId: logOfCall.get(callId)!,
+      path: path!,
+    }));
+  }
+
   /** SDW17: a count already stored for the same path, commit and model; null when there is none. */
   async knownTokens(
     path: string,
