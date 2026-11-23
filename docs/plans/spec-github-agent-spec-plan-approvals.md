@@ -897,7 +897,7 @@ replaced was approved. 1,472 unit and 360 integration tests.
   `refresh` `empty`, no call. #63: "still at Grill Me"; closed → spec 5's reply)
 - [x] Matrix "`/approve` and the Plan": `#F` in full (#62: Ready to code, `/refresh`'s reply, then `/approve` → the
   `workspace` stop)
-- [ ] You review and commit
+- [x] You review and commit (`56d0bef`, 2026-11-23)
 
 ---
 
@@ -1096,6 +1096,14 @@ as the spec says.
 - (2026-11-23, #56) An issue closed while a step's model call runs: the step still posts its answer (#56's Spec
   v1 came 2 minutes after the close), as spec 5 has it (a close is no event; `open` is read when an event is
   processed). One model call spent on a closed issue; not changed.
+- (Checkpoint 4, 2026-11-23) `ready-for-dev` shows while the Plan still waits for `/approve`, which reads as
+  "approved": you want `status: plan-review` while it waits and `ready-for-dev` only after the last approval → spec 13
+  `bot-feedback` (overview D33), not this spec; row 17 stays as built.
+- (Checkpoint 4, 2026-11-23, #60) The last document before code is approved at once, and its warning reply comes
+  after, with a restart as the only way back; a `full-sdd` Spec's approval writes the Plan before anyone sees the
+  ⚠️ line. A P43 ("ask first" for the last document) was proposed, then withdrawn: you want the check before every
+  next step, as its own spec with an interview → spec 14 `up-to-date-approvals` (overview D34), built right after
+  spec 7. Spec 7 keeps SP3 and SPW13 as built.
 - (Checkpoint 4, 2026-11-23) #57's second refresh (the Plan waiting, the approved Spec renamed a constant): the model
   answered `upToDate: false` with its change line and an empty `document`, three times; the schema refused it, the
   run stopped at `spec`, and `/retry` wrote Spec v3. The re-ask names the problem ("upToDate is false, so document

@@ -1402,11 +1402,17 @@ live; test once that it can fail, e.g. with a wrong issue list)
   plan P10) and `redact()` before a document is stored or posted (SPW21) are code already; the issue text, the
   Grill answers and the approved Spec reach the model unredacted and are stored as sent in `execution_logs`
   (spec 4), which spec 12 decides. Spec 7 changes nothing for it.
+- **Spec 14 (`up-to-date-approvals`, overview D34; added 2026-11-23 after sandbox issue #60, to interview; built
+  right after this spec):** an `/approve` on a Spec or a Plan asks first when `main` changed files it read: the
+  approval doesn't count yet, one reply offers `/refresh` or `/approve` again. It replaces this spec's "it never
+  blocks" (SP3) and the warning reply after the last approval (SPW13); until then they stay as built.
 - **Spec 13 (`bot-feedback`, overview D33; added 2026-11-23 after sandbox issue #55, to interview):** a quick
   signal when the bot gets a human action (a reaction on the comment, a label while it works). From spec 7: an
   `/approve` or `/refresh` that leads to a model call (minutes), and a comment that waits while the Spec call holds
   the issue (its late-comment reply comes only after the Spec); the replies without a model call come within
-  seconds. Spec 7 adds no signal (its plan P42 was moved there).
+  seconds. Spec 7 adds no signal (its plan P42 was moved there). Also there (2026-11-23, the user): `status:
+  plan-review` while the Plan waits, `ready-for-dev` only after the last approval; this spec keeps row 17's
+  `ready-for-dev` until then.
 
 ## Open questions
 
