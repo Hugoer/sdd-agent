@@ -221,32 +221,55 @@ export class DocumentsStore {
   /**
    * Tx1 (D13): the version `PENDING_POST` with its full comment. Every earlier version of the same kind in the run
    * that isn't superseded yet is superseded, approved or not; a new Spec also supersedes the run's Plan that waits
-   * (not approved, SPW8). So a run has at most one current Spec and one current Plan.
+   * (not approved, SPW8). So a run has at most one current Spec and one current Plan. A refresh's version comes with
+   * its `/refresh` row, in the same transaction (plan P28).
    */
   insertVersion(
     lease: HeldLease,
     record: VersionRecord,
+    action?: ActionRecord,
   ): Promise<TaskDocument> {
     return this.write(lease, async (tx) => {
-      const now = await dbNow(tx);
-      await tx.taskDocument.updateMany({
-        where: { runId: record.runId, kind: record.kind, supersededAt: null },
-        data: { supersededAt: now },
-      });
-      if (record.kind === 'spec') {
-        await tx.taskDocument.updateMany({
-          where: {
-            runId: record.runId,
-            kind: 'plan',
-            supersededAt: null,
-            approvedAt: null,
-          },
-          data: { supersededAt: now },
+      const row = await createVersion(tx, lease, record);
+      // The row names the version it made, so it comes after it.
+      if (action)
+        await tx.documentAction.create({ data: actionData(lease, action) });
+      return row;
+    });
+  }
+
+  /**
+   * Plan P28: the Plan's step answers a `/refresh` the Spec's step already recorded (in `ready-for-dev`): its result,
+   * its call and its reply go on that row, in one transaction with the Plan's new version or its "checked" mark.
+   */
+  finishRefresh(
+    lease: HeldLease,
+    actionId: string,
+    answer: Pick<ActionRecord, 'result' | 'documentId' | 'replyBody'> & {
+      logIds: string[];
+    },
+    write: {
+      version?: VersionRecord;
+      checked?: { id: string; commit: string };
+    },
+  ): Promise<{ action: DocumentAction; version: TaskDocument | null }> {
+    return this.write(lease, async (tx) => {
+      const version = write.version
+        ? await createVersion(tx, lease, write.version)
+        : null;
+      if (write.checked)
+        await tx.taskDocument.update({
+          where: { id: write.checked.id },
+          data: { checkedCommit: write.checked.commit },
         });
-      }
-      return tx.taskDocument.create({
-        data: { ...record, taskId: lease.taskId, postState: 'PENDING_POST' },
+      const action = await tx.documentAction.update({
+        where: { id: actionId },
+        data: {
+          ...answer,
+          replyPostState: answer.replyBody === null ? null : 'PENDING_POST',
+        },
       });
+      return { action, version };
     });
   }
 
@@ -307,6 +330,25 @@ export class DocumentsStore {
     });
   }
 
+  /**
+   * SPW11: a refresh found the document up to date at `commit`, which becomes its starting point; its `/refresh` row
+   * (with the reply, when this step answers) in the same transaction (plan P28).
+   */
+  markUpToDate(
+    lease: HeldLease,
+    id: string,
+    commit: string,
+    action: ActionRecord,
+  ): Promise<DocumentAction> {
+    return this.write(lease, async (tx) => {
+      await tx.taskDocument.update({
+        where: { id },
+        data: { checkedCommit: commit },
+      });
+      return tx.documentAction.create({ data: actionData(lease, action) });
+    });
+  }
+
   /** Tx1 of an answered action: the row, with its reply `PENDING_POST` when it has one. */
   insertAction(
     lease: HeldLease,
@@ -350,6 +392,35 @@ function actionData(lease: HeldLease, record: ActionRecord) {
     eventId: lease.eventId,
     replyPostState: record.replyBody === null ? null : 'PENDING_POST',
   };
+}
+
+/**
+ * Tx1 of a version (D13): every earlier version of the same kind in the run that isn't superseded yet is superseded,
+ * approved or not; a new Spec also supersedes the run's Plan that waits (not approved, SPW8).
+ */
+async function createVersion(
+  tx: Prisma.TransactionClient,
+  lease: HeldLease,
+  record: VersionRecord,
+): Promise<TaskDocument> {
+  const now = await dbNow(tx);
+  await tx.taskDocument.updateMany({
+    where: { runId: record.runId, kind: record.kind, supersededAt: null },
+    data: { supersededAt: now },
+  });
+  if (record.kind === 'spec')
+    await tx.taskDocument.updateMany({
+      where: {
+        runId: record.runId,
+        kind: 'plan',
+        supersededAt: null,
+        approvedAt: null,
+      },
+      data: { supersededAt: now },
+    });
+  return tx.taskDocument.create({
+    data: { ...record, taskId: lease.taskId, postState: 'PENDING_POST' },
+  });
 }
 
 /** PostgreSQL's clock, as spec 5 uses it for every time it writes (its plan P7). */

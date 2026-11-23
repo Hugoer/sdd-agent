@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   approveHintReply,
-  approveNothingWaitsReply,
   approveRefusedReply,
   approveWarningReply,
   goSignalComment,
   lateCommentReply,
+  nothingWaitsReply,
+  refreshNothingChangedReply,
+  refreshRefusedReply,
+  refreshUpToDateReply,
   planComment,
   planMarker,
   specComment,
   specMarker,
 } from './document-comments.js';
-import { documentText } from './document-text.js';
+import { diffBlock, documentText } from './document-text.js';
 
 const COMMIT = '4f2c1ab'.padEnd(40, 'e');
 const NOTES = [
@@ -185,7 +188,7 @@ describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
   });
 });
 
-describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => {
+describe('nothingWaitsReply for `/approve` (spec "Replies where nothing waits")', () => {
   it.each([
     [
       'no-run',
@@ -207,7 +210,9 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
   ] as const)(
     '%s → its text, after the linked `/approve`',
     (situation, run, text) => {
-      expect(approveNothingWaitsReply(answered('601'), situation, run)).toBe(
+      expect(
+        nothingWaitsReply('approve', answered('601'), situation, run),
+      ).toBe(
         `<!-- sdd-agent:approve-refused:601 -->\n[Your \`/approve\`](${LINK}601) ${text}`,
       );
     },
@@ -215,7 +220,7 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
 
   it('P40: no run, but a `workflow:` label is on → names it and how to start a run', () => {
     expect(
-      approveNothingWaitsReply(answered('602'), 'no-run', null, [
+      nothingWaitsReply('approve', answered('602'), 'no-run', null, [
         'full-sdd',
       ]).split('\n')[1],
     ).toBe(
@@ -223,7 +228,7 @@ describe('approveNothingWaitsReply (spec "Replies where nothing waits")', () => 
         'run for it yet. If none starts within a few minutes, remove the label and add it again.',
     );
     expect(
-      approveNothingWaitsReply(answered('603'), 'no-run', null, [
+      nothingWaitsReply('approve', answered('603'), 'no-run', null, [
         'full-sdd',
         'code-only',
       ]).split('\n')[1],
@@ -436,5 +441,394 @@ describe('goSignalComment (spec "The go-signal")', () => {
           '`/approve` to start; the bot reads the title and description as they read then.',
       ].join('\n'),
     );
+  });
+});
+
+describe('the refreshed and restored comments (spec "The v2 comment", the `/restore` table)', () => {
+  const B = '9e1d0c2'.padEnd(40, 'b');
+  const COMPARE = 'https://github.com/o/r/compare/a...b';
+  const APPROVE_LINE =
+    "To change it, edit this comment. When it's right, an Approver (Write access) comments `/approve` and the bot " +
+    "writes the Plan from the text as it reads then. `/refresh` checks it against today's `main`.";
+  const refreshed = (
+    diff: string | null = diffBlock('a\nb\nc\n', 'a\nB\nc\n'),
+  ) => ({
+    kind: 'refreshed' as const,
+    previous: { version: 1, from: COMMIT },
+    compareUrl: COMPARE,
+    by: 'bob',
+    command: { url: `${LINK}900` },
+    changes: [
+      '`split()` is now `splitEvenly()`; the Spec names the new function.',
+    ],
+    diff,
+  });
+  const specV2 = (
+    origin: Parameters<typeof specComment>[0]['origin'],
+    extra: Partial<Parameters<typeof specComment>[0]> = {},
+  ) =>
+    specComment({
+      versionId: 's-2',
+      version: 2,
+      run: { number: 2, lane: 'full-sdd' },
+      base: 'main',
+      commit: B,
+      text: 'a\nB\nc',
+      notes: NOTES,
+      origin,
+      ...extra,
+    });
+
+  it('Spec v2: the header with both commits, "Refreshed for" linked, the changes, the document, the folded diff', () => {
+    expect(specV2(refreshed())).toBe(
+      [
+        '<!-- sdd-agent:spec:s-2 -->',
+        `**Spec v2** · run 2 (\`full-sdd\`) · replaces v1 above · read at \`main\` @ \`9e1d0c2\` (v1: \`4f2c1ab\`, [compare](${COMPARE}))`,
+        '',
+        `Refreshed for [\`bob\`'s \`/refresh\`](${LINK}900). What changed:`,
+        '- `split()` is now `splitEvenly()`; the Spec names the new function.',
+        '',
+        APPROVE_LINE,
+        '',
+        '<!-- sdd-agent:document -->',
+        'a',
+        'B',
+        'c',
+        '<!-- sdd-agent:document-end -->',
+        '',
+        '<details><summary>Diff from v1 (as it read at the refresh)</summary>',
+        '',
+        '```diff',
+        '@@ -1,3 +1,3 @@',
+        ' a',
+        '-b',
+        '+B',
+        ' c',
+        '```',
+        '',
+        '</details>',
+        '',
+        '---',
+        '<sub>Model: `gemini-4-carbon` (standard)</sub>',
+        '<sub>Read: skill `money-rules` (`SKILL.md`), `src/index.ts`</sub>',
+      ].join('\n'),
+    );
+  });
+
+  it("while a Plan waited: the no-longer-counts line; GitHub couldn't compare (P32): no compare link", () => {
+    const body = specV2(
+      { ...refreshed(), compareUrl: null },
+      { planNoLongerCounts: 1 },
+    );
+    expect(body).toContain(
+      '- `split()` is now `splitEvenly()`; the Spec names the new function.\n\n' +
+        'Plan v1 was written from Spec v1, so it no longer counts: approve this Spec and the bot writes a new Plan.\n\n' +
+        'To change it',
+    );
+    expect(body).toContain('read at `main` @ `9e1d0c2` (v1: `4f2c1ab`)\n');
+    expect(documentText(body)).toBe('a\nB\nc');
+  });
+
+  it('the comment would pass 65,000 characters → the diff is left out with its line', () => {
+    const long = 'x'.repeat(40_000);
+    const body = specV2(refreshed(diffBlock(`${long}\n`, `${long}y\n`)), {
+      text: `${long}y`,
+    });
+    expect(body).not.toContain('<details>');
+    expect(body).toContain(
+      '<!-- sdd-agent:document-end -->\n\nThe diff is too long to show here; compare v1 and v2 above.\n\n---',
+    );
+  });
+
+  it('Plan v2: from the approved Spec, replaces v1, "The approved Spec v1 is still up to date."', () => {
+    const body = planComment({
+      versionId: 'p-2',
+      version: 2,
+      run: { number: 2 },
+      base: 'main',
+      commit: B,
+      specVersion: 1,
+      warning: null,
+      text: 'a\nB\nc',
+      notes: [],
+      origin: refreshed(),
+    });
+    expect(body.split('\n').slice(0, 5)).toEqual([
+      '<!-- sdd-agent:plan:p-2 -->',
+      `**Plan v2** · run 2 (\`full-sdd\`) · from the approved Spec v1 · replaces v1 above · read at \`main\` @ \`9e1d0c2\` (v1: \`4f2c1ab\`, [compare](${COMPARE}))`,
+      '',
+      `Refreshed for [\`bob\`'s \`/refresh\`](${LINK}900). The approved Spec v1 is still up to date. What changed:`,
+      '- `split()` is now `splitEvenly()`; the Spec names the new function.',
+    ]);
+  });
+
+  it('restored: the header names who asked (linked), then the restored or the lost-edits line; no diff', () => {
+    const restored = (lost: boolean) =>
+      specComment({
+        versionId: 's-1b',
+        version: 1,
+        run: { number: 2, lane: 'full-sdd' },
+        base: 'main',
+        commit: COMMIT,
+        text: '# Spec',
+        notes: NOTES,
+        origin: {
+          kind: 'restored',
+          by: 'alice',
+          command: { url: `${LINK}901` },
+          lost,
+        },
+      });
+    expect(restored(false).split('\n').slice(1, 5)).toEqual([
+      `**Spec v1** (restored for [\`alice\`'s \`/restore\`](${LINK}901)) · run 2 (\`full-sdd\`) · read at \`main\` @ \`4f2c1ab\``,
+      '',
+      'Restored as it read when it was deleted.',
+      '',
+    ]);
+    expect(restored(true)).toContain(
+      '\nThe bot missed the deletion, so this is its last version: edits made to the deleted comment are lost.\n',
+    );
+    expect(restored(true)).not.toContain('<details>');
+  });
+});
+
+describe('the refresh replies (spec "`/refresh`")', () => {
+  const B = '9e1d0c2'.padEnd(40, 'b');
+  const YOURS = `[Your \`/refresh\`](${LINK}910)`;
+  const reply = (body: string) => body.split('\n').slice(1).join('\n');
+
+  it.each([
+    [
+      'deleted',
+      { kind: 'spec', version: 1 },
+      'has nothing to refresh: Spec v1 was deleted. Comment `/restore` to get it back, then `/refresh`.',
+    ],
+    [
+      'empty',
+      { kind: 'plan', version: 2 },
+      "has nothing to refresh: Plan v2's comment has no text left between its markers. Edit the comment to put the " +
+        'Plan back, then comment `/refresh`.',
+    ],
+    [
+      'already-approved',
+      { kind: 'spec', version: 1 },
+      "can't refresh Spec v1: it's already approved.",
+    ],
+  ] as const)(
+    '%s → one reply, marker refresh:<comment>',
+    (refusal, document, text) => {
+      const body = refreshRefusedReply(answered('910'), refusal, document);
+      expect(body.split('\n')[0]).toBe('<!-- sdd-agent:refresh:910 -->');
+      expect(reply(body)).toBe(`${YOURS} ${text}`);
+    },
+  );
+
+  it('nothing changed: written, last checked, both documents', () => {
+    const text = (
+      documents: { kind: 'spec' | 'plan'; version: number }[],
+      checked: boolean,
+    ) =>
+      reply(
+        refreshNothingChangedReply(answered('910'), {
+          documents,
+          base: 'main',
+          commit: COMMIT,
+          checked,
+        }),
+      );
+    expect(text([{ kind: 'spec', version: 1 }], false)).toBe(
+      `${YOURS} has nothing to refresh: nothing changed on \`main\` since Spec v1 was written (\`4f2c1ab\`).`,
+    );
+    expect(
+      text(
+        [
+          { kind: 'spec', version: 1 },
+          { kind: 'plan', version: 1 },
+        ],
+        true,
+      ),
+    ).toBe(
+      `${YOURS} has nothing to refresh: nothing changed on \`main\` since Spec v1 and Plan v1 were last checked ` +
+        '(`4f2c1ab`).',
+    );
+  });
+
+  it('up to date: the Spec with its files and compare link, then the notes', () => {
+    expect(
+      refreshUpToDateReply(
+        answered('910'),
+        'main',
+        B,
+        {
+          kind: 'spec',
+          spec: 1,
+          from: COMMIT,
+          changed: { files: 3, complete: true, compareUrl: 'https://c' },
+        },
+        NOTES,
+      ),
+    ).toBe(
+      '<!-- sdd-agent:refresh:910 -->\n' +
+        `${YOURS} checked Spec v1 against \`main\` @ \`9e1d0c2\`: still up to date. 3 files changed since \`4f2c1ab\` ` +
+        '([compare](https://c)); nothing in the Spec needs to change.\n\n---\n' +
+        '<sub>Model: `gemini-4-carbon` (standard)</sub>\n<sub>Read: skill `money-rules` (`SKILL.md`), `src/index.ts`</sub>',
+    );
+  });
+
+  it('up to date: 1 file, a cut list, not compared (P32), the Plan at that commit, both', () => {
+    const text = (upToDate: Parameters<typeof refreshUpToDateReply>[3]) =>
+      reply(refreshUpToDateReply(answered('910'), 'main', B, upToDate, []));
+    const spec = (
+      changed: { files: number; complete: boolean; compareUrl: string } | null,
+    ) => text({ kind: 'spec', spec: 1, from: COMMIT, changed });
+    expect(spec({ files: 1, complete: true, compareUrl: 'u' })).toContain(
+      'still up to date. 1 file changed since',
+    );
+    expect(spec({ files: 300, complete: false, compareUrl: 'u' })).toContain(
+      '300 or more files changed since',
+    );
+    expect(spec(null)).toContain(
+      "still up to date. The bot couldn't list the files changed since `4f2c1ab`; nothing in the Spec needs to change.",
+    );
+    expect(text({ kind: 'plan-at-commit', spec: 1, plan: 1 })).toBe(
+      `${YOURS} checked Spec v1 against \`main\` @ \`9e1d0c2\`: still up to date, and Plan v1 was already written at ` +
+        'that commit.',
+    );
+    expect(text({ kind: 'both', spec: 1, plan: 2 })).toBe(
+      `${YOURS} checked Spec v1 and Plan v2 against \`main\` @ \`9e1d0c2\`: both still up to date.`,
+    );
+  });
+});
+
+describe('nothingWaitsReply for `/refresh` and `/restore` (spec "Replies where nothing waits")', () => {
+  it.each([
+    [
+      'refresh',
+      'no-run',
+      'has nothing to refresh: this issue has no run. To start one, add a `workflow:` label.',
+    ],
+    [
+      'refresh',
+      'starting',
+      'has nothing to refresh yet: run 2 is just starting.',
+    ],
+    [
+      'refresh',
+      'grilling',
+      "has nothing to refresh yet: run 2 is still at Grill Me, so there's no Spec.",
+    ],
+    [
+      'refresh',
+      'executing',
+      'comes too late: run 2 is already writing the code from the approved texts.',
+    ],
+    ['refresh', 'in-review', "comes too late: run 2's pull request is open."],
+    [
+      'refresh',
+      'stopped',
+      'has nothing to refresh now: run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`.',
+    ],
+    [
+      'refresh',
+      'code-only',
+      'has nothing to refresh: a `code-only` run has no Spec or Plan; the bot codes from the issue description as it ' +
+        'reads at `/approve`.',
+    ],
+    [
+      'restore',
+      'no-run',
+      'has nothing to restore: this issue has no run. To start one, add a `workflow:` label.',
+    ],
+    [
+      'restore',
+      'starting',
+      'has nothing to restore yet: run 2 is just starting.',
+    ],
+    [
+      'restore',
+      'grilling',
+      "has nothing to restore: run 2 is still at Grill Me, so there's no Spec.",
+    ],
+    [
+      'restore',
+      'executing',
+      'has nothing to restore: the bot keeps the approved texts.',
+    ],
+    [
+      'restore',
+      'in-review',
+      'has nothing to restore: the bot keeps the approved texts.',
+    ],
+    [
+      'restore',
+      'stopped',
+      'has nothing to restore now: run 2 is stopped. Continue it first (see the stop comment), then comment `/restore`.',
+    ],
+    [
+      'restore',
+      'code-only',
+      'has nothing to restore: a `code-only` run has no Spec or Plan.',
+    ],
+  ] as const)('/%s, %s → its text', (command, situation, text) => {
+    expect(
+      nothingWaitsReply(
+        command,
+        answered('920'),
+        situation,
+        situation === 'no-run' ? null : 2,
+      ),
+    ).toBe(
+      `<!-- sdd-agent:${command}-refused:920 -->\n[Your \`/${command}\`](${LINK}920) ${text}`,
+    );
+  });
+
+  it('P40: a workflow label on with no run → named, for /refresh too', () => {
+    expect(
+      nothingWaitsReply('refresh', answered('921'), 'no-run', null, [
+        'spec-code',
+      ]),
+    ).toContain(
+      'has nothing to refresh: `workflow: spec-code` is on, but the bot has no run for it yet.',
+    );
+  });
+
+  it('/approve has no grilling or code-only text (spec 6 answers it; the go-signal waits)', () => {
+    expect(() =>
+      nothingWaitsReply('approve', answered('922'), 'grilling', 2),
+    ).toThrow('no /approve reply where nothing waits: grilling');
+  });
+});
+
+describe('no text of spec 7 notifies anyone: every login in backticks', () => {
+  it('no `@` outside backticks in the refresh and restore texts', () => {
+    const texts = [
+      refreshRefusedReply(answered('1'), 'deleted', {
+        kind: 'spec',
+        version: 1,
+      }),
+      refreshNothingChangedReply(answered('1'), {
+        documents: [{ kind: 'spec', version: 1 }],
+        base: 'main',
+        commit: COMMIT,
+        checked: false,
+      }),
+      ...(['refresh', 'restore'] as const).flatMap((command) =>
+        (
+          [
+            'no-run',
+            'starting',
+            'grilling',
+            'executing',
+            'in-review',
+            'stopped',
+            'code-only',
+          ] as const
+        ).map((situation) =>
+          nothingWaitsReply(command, { id: '1' }, situation, 2, ['full-sdd']),
+        ),
+      ),
+    ];
+    for (const text of texts)
+      expect(text.replace(/`[^`]*`/g, '')).not.toContain('@');
   });
 });

@@ -13,7 +13,10 @@ import {
   REPO_PROVIDER,
   type RepoProvider,
 } from '../contracts/repo-provider.js';
-import type { TaskDocument } from '../generated/prisma/client.js';
+import type {
+  DocumentAction,
+  TaskDocument,
+} from '../generated/prisma/client.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StepConfigService } from '../llm/step-config.service.js';
 import { SecretScanner } from '../secret-scan/secret-scanner.js';
@@ -23,10 +26,25 @@ import type {
   StepHandler,
 } from '../workflow/step-handler.registry.js';
 import { issueTag } from '../workflow/task.service.js';
-import { planComment, type SpecWarning } from './document-comments.js';
+import {
+  planComment,
+  refreshNothingChangedReply,
+  refreshRefusedReply,
+  refreshUpToDateReply,
+  type SpecWarning,
+} from './document-comments.js';
 import { DocumentApprovals } from './document-approval.js';
-import { APPROVE_REFUSED, DocumentPosts } from './document-posts.js';
-import { cleanDocument, DOCUMENT_MAX_CHARS } from './document-text.js';
+import {
+  APPROVE_REFUSED,
+  DocumentPosts,
+  REFRESH_REFUSED,
+} from './document-posts.js';
+import { DocumentRefreshes, REFRESH_REFUSALS } from './document-refresh.js';
+import {
+  cleanDocument,
+  diffBlock,
+  DOCUMENT_MAX_CHARS,
+} from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
 import { planFrame, planTurns, type PlanChanges } from './plan-frame.js';
 
@@ -43,6 +61,7 @@ export class PlanHandler implements StepHandler {
     private readonly scanner: SecretScanner,
     private readonly posts: DocumentPosts,
     private readonly approvals: DocumentApprovals,
+    private readonly refreshes: DocumentRefreshes,
     config: ConfigService<Env, true>,
   ) {
     this.base = config.get('TARGET_BASE_BRANCH', { infer: true });
@@ -55,6 +74,8 @@ export class PlanHandler implements StepHandler {
         return this.generate(context);
       case 'approve':
         return this.approve(context);
+      case 'refresh':
+        return this.refresh(context);
       default:
         throw new Error(`plan: no ${context.op} op`);
     }
@@ -147,6 +168,191 @@ export class PlanHandler implements StepHandler {
       last: true,
     });
     if (!approved) return APPROVE_REFUSED;
+  }
+
+  /**
+   * Row 32, `ready-for-dev`, the second call (spec "In `ready-for-dev`, `full-sdd`"): the Spec's call recorded its
+   * result on the `/refresh` row (P28); the Plan's comment as it reads now; `main` unmoved since the Plan's starting
+   * commit → no call, one reply for both; still right → "both still up to date"; changed → Plan v(M+1). Exactly one
+   * comment or reply answers the `/refresh`. An answer already on the row (a retried event) is replayed (P34).
+   */
+  private async refresh(context: StepContext): Promise<StepOutcome | void> {
+    const { input, run, lease } = context;
+    if (input.type !== 'REFRESH')
+      throw new Error(`plan refresh: a ${input.type} event`);
+    const row = await this.store.actionFor('refresh', input.comment.id);
+    if (!row) throw new Error('plan refresh: the Spec step recorded nothing');
+    if (row.replyBody !== null || row.result === 'plan-changed') {
+      await this.posts.postReply(context, row);
+      return REFRESH_REFUSALS.has(row.result) ? REFRESH_REFUSED : undefined;
+    }
+    const plan = await this.store.waiting(run.id, 'ready-for-dev', null);
+    const spec = await this.store.current(run.id, 'spec');
+    if (plan?.kind !== 'plan' || !spec?.approvedAt)
+      throw new Error('plan refresh: no waiting Plan with an approved Spec');
+    const now = await this.refreshes.readNow(context, plan);
+    if ('refusal' in now) {
+      // Gone or emptied since the Spec's call looked, a moment ago: the same reply as there.
+      if (now.refusal === 'deleted' && !plan.deletedAt)
+        await this.store.recordMissedDeletion(lease, plan.id);
+      await this.answer(
+        context,
+        row,
+        {
+          result: now.refusal,
+          documentId: plan.id,
+          logIds: row.logIds,
+          replyBody: refreshRefusedReply(input.comment, now.refusal, {
+            kind: 'plan',
+            version: plan.version,
+          }),
+        },
+        `/refresh refused (${now.refusal})`,
+      );
+      return REFRESH_REFUSED;
+    }
+
+    const check = await this.refreshes.check(context, plan, now.text, spec);
+    const documents = [
+      { kind: 'spec' as const, version: spec.version },
+      { kind: 'plan' as const, version: plan.version },
+    ];
+    switch (check.kind) {
+      case 'nothing-changed':
+        // The Plan was written (or last found up to date) at B: no call; the reply speaks for both.
+        await this.answer(
+          context,
+          row,
+          {
+            result: row.result,
+            documentId: plan.id,
+            logIds: row.logIds,
+            replyBody:
+              row.result === 'nothing-changed'
+                ? refreshNothingChangedReply(input.comment, {
+                    documents,
+                    base: this.base,
+                    commit: check.to,
+                    checked:
+                      spec.checkedCommit !== null ||
+                      plan.checkedCommit !== null,
+                  })
+                : refreshUpToDateReply(
+                    input.comment,
+                    this.base,
+                    check.to,
+                    {
+                      kind: 'plan-at-commit',
+                      spec: spec.version,
+                      plan: plan.version,
+                    },
+                    [],
+                  ),
+          },
+          row.result === 'nothing-changed'
+            ? '/refresh → nothing changed'
+            : '/refresh → up to date',
+        );
+        return;
+      case 'up-to-date':
+        await this.answer(
+          context,
+          row,
+          {
+            result: 'up-to-date',
+            documentId: plan.id,
+            logIds: [...row.logIds, check.logId],
+            replyBody: refreshUpToDateReply(
+              input.comment,
+              this.base,
+              check.to,
+              { kind: 'both', spec: spec.version, plan: plan.version },
+              check.notes,
+            ),
+          },
+          '/refresh → up to date',
+          { id: plan.id, commit: check.to },
+        );
+        return;
+      case 'changed': {
+        const versionId = randomUUID();
+        const version = await this.store.nextVersion(run.id, 'plan');
+        const { version: made } = await this.store.finishRefresh(
+          lease,
+          row.id,
+          {
+            result: 'plan-changed',
+            documentId: versionId,
+            logIds: [...row.logIds, check.logId],
+            replyBody: null,
+          },
+          {
+            version: {
+              id: versionId,
+              runId: run.id,
+              kind: 'plan',
+              version,
+              origin: 'refreshed',
+              basedOnId: plan.id,
+              commit: check.to,
+              logId: check.logId,
+              text: check.text,
+              changes: check.changes,
+              notes: check.notes,
+              triggerCommentId: input.comment.id,
+              body: planComment({
+                versionId,
+                version,
+                run: { number: run.number },
+                base: this.base,
+                commit: check.to,
+                specVersion: spec.version,
+                warning: null,
+                text: check.text,
+                notes: check.notes,
+                origin: {
+                  kind: 'refreshed',
+                  previous: { version: plan.version, from: check.from },
+                  compareUrl: check.compareUrl,
+                  by: input.sender,
+                  command: input.comment,
+                  changes: check.changes,
+                  diff: diffBlock(now.text, check.text),
+                },
+              }),
+            },
+          },
+        );
+        this.posts.log(context, `/refresh → plan v${version}`);
+        if (made) await this.posts.postVersion(context, made);
+        return;
+      }
+    }
+  }
+
+  /** The Plan's answer on the `/refresh` row (and its "checked" mark), then its reply posted once. */
+  private async answer(
+    context: StepContext,
+    row: DocumentAction,
+    answer: {
+      result: string;
+      documentId: string;
+      logIds: string[];
+      replyBody: string;
+    },
+    logLine: string,
+    checked?: { id: string; commit: string },
+  ): Promise<void> {
+    const { action } = await this.store.finishRefresh(
+      context.lease,
+      row.id,
+      answer,
+      {
+        ...(checked && { checked }),
+      },
+    );
+    this.posts.log(context, logLine);
+    await this.posts.postReply(context, action);
   }
 
   /** SP3: the Spec's approval flagged files (with GitHub's compare link), or couldn't compare; else no line. */

@@ -15,6 +15,7 @@ import {
 } from '../github/labels.js';
 import { isApproveCommand } from './approve-command.js';
 import type { IgnoreReason } from './ignore-reason.js';
+import { isRefreshCommand } from './refresh-command.js';
 import { isRetryCommand } from './retry-command.js';
 
 /** The level an input needs; `self` = the bot's own PR event, accepted with no lookup. */
@@ -258,6 +259,13 @@ function classifyComment(
   if (isRetryCommand(raw.body))
     return candidate(
       { ...common, type: 'RETRY', task, comment },
+      'participant',
+      task,
+    );
+  // Spec 7 (SPW9): `/refresh` needs a Participant, like `/retry`.
+  if (isRefreshCommand(raw.body))
+    return candidate(
+      { ...common, type: 'REFRESH', task, comment },
       'participant',
       task,
     );

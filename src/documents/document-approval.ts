@@ -90,7 +90,7 @@ export class DocumentApprovals {
     const from = doc.checkedCommit ?? doc.commit;
     if (from === null)
       throw new Error(`approval: ${doc.kind} ${doc.id} has no commit`);
-    const changed = from === now ? null : await this.changed(from, now);
+    const changed = from === now ? null : await this.changedSince(from, now);
     const flagged =
       changed === null || changed === 'not-compared'
         ? []
@@ -186,8 +186,11 @@ export class DocumentApprovals {
     return chainReads(doc.kind, chain, await this.loads.loadedPaths(logIds));
   }
 
-  /** Plan P32: only GitHub's "unknown commit" (404, 422) counts as not compared; any other error passes through. */
-  private async changed(
+  /**
+   * The files changed from one commit to another (an approval's commit check, a refresh's list). Plan P32: only
+   * GitHub's "unknown commit" (404, 422) counts as not compared; any other error passes through.
+   */
+  async changedSince(
     from: string,
     to: string,
   ): Promise<{ paths: string[]; complete: boolean } | 'not-compared'> {

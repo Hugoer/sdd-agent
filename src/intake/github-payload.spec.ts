@@ -547,6 +547,27 @@ describe('classifyGitHubEvent: issue_comment', () => {
     },
   );
 
+  it.each(['/refresh', '  /REFRESH ', '/Refresh\n'])(
+    'created %j → REFRESH; Participant (spec 7, SPW9)',
+    (body) => {
+      expect(classify(issueCommentCreated({ body }))).toMatchObject({
+        outcome: 'candidate',
+        input: { type: 'REFRESH', task: task(), comment: { body } },
+        needs: 'participant',
+        subject: task(),
+      });
+    },
+  );
+
+  it.each(['please /refresh', '/refresh now', '/refreshed'])(
+    'created %j → COMMENT (spec 7)',
+    (body) => {
+      expect(classify(issueCommentCreated({ body }))).toMatchObject({
+        input: { type: 'COMMENT' },
+      });
+    },
+  );
+
   it('created /retry on a pull request → pr-comment (spec 5)', () => {
     expect(
       classify(issueCommentCreated({ body: '/retry', onPullRequest: true })),

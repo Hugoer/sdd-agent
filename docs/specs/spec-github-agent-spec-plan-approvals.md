@@ -602,22 +602,25 @@ approve, comment exactly `/approve`, with nothing else." At most once per waitin
 A `REFRESH` input (the whole comment, trimmed, any case; a Participant or an Approver, SPW9).
 
 **In `spec-review`** (the Spec waits):
-1. The waiting Spec's comment as it reads now (SPW17); deleted → reply (SPW23); already approved (`spec-code`,
-   waiting for the workspace) → one reply "Spec v1 is already approved, so it can't be refreshed now." (the same
-   in `ready-for-dev` when the Plan is approved); empty (nothing between its markers) → one reply, no model call:
-   "Spec v1's comment has no text left between its markers, so there's nothing to refresh. Edit the comment to put
-   the Spec back, then comment `/refresh`." (`document_actions` `refresh`, result `empty`; 2026-11-22, plan P5, as
-   for `/approve`, SPW5).
-2. `prepare('spec', task)` → commit B. B equals the version's `checkedCommit` (or `commit`) → reply "Nothing
-   changed on `main` since Spec v1 was written (`4f2c1ab`), so there's nothing to refresh." No model call.
+1. The waiting Spec's comment as it reads now (SPW17); deleted → one reply (SPW23): "[Your `/refresh`](…) has
+   nothing to refresh: Spec v1 was deleted. Comment `/restore` to get it back, then `/refresh`."; already approved
+   (`spec-code`, waiting for the workspace) → one reply "[Your `/refresh`](…) can't refresh Spec v1: it's already
+   approved." (the same in `ready-for-dev` when the Plan is approved); empty (nothing between its markers) → one
+   reply, no model call: "[Your `/refresh`](…) has nothing to refresh: Spec v1's comment has no text left between
+   its markers. Edit the comment to put the Spec back, then comment `/refresh`." (`document_actions` `refresh`,
+   result `empty`; 2026-11-22, plan P5, as for `/approve`, SPW5).
+2. `prepare('spec', task)` → commit B. B equals the version's `checkedCommit` (or `commit`) → reply "[Your
+   `/refresh`](…) has nothing to refresh: nothing changed on `main` since Spec v1 was written (`4f2c1ab`)." ("was
+   last checked" when a refresh moved its starting point, SPW11). No model call.
 3. `changedFiles(from, B)`; flagged as for an approval. The comparison fails (an unknown commit, SPW22) → the
    refresh still runs: the frame says "the bot couldn't list the files changed since `4f2c1ab`; read what you
    need" in place of the list (2026-11-22, plan P32).
 4. The refresh call (frame below) with the Spec's text, both commits, the changed paths (flagged ones marked) and
    the four tools at B.
-5. `upToDate` → `checkedCommit` = B; one reply "Checked Spec v1 against `main` @ `9e1d0c2` (`bob`'s `/refresh`):
+5. `upToDate` → `checkedCommit` = B; one reply "[Your `/refresh`](…) checked Spec v1 against `main` @ `9e1d0c2`:
    still up to date. 3 files changed since `4f2c1ab` ([compare](…)); nothing in the Spec needs to change." with the
-   notes.
+   notes (GitHub couldn't compare: "The bot couldn't list the files changed since `4f2c1ab`; nothing in the Spec
+   needs to change.").
 6. Changed → Spec v(N+1), origin `refreshed`, posted as a new comment; the waiting one is superseded.
 
 **In `ready-for-dev`, `full-sdd`** (the Plan waits): `decide()` asks for two handler calls in order, `spec`
@@ -634,12 +637,18 @@ or reply answers it.
   - the Spec is still right → its `checkedCommit` = B, it records `up-to-date` and returns nothing.
 - **`plan` `refresh`**, from the Plan's comment as it reads now (deleted → the `/restore` reply; empty → plan
   P5's reply), knowing what the Spec call recorded:
-  - B equals the Plan's starting commit → no call; it answers for both: "Nothing changed on `main` since …"
-    (Spec unchanged too) or "Checked Spec v1 against `main` @ `9e1d0c2`: still up to date, and Plan v1 was
-    already written at that commit.";
-  - the Plan is still right → one reply "Checked Spec v1 and Plan v1 against `main` @ `9e1d0c2`: both still up to
-    date.";
-  - the Plan changes → Plan v(M+1) with "The approved Spec v1 is still up to date." in its header.
+  - B equals the Plan's starting commit → no call; it answers for both: "[Your `/refresh`](…) has nothing to
+    refresh: nothing changed on `main` since Spec v1 and Plan v1 were written (`9e1d0c2`)." (Spec unchanged too)
+    or "[Your `/refresh`](…) checked Spec v1 against `main` @ `9e1d0c2`: still up to date, and Plan v1 was already
+    written at that commit.";
+  - the Plan is still right → one reply "[Your `/refresh`](…) checked Spec v1 and Plan v1 against `main` @
+    `9e1d0c2`: both still up to date.";
+  - the Plan changes → Plan v(M+1): "**Plan v2** · run 2 (`full-sdd`) · from the approved Spec v1 · replaces v1
+    above · read at `main` @ `9e1d0c2` (v1: `4f2c1ab`, [compare](…))", then "Refreshed for [`bob`'s `/refresh`](…).
+    The approved Spec v1 is still up to date. What changed:" and its lines.
+
+2026-11-23, plan P39: every answer to a `/refresh` links it ("[Your `/refresh`](…)", "Refreshed for [`bob`'s
+`/refresh`](…)"); the replies' marker is `refresh:<commentId>`.
 
 ```mermaid
 sequenceDiagram
@@ -678,20 +687,25 @@ sequenceDiagram
 
 ```text
 You are the {kind} step of a spec-driven workflow on a GitHub issue, asked to bring an existing {kind} up to date
-with the repository. The {kind} below was written at commit {from}; the repository is now at commit {to}. These
-files changed since: {paths, the ones its writer read marked *}.
+with the repository. The {kind} below was written at commit {from}; the repository is now at commit {to}.
+These files changed since, * marking the ones the {kind} read: {paths}{", and possibly more" when GitHub cut it}.
 
 Read what you need with read_file at {to}. Then change only what the new code makes wrong or incomplete, and keep
 everything else exactly as written, including the edits people made: the same sections, wording and order. If the
-method below says how to update a {kind}, follow it. {Plan only: "What to build still comes from the approved Spec
-below; don't add anything it doesn't ask for."}
+method below says how to update a {kind}, follow it.
+{Plan only: "What to build still comes from the approved Spec below; don't add anything it doesn't ask for."}
 
 Answer with:
 - upToDate: true when nothing needs to change; then leave changes and document empty.
 - changes: what you changed and why, one short line each, at most 10.
-- document: the whole updated {kind}, at most 50,000 characters, in its language. Write logins in backticks and add
-  no HTML comments.
+- document: the whole updated {kind}, at most 50,000 characters, in its language. Write logins in backticks
+  and add no HTML comments.
 ```
+
+The files line: GitHub couldn't compare (plan P32) → "The bot couldn't list the files changed since {from}; read
+what you need."; the paths the read tools hide are left out (plan P41), and when only those changed → "None of the
+files you can read changed since." The turn: the issue title, the approved Spec (a Plan's refresh: key
+`spec-<versionId>`, as the Plan's call), then "{kind} vN to update:" (key `{kind}-<versionId>`), all untrusted.
 
 ```ts
 z.object({
@@ -707,7 +721,7 @@ z.object({
 **Spec v2** · run 2 (`full-sdd`) · replaces v1 above · read at `main` @ `9e1d0c2` (v1: `4f2c1ab`,
 [compare](…))
 
-Refreshed for `bob`'s `/refresh`. What changed:
+Refreshed for [`bob`'s `/refresh`](…). What changed:
 - `split()` is now `splitEvenly()`; the Spec names the new function.
 
 To change it, edit this comment. When it's right, an Approver (Write access) comments `/approve` …
@@ -759,9 +773,9 @@ the comment's last text from the event and who deleted it). Every other deletion
 
 | The waiting document | The bot |
 |---|---|
-| deleted (seen or not) | posts a new row with the same version number, origin `restored`: "**Spec v1** (restored for `alice`'s `/restore`) · run 2 (`full-sdd`) · read at `main` @ `4f2c1ab`" + "Restored as it read when it was deleted." (from `deletedText`), or "The bot missed the deletion, so this is its last version: edits made to the deleted comment are lost." (its own `text`) |
-| still there | one reply: "Spec v1 is still on the issue ([link](…)), so there's nothing to restore." |
-| approved (the Plan waits and the Spec comment was deleted, or an approved Spec or Plan that is still the waiting one) | one reply: "Spec v1 is already approved; the bot keeps the approved text, so there's nothing to restore." |
+| deleted (seen or not) | posts a new row with the same version number, origin `restored`: "**Spec v1** (restored for [`alice`'s `/restore`](…)) · run 2 (`full-sdd`) · read at `main` @ `4f2c1ab`" + "Restored as it read when it was deleted." (from `deletedText`), or "The bot missed the deletion, so this is its last version: edits made to the deleted comment are lost." (its own `text`) |
+| still there | one reply: "[Your `/restore`](…) has nothing to restore: Spec v1 is still on the issue ([link](…))." |
+| approved (the Plan waits and the Spec comment was deleted, or an approved Spec or Plan that is still the waiting one) | one reply: "[Your `/restore`](…) has nothing to restore: Spec v1 is already approved; the bot keeps the approved text." |
 
 A restore makes no model call. Its comment has the normal edit and `/approve` lines and the same notes as the
 version it restores.
@@ -829,9 +843,9 @@ start; the bot reads the title and description as they read then.
 ```
 
 Its `/approve` (row 19) stores the issue's title and description as the approved text (SPW6), then the
-`workspace` step. `/refresh` → "Nothing to refresh: a `code-only` run has no Spec or Plan; the bot codes from the
-issue description as it reads at `/approve`." `/restore` → "Nothing to restore: a `code-only` run has no Spec or
-Plan."
+`workspace` step. `/refresh` → "[Your `/refresh`](…) has nothing to refresh: a `code-only` run has no Spec or Plan;
+the bot codes from the issue description as it reads at `/approve`." `/restore` → "[Your `/restore`](…) has nothing
+to restore: a `code-only` run has no Spec or Plan."
 
 ### When the run ends (SPW10)
 
@@ -859,12 +873,12 @@ event ends `IGNORED` with the reason in brackets.
 
 | Status | `/approve` (`approve-refused`) | `/refresh` (`refresh-refused`) | `/restore` (`restore-refused`) |
 |---|---|---|---|
-| `draft`, no run | "[Your `/approve`](…) has nothing to approve: this issue has no run. To start one, add a `workflow:` label." | "… nothing to refresh …" (same) | "… nothing to restore …" (same) |
+| `draft`, no run | "[Your `/approve`](…) has nothing to approve: this issue has no run. To start one, add a `workflow:` label." | "[Your `/refresh`](…) has nothing to refresh: …" (same) | "[Your `/restore`](…) has nothing to restore: …" (same) |
 | `draft`, the run is starting | "[Your `/approve`](…) has nothing to approve yet: run 2 is just starting." | same, "refresh" | same, "restore" |
-| `grilling` | spec 6's reply (GM8) | "There's no Spec to refresh yet: run 2 is still at Grill Me." | "There's no Spec to restore: run 2 is still at Grill Me." |
-| `executing` | "[Your `/approve`](…) has nothing to approve: run 2 is writing the code." | "Too late to refresh: run 2 is already writing the code from the approved texts." | "Nothing to restore: the bot keeps the approved texts." |
-| `in-review` | "[Your `/approve`](…) has nothing to approve here: run 2's pull request is open; review it there." | "Too late to refresh: run 2's pull request is open." | as `executing` |
-| `needs-human` | "[Your `/approve`](…) has nothing to approve now: run 2 is stopped. See the stop comment for how to continue." | "Run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`." | same, "`/restore`" |
+| `grilling` | spec 6's reply (GM8) | "[Your `/refresh`](…) has nothing to refresh yet: run 2 is still at Grill Me, so there's no Spec." | "[Your `/restore`](…) has nothing to restore: run 2 is still at Grill Me, so there's no Spec." |
+| `executing` | "[Your `/approve`](…) has nothing to approve: run 2 is writing the code." | "[Your `/refresh`](…) comes too late: run 2 is already writing the code from the approved texts." | "[Your `/restore`](…) has nothing to restore: the bot keeps the approved texts." |
+| `in-review` | "[Your `/approve`](…) has nothing to approve here: run 2's pull request is open; review it there." | "[Your `/refresh`](…) comes too late: run 2's pull request is open." | as `executing` |
+| `needs-human` | "[Your `/approve`](…) has nothing to approve now: run 2 is stopped. See the stop comment for how to continue." | "[Your `/refresh`](…) has nothing to refresh now: run 2 is stopped. Continue it first (see the stop comment), then comment `/refresh`." | same, "`/restore`" |
 
 2026-11-23, plan P40: no run, yet a `workflow:` label is on (the bot missed the event that added it: it wasn't
 running, or the delivery failed) → the reply names the label instead of asking to add one: "[Your `/approve`](…) has
@@ -1266,12 +1280,14 @@ A…" issues, closed afterwards.
 - [ ] `/approve` on an issue with no run → ONE "this issue has no run" reply.
 
 **The commit check and `/refresh`** (`#G`, a Spec v1 waiting; sandbox commits pushed by the developer)
-- [ ] `/refresh` with `main` unchanged → ONE "Nothing changed on `main` since …" reply; NO new `execution_logs` row.
+- [ ] `/refresh` with `main` unchanged → ONE "… has nothing to refresh: nothing changed on `main` since …" reply; NO
+  new `execution_logs` row.
 - [ ] Push a change to a file the Spec read (e.g. rename a function in `src/index.ts`), `/refresh` → ONE
   "**Spec v2** · … replaces v1 above" comment with "What changed", the diff block (hunks with their `@@` line and
   unchanged lines around each change, no `---` / `+++` lines, plan P1) and both commits with a compare link; v1
-  superseded. An `/approve` written between v1 and v2 (comment it right before the `/refresh`) → ONE
-  "written before Spec v2" reply.
+  superseded. An `/approve` written between v1 and v2 (comment it right after the `/refresh`, while the bot
+  refreshes; 2026-11-23: written before the `/refresh`, it would be processed first and approve v1) → ONE "written
+  before Spec v2" reply.
 - [ ] Push a change to an unrelated file (`README.md`), `/refresh` → ONE "still up to date" reply (or a Spec v3
   whose "What changed" says why); after "up to date", `checked_commit` = the new commit.
 - [ ] Spec waiting, push a change to a file it read, `/approve` without refreshing → the Plan's header has the ⚠️
@@ -1292,8 +1308,8 @@ A…" issues, closed afterwards.
   "Plan v1 … no longer counts"; `status: spec-review`; `/approve` → Plan v2 (`written`).
 - [ ] Plan waiting, push a change that affects only the Plan (a file it names), `/refresh` → ONE Plan v2 comment
   "The approved Spec v1 is still up to date", or ONE "both still up to date" reply; status stays `ready-for-dev`.
-- [ ] Spec waiting, delete everything between its comment's hidden markers (edit the comment), `/refresh` → ONE "no
-  text left between its markers, so there's nothing to refresh" reply; NO new `execution_logs` row;
+- [ ] Spec waiting, delete everything between its comment's hidden markers (edit the comment), `/refresh` → ONE "has
+  nothing to refresh: Spec v1's comment has no text left between its markers" reply; NO new `execution_logs` row;
   `document_actions` `refresh` `empty` (plan P5).
 - [ ] `/refresh` while Grill Me asks → ONE "still at Grill Me" reply; on a closed issue → spec 5's closed reply.
 - [ ] `/refresh` from a sender with no access (spec 2's signed request, `octocat`) → ignored `unauthorized`, NO reply.

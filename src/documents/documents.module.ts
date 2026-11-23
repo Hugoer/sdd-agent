@@ -8,6 +8,7 @@ import { WorkflowModule } from '../workflow/workflow.module.js';
 import { DocumentsGate } from './approval-check.js';
 import { DocumentApprovals } from './document-approval.js';
 import { DocumentPosts } from './document-posts.js';
+import { DocumentRefreshes } from './document-refresh.js';
 import { DocumentsHandler } from './documents.handler.js';
 import { DocumentsStore } from './documents.store.js';
 import { GoSignalHandler } from './go-signal.handler.js';
@@ -32,6 +33,7 @@ import { SpecHandler } from './spec.handler.js';
     DocumentsStore,
     DocumentPosts,
     DocumentApprovals,
+    DocumentRefreshes,
     SpecHandler,
     PlanHandler,
     GoSignalHandler,

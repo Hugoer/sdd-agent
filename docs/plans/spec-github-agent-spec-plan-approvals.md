@@ -778,18 +778,25 @@ name the `workflow:` labels on the issue. P41: the refresh frame's changed paths
 hide (`isHiddenPath`).
 
 **Acceptance criteria:**
-- [ ] The schema: `upToDate` with changes or a document → refused; changed with a blank document or no change line →
+- [x] The schema: `upToDate` with changes or a document → refused; changed with a blank document or no change line →
   refused; 11 changes → refused; a 60,000-character `document` → refused with P2's schema message
-- [ ] Every text matches the spec's examples; a 64,000-character v2 drops its diff with the line; no text has an `@`
+- [x] Every text matches the spec's examples; a 64,000-character v2 drops its diff with the line; no text has an `@`
   outside backticks
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass
+- [x] `npm run typecheck && npm run lint && npm test` pass (2026-11-23: 1,451 unit tests)
 
 **Dependencies:** T1
 **Files:** `src/documents/refresh-frame.ts`, `src/documents/refresh-output.ts`, `src/documents/document-comments.ts`
 (+ specs)
 **Scope:** M
+
+**Built 2026-11-23:** `refresh-output.ts`, `refresh-frame.ts` and the texts in `document-comments.ts`; the
+nothing-waits reply is one function for the three commands (`nothingWaitsReply`); the refresh replies' marker is
+`refresh:<commentId>`. Chosen while building (in the spec): the refreshed and restored headers link the command
+("Refreshed for [`bob`'s `/refresh`](…)", P39); "last checked" instead of "written" when a refresh moved the
+starting point (SPW11); an up-to-date Spec with GitHub's list cut says "300 or more files"; only hidden paths
+changed → "None of the files you can read changed since." (P41).
 
 ### Task 19: `/refresh` while the Spec waits
 
@@ -805,20 +812,20 @@ superseded. The `document_actions` `refresh` row (P28) with its result and `log_
 the event ends as P35 says. A model or GitHub error → the stop at `spec` (SPW7).
 
 **Acceptance criteria:**
-- [ ] `main` unchanged → ONE nothing-changed reply, NO new `execution_logs` row
-- [ ] A file the Spec read changed → ONE Spec v2 comment (What changed, the diff, both commits, the link); v1
+- [x] `main` unchanged → ONE nothing-changed reply, NO new `execution_logs` row
+- [x] A file the Spec read changed → ONE Spec v2 comment (What changed, the diff, both commits, the link); v1
   superseded; an `/approve` written between v1 and v2 → the "written before Spec v2" reply
-- [ ] Up to date → the reply, `checked_commit` = B; a second `/refresh` at the same B → nothing changed (SPW11)
-- [ ] `/refresh` while grilling, in `code-only`'s `ready-for-dev`, in `needs-human`, in `executing`, in `in-review`,
+- [x] Up to date → the reply, `checked_commit` = B; a second `/refresh` at the same B → nothing changed (SPW11)
+- [x] `/refresh` while grilling, in `code-only`'s `ready-for-dev`, in `needs-human`, in `executing`, in `in-review`,
   in `draft` with a starting run (statuses set in the test database), with no run → one reply each, each text the
   spec's; a closed issue → spec 5's reply; a sender with no access → `unauthorized`, no reply
-- [ ] Every outcome has its row (`nothing-changed`, `up-to-date`, `spec-changed`, `deleted`, `already-approved`,
+- [x] Every outcome has its row (`nothing-changed`, `up-to-date`, `spec-changed`, `deleted`, `already-approved`,
   `empty`; `log_ids` holds the call) and the spec's log line (`/refresh → spec v2`, `→ up to date`, `→ nothing changed`)
-- [ ] The refresh call fails → stop at `spec`; `/retry` → ONE v2; the job run again after v2's Tx2 → no second
+- [x] The refresh call fails → stop at `spec`; `/retry` → ONE v2; the job run again after v2's Tx2 → no second
   comment and no model call (P34); a too-long `document` three times → the stop with P2's schema message
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
   (`test/documents-refresh.integration.spec.ts`)
 
 **Dependencies:** T12, T15 (a `code-only` run), T16, T18
@@ -827,6 +834,11 @@ the event ends as P35 says. A model or GitHub error → the stop at `spec` (SPW7
 `src/documents/spec.handler.ts`, `src/documents/documents.handler.ts`, `src/documents/documents.store.ts`,
 `test/documents-refresh.integration.spec.ts`, `test/closed-issue.integration.spec.ts`
 **Scope:** L
+
+**Built 2026-11-23:** `DocumentRefreshes` (`document-refresh.ts`) holds steps 2–4 for both kinds and writes
+nothing; the handler stores a refresh's version or its "checked" mark in one transaction with the `/refresh` row
+(P28), the version first (the row names it). `DocumentApprovals.changedSince` is the shared compare (P32). The
+frame marks only the files the document's own calls read. 1,472 unit and 353 integration tests.
 
 ### Task 20: `/refresh` while the Plan waits
 
@@ -840,30 +852,51 @@ Spec step's result from the row: B equals the Plan's starting commit → no call
 reply answers the `/refresh`.
 
 **Acceptance criteria:**
-- [ ] A change that makes the approved Spec wrong → ONE Spec v2 ("Plan v1 … no longer counts"), `spec-review`;
+- [x] A change that makes the approved Spec wrong → ONE Spec v2 ("Plan v1 … no longer counts"), `spec-review`;
   `/approve` → Plan v2 (`written`, version 2)
-- [ ] A change only the Plan's files see → ONE Plan v2 or ONE "both still up to date" reply; status stays
+- [x] A change only the Plan's files see → ONE Plan v2 or ONE "both still up to date" reply; status stays
   `ready-for-dev`
-- [ ] The Plan's refresh call fails → stop at `plan`; `/retry` → the Spec step makes no second call (P28), ONE answer
-- [ ] The Plan comment deleted (or emptied), then `/refresh` → ONE reply, NO model call, no Spec v2
-- [ ] Spec v2 posted, then the status write fails → the retried event in `spec-review` returns `SPEC_REFRESHED` from
+- [x] The Plan's refresh call fails → stop at `plan`; `/retry` → the Spec step makes no second call (P28), ONE answer
+- [x] The Plan comment deleted (or emptied), then `/refresh` → ONE reply, NO model call, no Spec v2
+- [x] Spec v2 posted, then the status write fails → the retried event in `spec-review` returns `SPEC_REFRESHED` from
   the row (P34): no "nothing changed" reply, no second comment
-- [ ] The row's result is the last step's (`plan-changed`, `up-to-date`), with both calls in `log_ids`
+- [x] The row's result is the last step's (`plan-changed`, `up-to-date`), with both calls in `log_ids`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T19
 **Files:** `src/documents/spec.handler.ts`, `src/documents/plan.handler.ts`, `src/documents/documents.store.ts`,
 `test/documents-refresh.integration.spec.ts`
 **Scope:** M
 
+**Built 2026-11-23:** the Plan's step completes the row the Spec's step started (`finishRefresh`, with its version
+or its "checked" mark in the same transaction, P28). Chosen while building: the Plan's step reads its comment again
+(a deletion between the two calls gets the same reply, on the row); "already written at that commit" carries no
+notes (the Spec call's notes aren't stored); a replayed `spec-changed` returns `SPEC_REFRESHED` when the Spec it
+replaced was approved. 1,472 unit and 360 integration tests.
+
 ### Checkpoint 4 — The commit check and `/refresh` on the sandbox
-- [ ] Your sandbox commits for the rows ("Your part", item 5), each pushed before its row and written against the
+- [x] Your sandbox commits for the rows ("Your part", item 5), each pushed before its row and written against the
   files that issue's Spec or Plan actually read (its "Read:" line), since the sandbox's `src/index.ts` holds only
-  `LIBRARY_NAME`
-- [ ] Matrix "The commit check and `/refresh`": every row but the no-access one (T26)
-- [ ] Matrix "`/approve` and the Plan": `#F` in full (Ready to code, `/refresh`'s reply, then `/approve`)
+  `LIBRARY_NAME` (2026-11-23: made by me with `gh` as you, at your choice, one file per commit through GitHub's
+  contents API: `CHANGELOG.md` new, two `README.md` lines, `LIBRARY_NAME` → `PACKAGE_NAME` → `LIB_NAME` in
+  `src/index.ts` and its test, `NOTES.md` new, `noUncheckedIndexedAccess` in `tsconfig.json`, a comment in
+  `eslint.config.mjs`; sandbox `main` from `c8f58d7` to `e3a8e8b`)
+- [x] Matrix "The commit check and `/refresh`": every row but the no-access one (T26) (2026-11-23, my instance,
+  #57–#63. #57: `/refresh` unchanged → ONE nothing-changed reply, no `execution_logs` row; the rename → `/refresh`,
+  `/approve` 3 s later → ONE Spec v2 (header with both commits and the compare link, one "What changed" line, the
+  `@@` diff) and ONE "written before Spec v2"; `NOTES.md` → "still up to date", `checked_commit` moved; a README line
+  → `/approve` → Plan v1 with the ⚠️ line naming `README.md` from `dc1cdda`, `stale_files {README.md}`, the prompt's
+  paragraph with both commits, NO warning reply; the second rename → `/refresh` → the model answered `upToDate:
+  false` with an empty `document` three times → the stop at `spec` (`invalid-answer`); `/retry` → ONE Spec v3 with
+  "Plan v1 was written from Spec v2, so it no longer counts", `spec-review`; `/approve` → Plan v2 `written`;
+  `tsconfig.json` → "both still up to date", the row with both calls; `eslint.config.mjs` → `/approve` → ONE warning
+  "which it read", the `workspace` stop. #58: `README.md` → "which the approved Spec read". #59: `CHANGELOG.md` → NO
+  warning, only the stop. #60 `spec-code`: "which it read", naming `workflow: spec-code`. #61 emptied → ONE reply,
+  `refresh` `empty`, no call. #63: "still at Grill Me"; closed → spec 5's reply)
+- [x] Matrix "`/approve` and the Plan": `#F` in full (#62: Ready to code, `/refresh`'s reply, then `/approve` → the
+  `workspace` stop)
 - [ ] You review and commit
 
 ---
@@ -1063,6 +1096,14 @@ as the spec says.
 - (2026-11-23, #56) An issue closed while a step's model call runs: the step still posts its answer (#56's Spec
   v1 came 2 minutes after the close), as spec 5 has it (a close is no event; `open` is read when an event is
   processed). One model call spent on a closed issue; not changed.
+- (Checkpoint 4, 2026-11-23) #57's second refresh (the Plan waiting, the approved Spec renamed a constant): the model
+  answered `upToDate: false` with its change line and an empty `document`, three times; the schema refused it, the
+  run stopped at `spec`, and `/retry` wrote Spec v3. The re-ask names the problem ("upToDate is false, so document
+  must be the whole updated text") but the model repeated itself. Not changed; a sharper re-ask is possible.
+- (Checkpoint 4) A refresh call may read a file only because it is in the changed list (`CHANGELOG.md`, `NOTES.md`);
+  it then counts among that version's reads for later checks. As designed (the reads are what the calls loaded).
+- (Checkpoint 4) The matrix row "An `/approve` written between v1 and v2" said to comment it before the `/refresh`;
+  events run in order, so it must come right after (fixed in the spec).
 - (P39, 2026-11-23) Earlier specs' replies don't link the comment they answer either: spec 5's `/retry` refusals
   ("This `/retry` was written before run 1 stopped …") and closed-issue reply, spec 6's `/approve` and answer
   replies. P39 covers spec 7's replies only; the others keep their texts.

@@ -21,7 +21,9 @@ import type {
 import { issueTag } from '../workflow/task.service.js';
 import {
   approveRefusedReply,
+  refreshRefusedReply,
   type ApproveRefusal,
+  type RefreshRefusal,
 } from './document-comments.js';
 import {
   DocumentsStore,
@@ -32,6 +34,12 @@ import {
 export const APPROVE_REFUSED: StepOutcome = {
   type: 'IGNORED',
   reason: 'approve-refused',
+};
+
+/** Plan P35: a `/refresh` that did nothing (deleted, empty, already approved) ends `IGNORED`. */
+export const REFRESH_REFUSED: StepOutcome = {
+  type: 'IGNORED',
+  reason: 'refresh-refused',
 };
 
 /** What posting needs: the issue and the lease; a reply's row and its log line also name the run, when there is one. */
@@ -142,6 +150,38 @@ export class DocumentPosts {
       `/approve refused (${refusal})`,
     );
     return APPROVE_REFUSED;
+  }
+
+  /**
+   * Spec "`/refresh`" step 1 (SPW23, plan P5): one reply when the document to refresh is deleted, emptied or
+   * already approved, before any model call; a deletion the bot hadn't seen is recorded (without its text).
+   */
+  async refuseRefresh(
+    context: StepContext,
+    refusal: RefreshRefusal,
+    doc: TaskDocument,
+  ): Promise<StepOutcome> {
+    const comment = commentOf(context);
+    if (
+      refusal === 'deleted' &&
+      !doc.deletedAt &&
+      !(await this.store.actionFor('refresh', comment.id))
+    )
+      await this.store.recordMissedDeletion(context.lease, doc.id);
+    await this.answer(
+      context,
+      {
+        documentId: doc.id,
+        action: 'refresh',
+        result: refusal,
+        replyBody: refreshRefusedReply(comment, refusal, {
+          kind: doc.kind as 'spec' | 'plan',
+          version: doc.version,
+        }),
+      },
+      `/refresh refused (${refusal})`,
+    );
+    return REFRESH_REFUSED;
   }
 
   /** `#12 run 2 documents: …` (or `#12 documents: …` with no run), the spec's log lines. */

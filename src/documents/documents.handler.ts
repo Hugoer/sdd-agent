@@ -15,20 +15,26 @@ import type {
 } from '../workflow/step-handler.registry.js';
 import {
   approveHintReply,
-  approveNothingWaitsReply,
   lateCommentReply,
+  nothingWaitsReply,
   type NothingWaits,
 } from './document-comments.js';
-import { APPROVE_REFUSED, DocumentPosts } from './document-posts.js';
+import {
+  APPROVE_REFUSED,
+  DocumentPosts,
+  REFRESH_REFUSED,
+} from './document-posts.js';
 import { DocumentsStore } from './documents.store.js';
 
 const NO_TRANSITION: StepOutcome = { type: 'IGNORED', reason: 'no-transition' };
 const APPROVE_HINT: StepOutcome = { type: 'IGNORED', reason: 'approve-hint' };
 const LATE_COMMENT: StepOutcome = { type: 'IGNORED', reason: 'late-comment' };
 
-/** Row 36: an `/approve` in a status where nothing waits, by the result its row records. */
+/** Rows 35, 36: a command in a status where nothing waits, by the result its row records. */
 const NOTHING_WAITS: Partial<Record<StepContext['status'], NothingWaits>> = {
   draft: 'starting',
+  grilling: 'grilling',
+  'ready-for-dev': 'code-only', // a `/refresh` in `code-only` (decide() sends `full-sdd`'s to the steps)
   executing: 'executing',
   'in-review': 'in-review',
   'needs-human': 'stopped',
@@ -56,8 +62,10 @@ export class DocumentsHandler implements StepHandler {
     switch (input.type) {
       case 'APPROVE':
         return context.approval === null
-          ? this.nothingWaits(context, input.comment)
+          ? this.nothingWaits(context, 'approve', input.comment)
           : this.refuseApprove(context);
+      case 'REFRESH':
+        return this.nothingWaits(context, 'refresh', input.comment);
       case 'COMMENT':
         return this.comment(context, input.comment);
       default:
@@ -76,29 +84,31 @@ export class DocumentsHandler implements StepHandler {
     return this.posts.refuseApprove(context, approval, waiting);
   }
 
-  /** Row 36 (SPW16): an `/approve` where nothing waits: one reply why, worded by the run's state (plan P14). */
+  /** Rows 35, 36 (SPW16): a command where nothing waits: one reply why, worded by the run's state (plan P14). */
   private async nothingWaits(
     context: StepContext,
+    command: 'approve' | 'refresh',
     comment: TaskComment,
   ): Promise<StepOutcome> {
     const situation = NOTHING_WAITS[context.status];
     if (!situation)
-      throw new Error(`documents reply: an /approve in ${context.status}`);
+      throw new Error(`documents reply: a /${command} in ${context.status}`);
     await this.posts.answer(
       context,
       {
         documentId: null,
-        action: 'approve-refused',
+        action: `${command}-refused`,
         result: situation,
-        replyBody: approveNothingWaitsReply(
+        replyBody: nothingWaitsReply(
+          command,
           comment,
           situation,
           context.run.number,
         ),
       },
-      `/approve refused (${situation})`,
+      `/${command} refused (${situation})`,
     );
-    return APPROVE_REFUSED;
+    return command === 'approve' ? APPROVE_REFUSED : REFRESH_REFUSED;
   }
 
   /**

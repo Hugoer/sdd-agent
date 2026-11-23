@@ -122,7 +122,10 @@ export function laneConflictComment(
 }
 
 export type ClosedCommand =
-  { kind: 'lane-added'; lane: Lane } | { kind: 'retry' } | { kind: 'approve' };
+  | { kind: 'lane-added'; lane: Lane }
+  | { kind: 'retry' }
+  | { kind: 'approve' }
+  | { kind: 'refresh' };
 
 /** RL19: a command on a closed issue gets one reply (marker per delivery). */
 export function issueClosedComment(

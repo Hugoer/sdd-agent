@@ -269,6 +269,8 @@ function onClosedIssue(state: RouterState, event: IssueEvent): Action {
       return { kind: 'reply-closed', command: { kind: 'retry' } };
     case 'APPROVE':
       return { kind: 'reply-closed', command: { kind: 'approve' } };
+    case 'REFRESH':
+      return { kind: 'reply-closed', command: { kind: 'refresh' } };
     default:
       return ignore('issue-closed');
   }
@@ -318,6 +320,7 @@ function withoutRun(state: RouterState, event: IssueEvent): Action {
     case 'RETRY':
       return { kind: 'reply-retry', refusal: { kind: 'no-run' } };
     case 'APPROVE':
+    case 'REFRESH':
       return { kind: 'reply-without-run' }; // row 5 (spec 7)
     default:
       return ignore('no-transition');
@@ -360,6 +363,8 @@ function byStatus(
       return whileGrilling(state, event);
     case 'spec-review':
       if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, a late comment, or nothing
+      if (event.type === 'REFRESH')
+        return steps([{ handler: 'spec', op: 'refresh' }], null); // row 32
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
       if (state.approval !== 'valid') return approvalAnswer(state.approval);
       return run.lane === 'full-sdd'
@@ -379,6 +384,17 @@ function byStatus(
           ); // row 18
     case 'ready-for-dev':
       if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, or nothing
+      if (event.type === 'REFRESH')
+        // Row 32: the Spec first, then the Plan (D3: two calls, no step calls another); `code-only`: row 35.
+        return run.lane === 'full-sdd'
+          ? steps(
+              [
+                { handler: 'spec', op: 'refresh' },
+                { handler: 'plan', op: 'refresh' },
+              ],
+              null,
+            )
+          : documentsReply();
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
       if (state.approval !== 'valid') return approvalAnswer(state.approval);
       // Row 19.
@@ -394,8 +410,8 @@ function byStatus(
       );
     default:
       // Row 27 (in-review, needs-human); also `draft` before the first step and `executing`: nothing to do, but
-      // an `/approve` gets one reply why (spec 7 row 36).
-      return event.type === 'APPROVE'
+      // an `/approve` gets one reply why (spec 7 row 36), and a `/refresh` too (row 35).
+      return event.type === 'APPROVE' || event.type === 'REFRESH'
         ? documentsReply()
         : ignore('no-transition');
   }
@@ -529,6 +545,8 @@ function whileGrilling(state: RouterState, event: IssueEvent): Action {
         : steps([{ handler: 'grill', op: 'round' }], null);
     case 'APPROVE':
       return steps([{ handler: 'grill', op: 'approve' }], null);
+    case 'REFRESH':
+      return documentsReply(); // row 35: no Spec yet
     default:
       return ignore('no-transition');
   }

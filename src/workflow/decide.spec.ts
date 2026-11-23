@@ -705,9 +705,9 @@ describe('decide(): spec 7 seam (plan T7)', () => {
     ).toEqual({ kind: 'set-status', status: 'spec-review' });
   });
 
-  it('REFRESH, RESTORE, BOT_COMMENT_DELETED on an open issue → ignored no-transition until their tasks', () => {
+  it('RESTORE, BOT_COMMENT_DELETED on an open issue → ignored no-transition until their tasks', () => {
     const statuses = ['spec-review', 'ready-for-dev', 'grilling'] as const;
-    for (const input of [ev.refresh(), ev.restore(), ev.deleted()]) {
+    for (const input of [ev.restore(), ev.deleted()]) {
       expect(act(state(), input)).toEqual(ignored('no-transition'));
       for (const status of statuses)
         expect(act(running({ status }), input)).toEqual(
@@ -717,10 +717,62 @@ describe('decide(): spec 7 seam (plan T7)', () => {
   });
 
   it('… and on a closed issue → ignored issue-closed', () => {
-    for (const input of [ev.refresh(), ev.restore(), ev.deleted()])
+    for (const input of [ev.restore(), ev.deleted()])
       expect(
         act(running({ status: 'spec-review', open: false }), input),
       ).toEqual(ignored('issue-closed'));
+  });
+});
+
+describe('decide(): /refresh (spec 7 rows 5, 32, 35; RL19)', () => {
+  const calls = (...list: { handler: string; op: string }[]) => ({
+    kind: 'steps',
+    calls: list,
+    statusFirst: null,
+    statusAfter: null,
+  });
+  const reply = calls({ handler: 'documents', op: 'reply' });
+
+  it('row 32: spec-review → the Spec step refreshes; ready-for-dev full-sdd → the Spec, then the Plan', () => {
+    expect(act(running({ status: 'spec-review' }), ev.refresh())).toEqual(
+      calls({ handler: 'spec', op: 'refresh' }),
+    );
+    expect(
+      act(
+        running({ status: 'spec-review' }, runOf({ lane: 'spec-code' })),
+        ev.refresh(),
+      ),
+    ).toEqual(calls({ handler: 'spec', op: 'refresh' }));
+    expect(act(running({ status: 'ready-for-dev' }), ev.refresh())).toEqual(
+      calls(
+        { handler: 'spec', op: 'refresh' },
+        { handler: 'plan', op: 'refresh' },
+      ),
+    );
+  });
+
+  it('row 35: grilling, code-only ready-for-dev, executing, in-review, needs-human, draft with a run → one reply', () => {
+    for (const status of [
+      'grilling',
+      'executing',
+      'in-review',
+      'needs-human',
+      'draft',
+    ] as const)
+      expect(act(running({ status }), ev.refresh())).toEqual(reply);
+    expect(
+      act(
+        running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })),
+        ev.refresh(),
+      ),
+    ).toEqual(reply);
+  });
+
+  it("row 5: no run → the gate answers; a closed issue → spec 5's reply (RL19)", () => {
+    expect(act(state(), ev.refresh())).toEqual({ kind: 'reply-without-run' });
+    expect(
+      act(running({ status: 'spec-review', open: false }), ev.refresh()),
+    ).toEqual({ kind: 'reply-closed', command: { kind: 'refresh' } });
   });
 });
 

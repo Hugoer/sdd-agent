@@ -10,6 +10,8 @@ import {
   type Lane,
 } from '../contracts/issue-provider.js';
 import { LlmError } from '../contracts/llm-error.js';
+import type { TaskComment } from '../contracts/workflow-input.js';
+import type { TaskDocument } from '../generated/prisma/client.js';
 import { GrillService } from '../grill/grill.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { StepConfigService } from '../llm/step-config.service.js';
@@ -21,9 +23,27 @@ import type {
 } from '../workflow/step-handler.registry.js';
 import { issueTag } from '../workflow/task.service.js';
 import { DocumentApprovals } from './document-approval.js';
-import { specComment } from './document-comments.js';
-import { APPROVE_REFUSED, DocumentPosts } from './document-posts.js';
-import { cleanDocument, DOCUMENT_MAX_CHARS } from './document-text.js';
+import {
+  refreshNothingChangedReply,
+  refreshUpToDateReply,
+  specComment,
+} from './document-comments.js';
+import {
+  APPROVE_REFUSED,
+  DocumentPosts,
+  REFRESH_REFUSED,
+} from './document-posts.js';
+import {
+  DocumentRefreshes,
+  REFRESH_REFUSALS,
+  refreshRow,
+  type RefreshCheck,
+} from './document-refresh.js';
+import {
+  cleanDocument,
+  diffBlock,
+  DOCUMENT_MAX_CHARS,
+} from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
 import { specFrame, specTurns } from './spec-frame.js';
 
@@ -41,6 +61,7 @@ export class SpecHandler implements StepHandler {
     private readonly scanner: SecretScanner,
     private readonly posts: DocumentPosts,
     private readonly approvals: DocumentApprovals,
+    private readonly refreshes: DocumentRefreshes,
     config: ConfigService<Env, true>,
   ) {
     this.base = config.get('TARGET_BASE_BRANCH', { infer: true });
@@ -53,6 +74,8 @@ export class SpecHandler implements StepHandler {
         return this.generate(context);
       case 'approve':
         return this.approve(context);
+      case 'refresh':
+        return this.refresh(context);
       default:
         throw new Error(`spec: no ${context.op} op`);
     }
@@ -137,6 +160,233 @@ export class SpecHandler implements StepHandler {
     if (!approved) return APPROVE_REFUSED;
   }
 
+  /**
+   * Row 32 (spec "`/refresh`"): in `spec-review` the waiting Spec; in `ready-for-dev` the approved Spec, first of the
+   * two calls. Plan P34: a `/refresh` already answered (a retried event) replays its row, so the model is never asked
+   * twice for a step that already answered (P28).
+   */
+  private async refresh(context: StepContext): Promise<StepOutcome | void> {
+    const { input, status } = context;
+    if (input.type !== 'REFRESH')
+      throw new Error(`spec refresh: a ${input.type} event`);
+    const recorded = await this.store.actionFor('refresh', input.comment.id);
+    if (recorded) {
+      await this.posts.postReply(context, recorded);
+      if (REFRESH_REFUSALS.has(recorded.result)) return REFRESH_REFUSED;
+      if (recorded.result === 'spec-changed')
+        return this.refreshedOutcome(recorded.documentId);
+      return;
+    }
+    switch (status) {
+      case 'spec-review':
+        return this.refreshWaiting(context, input.comment);
+      case 'ready-for-dev':
+        return this.refreshApproved(context);
+      default:
+        throw new Error(`spec refresh in ${status}`);
+    }
+  }
+
+  /**
+   * Steps 1–6 in `spec-review`: the waiting Spec's comment as it reads now; approved, deleted or empty → one reply;
+   * `main` unmoved → one reply, no call; else the call: up to date → its starting point moves to B (SPW11) and one
+   * reply; changed → Spec v(N+1).
+   */
+  private async refreshWaiting(
+    context: StepContext,
+    comment: TaskComment,
+  ): Promise<StepOutcome | void> {
+    const { run, status, statusBeforeStop, lease } = context;
+    const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
+    if (waiting?.kind !== 'spec')
+      throw new Error(`spec refresh: no waiting Spec in ${status}`);
+    if (waiting.approvedAt)
+      return this.posts.refuseRefresh(context, 'already-approved', waiting);
+    const now = await this.refreshes.readNow(context, waiting);
+    if ('refusal' in now)
+      return this.posts.refuseRefresh(context, now.refusal, waiting);
+
+    const check = await this.refreshes.check(context, waiting, now.text);
+    switch (check.kind) {
+      case 'nothing-changed':
+        await this.posts.answer(
+          context,
+          {
+            documentId: waiting.id,
+            action: 'refresh',
+            result: 'nothing-changed',
+            replyBody: refreshNothingChangedReply(comment, {
+              documents: [{ kind: 'spec', version: waiting.version }],
+              base: this.base,
+              commit: check.to,
+              checked: waiting.checkedCommit !== null,
+            }),
+          },
+          '/refresh → nothing changed',
+        );
+        return;
+      case 'up-to-date': {
+        const row = await this.store.markUpToDate(lease, waiting.id, check.to, {
+          ...refreshRow(context),
+          documentId: waiting.id,
+          result: 'up-to-date',
+          logIds: [check.logId],
+          replyBody: refreshUpToDateReply(
+            comment,
+            this.base,
+            check.to,
+            {
+              kind: 'spec',
+              spec: waiting.version,
+              from: check.from,
+              changed: check.changed && {
+                files: check.changed.paths.length,
+                complete: check.changed.complete,
+                compareUrl: check.compareUrl ?? '',
+              },
+            },
+            check.notes,
+          ),
+        });
+        this.posts.log(context, '/refresh → up to date');
+        await this.posts.postReply(context, row);
+        return;
+      }
+      case 'changed':
+        await this.postRefreshed(context, waiting, now.text, check, null);
+    }
+  }
+
+  /**
+   * `ready-for-dev`, `full-sdd` (the Plan waits), the Spec's call: the waiting Plan deleted, empty or approved → one
+   * reply and nothing more, before any model call (P35 stops the list). Then from the approved text (SPW17):
+   * `main` unmoved or still right → recorded on the row for the Plan's call, nothing posted; changed → Spec v(K+1),
+   * which supersedes the approved one and the waiting Plan (SPW8), and `SPEC_REFRESHED` sends the issue back to
+   * `spec-review`.
+   */
+  private async refreshApproved(
+    context: StepContext,
+  ): Promise<StepOutcome | void> {
+    const { run, lease } = context;
+    const plan = await this.store.waiting(run.id, 'ready-for-dev', null);
+    if (plan?.kind !== 'plan')
+      throw new Error('spec refresh: no waiting Plan in ready-for-dev');
+    if (plan.approvedAt)
+      return this.posts.refuseRefresh(context, 'already-approved', plan);
+    const planNow = await this.refreshes.readNow(context, plan);
+    if ('refusal' in planNow)
+      return this.posts.refuseRefresh(context, planNow.refusal, plan);
+    const spec = await this.store.current(run.id, 'spec');
+    if (!spec?.approvedAt || spec.approvedText === null)
+      throw new Error('spec refresh: the Plan waits without an approved Spec');
+
+    const check = await this.refreshes.check(context, spec, spec.approvedText);
+    switch (check.kind) {
+      case 'nothing-changed':
+        await this.store.insertAction(lease, {
+          ...refreshRow(context),
+          documentId: spec.id,
+          result: 'nothing-changed',
+          logIds: [],
+          replyBody: null,
+        });
+        return;
+      case 'up-to-date':
+        await this.store.markUpToDate(lease, spec.id, check.to, {
+          ...refreshRow(context),
+          documentId: spec.id,
+          result: 'up-to-date',
+          logIds: [check.logId],
+          replyBody: null,
+        });
+        return;
+      case 'changed':
+        await this.postRefreshed(
+          context,
+          spec,
+          spec.approvedText,
+          check,
+          plan.version,
+        );
+        return SPEC_REFRESHED;
+    }
+  }
+
+  /** Step 6: Spec v(N+1), `refreshed`, with its `/refresh` row in one transaction (P28); then posted once. */
+  private async postRefreshed(
+    context: StepContext,
+    replaced: TaskDocument,
+    before: string,
+    check: Extract<RefreshCheck, { kind: 'changed' }>,
+    planNoLongerCounts: number | null,
+  ): Promise<void> {
+    const { run, input, lease } = context;
+    if (input.type !== 'REFRESH')
+      throw new Error(`spec refresh: a ${input.type} event`);
+    const lane = documentLane(run.lane);
+    const versionId = randomUUID();
+    const version = await this.store.nextVersion(run.id, 'spec');
+    const row = await this.store.insertVersion(
+      lease,
+      {
+        id: versionId,
+        runId: run.id,
+        kind: 'spec',
+        version,
+        origin: 'refreshed',
+        basedOnId: replaced.id,
+        commit: check.to,
+        logId: check.logId,
+        text: check.text,
+        changes: check.changes,
+        notes: check.notes,
+        triggerCommentId: input.comment.id,
+        body: specComment({
+          versionId,
+          version,
+          run: { number: run.number, lane },
+          base: this.base,
+          commit: check.to,
+          text: check.text,
+          notes: check.notes,
+          origin: {
+            kind: 'refreshed',
+            previous: { version: replaced.version, from: check.from },
+            compareUrl: check.compareUrl,
+            by: input.sender,
+            command: input.comment,
+            changes: check.changes,
+            diff: diffBlock(before, check.text),
+          },
+          ...(planNoLongerCounts !== null && { planNoLongerCounts }),
+        }),
+      },
+      {
+        ...refreshRow(context),
+        documentId: versionId,
+        result: 'spec-changed',
+        logIds: [check.logId],
+        replyBody: null,
+      },
+    );
+    this.posts.log(context, `/refresh → spec v${version}`);
+    await this.posts.postVersion(context, row);
+  }
+
+  /**
+   * Plan P34: a replayed `spec-changed` sends the issue back to `spec-review` when the Spec it replaced was approved
+   * (the Plan waited), as the first answer did; in `spec-review` it changes nothing.
+   */
+  private async refreshedOutcome(
+    versionId: string | null,
+  ): Promise<StepOutcome | void> {
+    const made = versionId ? await this.store.byId(versionId) : null;
+    const replaced = made?.basedOnId
+      ? await this.store.byId(made.basedOnId)
+      : null;
+    return replaced?.approvedAt ? SPEC_REFRESHED : undefined;
+  }
+
   /** A Spec stored by Tx1 but not posted (a crash before Tx2): find its marker, else post its body; then Tx2. */
   private async postPending(context: StepContext): Promise<void> {
     const pending = await this.store.pendingVersion(context.run.id);
@@ -151,6 +401,8 @@ export class SpecHandler implements StepHandler {
     );
   }
 }
+
+const SPEC_REFRESHED: StepOutcome = { type: 'SPEC_REFRESHED' };
 
 /** A Spec is written only in `full-sdd` and `spec-code` (overview §3 rows 10, 13, 16). */
 function documentLane(lane: Lane): Exclude<Lane, 'code-only'> {

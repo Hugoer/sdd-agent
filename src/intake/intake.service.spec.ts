@@ -758,6 +758,7 @@ describe('IntakeService.answerComments (spec 6, GMW1)', () => {
       comment(1),
       comment(2, { body: '/approve' }),
       comment(3, { body: '/retry' }),
+      comment(10, { body: '/refresh' }),
       comment(4, { sender: BOT_LOGIN }),
       storedEvent(issueCommentEdited({ commentId: 1, body: 'edited answer' })),
       storedEvent(issueCommentDeleted({ commentId: 1 })),

@@ -227,6 +227,10 @@ describe('issueClosedComment (RL19)', () => {
       '<!-- sdd-agent:issue-closed:d-9 -->\n' +
         'This issue is closed, so `/approve` did nothing. Reopen the issue, then comment `/approve` again.',
     );
+    expect(issueClosedComment('d-10', { kind: 'refresh' })).toBe(
+      '<!-- sdd-agent:issue-closed:d-10 -->\n' +
+        'This issue is closed, so `/refresh` did nothing. Reopen the issue, then comment `/refresh` again.',
+    );
   });
 });
 

@@ -16,7 +16,7 @@ import type {
   GateContext,
   NoRunContext,
 } from '../workflow/step-handler.registry.js';
-import { approveNothingWaitsReply } from './document-comments.js';
+import { nothingWaitsReply } from './document-comments.js';
 import { DocumentPosts } from './document-posts.js';
 import { documentText } from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
@@ -57,31 +57,34 @@ export class DocumentsGate implements ApprovalGate {
   ) {}
 
   /**
-   * Row 5 (plan P7, P36): an `/approve` on an issue with no run gets one reply, and a `document_actions` row with no
-   * run, counted with the other wasted actions.
+   * Row 5 (plan P7, P36): an `/approve` or a `/refresh` on an issue with no run gets one reply, and a
+   * `document_actions` row with no run, counted with the other wasted actions.
    */
   async replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason> {
     const { input, lanes } = context;
-    if (input.type !== 'APPROVE')
+    if (input.type !== 'APPROVE' && input.type !== 'REFRESH')
       throw new Error(
         `approval gate: no reply without a run for ${input.type}`,
       );
+    const command = input.type === 'APPROVE' ? 'approve' : 'refresh';
+    const action = `${command}-refused` as const;
     await this.posts.answer(
       context,
       {
         documentId: null,
-        action: 'approve-refused',
+        action,
         result: 'no-run',
-        replyBody: approveNothingWaitsReply(
+        replyBody: nothingWaitsReply(
+          command,
           input.comment,
           'no-run',
           null,
           lanes,
         ),
       },
-      '/approve refused (no-run)',
+      `/${command} refused (no-run)`,
     );
-    return 'approve-refused';
+    return action;
   }
 
   async verdict(context: GateContext): Promise<ApprovalVerdict> {
