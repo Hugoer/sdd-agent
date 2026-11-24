@@ -23,6 +23,7 @@ import { flaggedFiles } from './commit-check.js';
 import { DocumentApprovals } from './document-approval.js';
 import { cleanDocument, documentText } from './document-text.js';
 import {
+  methodChange,
   refreshFrame,
   refreshTurns,
   type RefreshChanges,
@@ -102,7 +103,13 @@ export class DocumentRefreshes {
     const result = await this.llm.call<RefreshOutput>({
       context: { task: task.ref, step: kind, lane: run.lane, runId: run.id },
       setup,
-      frame: refreshFrame({ kind, from, to, changes: changed }),
+      frame: refreshFrame({
+        kind,
+        from,
+        to,
+        changes: changed,
+        method: methodChange(changed, setup.skill.path),
+      }),
       turns: refreshTurns({
         issue: issueTag(task.ref.externalRef),
         title: details.title,

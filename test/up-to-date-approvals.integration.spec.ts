@@ -24,6 +24,7 @@ import {
   yours,
 } from './documents-helpers.js';
 import { HUMAN, issuesUnlabeled } from './fixtures/github/payloads.js';
+import { skillMd } from './fixtures/skills.js';
 import { captureLogs, laneAdded } from './grill-helpers.js';
 import {
   deliver,
@@ -397,6 +398,9 @@ describe('/approve asks first (spec 14)', () => {
     });
   });
 
+  const refusalsOf = (issue: TaskRef, commentId: number) =>
+    withMarker(t, issue, approveRefusedMarker(String(commentId)));
+
   describe('the time rule and a pending question (plan T6)', () => {
     const refusals = (issue: TaskRef, commentId: number) =>
       withMarker(t, issue, approveRefusedMarker(String(commentId)));
@@ -551,5 +555,137 @@ describe('/approve asks first (spec 14)', () => {
         expect(await actionRows(t)).toHaveLength(1);
       },
     );
+  });
+
+  describe('/refresh after a question (plan T7)', () => {
+    const UP_TO_DATE = { upToDate: true, changes: [], document: '' };
+    const refreshFrames = (kind: 'Spec' | 'Plan') =>
+      t.models.calls
+        .map((call) => call.messages[0].text)
+        .filter((text) =>
+          text.startsWith(
+            `You are the ${kind} step of a spec-driven workflow on a GitHub issue, asked to bring`,
+          ),
+        );
+    const METHOD = (kind: string) =>
+      `The method below changed since the ${kind} was written.`;
+
+    it('a question, then `/refresh` → Spec v2; `/approve` → Plan v1 at once, NO question', async () => {
+      const issue = await specWritten(t, 31, { reads: ['src/index.ts'] });
+      seed('src/index.ts', 'export const a = 2;\n');
+      await deliver(t, commentNow(31, 3101, '/approve'));
+      expect(questions(issue)).toHaveLength(1);
+      t.models.replyJson({
+        upToDate: false,
+        changes: ['Uses `a = 2`.'],
+        document: '# Spec\n\nSplit a bill with `a = 2`.\n',
+      });
+
+      await deliver(t, commentNow(31, 3102, '/refresh'));
+
+      const specs = await rows('spec');
+      expect(specs).toHaveLength(2);
+      expect(specs[1]).toMatchObject({ version: 2, askedCommit: null });
+      t.models.reply({ answer: PLAN_TEXT });
+
+      await deliver(t, commentNow(31, 3103, '/approve'));
+
+      expect(await rows('plan')).toHaveLength(1);
+      expect(questions(issue)).toHaveLength(1);
+    });
+
+    it('a question, then `/refresh` finds it up to date → `asked_commit` empty, `checked_commit` = now; an `/approve` written before the question and processed after → counts', async () => {
+      const issue = await specWritten(t, 32, { reads: ['src/index.ts'] });
+      await t.prisma.taskDocument.updateMany({
+        data: { postedAt: new Date(Date.now() - 60_000) },
+      });
+      seed('src/index.ts', 'export const a = 2;\n');
+      const b1 = await now();
+      await deliver(t, commentNow(32, 3201, '/approve', 3));
+      expect((await rows('spec'))[0].askedCommit).toBe(b1);
+      t.models.replyJson(UP_TO_DATE);
+
+      await deliver(t, commentNow(32, 3202, '/refresh'));
+
+      expect((await rows('spec'))[0]).toMatchObject({
+        askedCommit: null,
+        checkedCommit: b1,
+      });
+      t.models.reply({ answer: PLAN_TEXT });
+
+      // Written 2 s ago: before the question was posted, but the question is closed.
+      await deliver(t, commentNow(32, 3203, '/approve', 2));
+
+      expect(refusalsOf(issue, 3203)).toEqual([]);
+      expect(await rows('plan')).toHaveLength(1);
+      expect(questions(issue)).toHaveLength(1);
+    });
+
+    it('the Plan waits: a question, `/refresh` → "both still up to date", the Plan’s `asked_commit` empty → `/approve` → the `workspace` stop, NO question', async () => {
+      const issue = await planWaiting(33, ['src/index.ts'], ['src/index.ts']);
+      seed('src/index.ts', 'export const a = 2;\n');
+      const b1 = await now();
+      await deliver(t, commentNow(33, 3302, '/approve'));
+      expect(questions(issue)).toHaveLength(1);
+      t.models.replyJson(UP_TO_DATE).replyJson(UP_TO_DATE);
+
+      await deliver(t, commentNow(33, 3303, '/refresh'));
+
+      expect(replies(issue, 3303)[0].body).toContain('both still up to date');
+      expect((await rows('plan'))[0]).toMatchObject({
+        askedCommit: null,
+        checkedCommit: b1,
+      });
+
+      await deliver(t, commentNow(33, 3304, '/approve'));
+
+      expect(await run()).toMatchObject({ stopStep: 'workspace' });
+      expect(questions(issue)).toHaveLength(1);
+      expect(replies(issue, 3304)).toEqual([]);
+    });
+
+    it('the Spec’s step skill changed → the question names its `SKILL.md` "which it read" and "its `spec` skill"; `/refresh` → the method sentence, no `.github-agent/` path', async () => {
+      const issue = await specWritten(t, 34, { reads: ['src/index.ts'] });
+      t.repo.seedFile(
+        'main',
+        '.github-agent/skills/spec/SKILL.md',
+        skillMd('spec', 'Placeholder spec. Add a "## Risks" section.'),
+      );
+
+      await deliver(t, commentNow(34, 3401, '/approve'));
+
+      expect(questions(issue)).toHaveLength(1);
+      expect(questions(issue)[0].body).toContain(
+        '`main` changed `.github-agent/skills/spec/SKILL.md`, which it read ([compare](',
+      );
+      expect(questions(issue)[0].body).toContain(
+        'Comment `/refresh` to bring it up to date with `main` and its `spec` skill, or',
+      );
+      t.models.replyJson(UP_TO_DATE);
+
+      await deliver(t, commentNow(34, 3402, '/refresh'));
+
+      const [frame] = refreshFrames('Spec');
+      expect(frame).toContain(METHOD('Spec'));
+      expect(frame).toContain('None of the files you can read changed since.');
+      // The frame (before spec 11's skill block, which names the skill's folder) names no hidden path (P41).
+      expect(frame.split('<skill ')[0]).not.toMatch(/github-agent/i);
+    });
+
+    it('the Plan waits, only the `plan` skill changed → only the Plan’s refresh gets the method sentence', async () => {
+      const issue = await planWaiting(35, ['src/index.ts'], ['src/index.ts']);
+      t.repo.seedFile(
+        'main',
+        '.github-agent/skills/plan/SKILL.md',
+        skillMd('plan', 'Placeholder plan. Add a "## Risks" section.'),
+      );
+      t.models.replyJson(UP_TO_DATE).replyJson(UP_TO_DATE);
+
+      await deliver(t, commentNow(35, 3502, '/refresh'));
+
+      expect(replies(issue, 3502)).toHaveLength(1);
+      expect(refreshFrames('Spec')[0]).not.toContain('The method below');
+      expect(refreshFrames('Plan')[0]).toContain(METHOD('Plan'));
+    });
   });
 });

@@ -25,6 +25,24 @@ export interface RefreshFrameValues {
   to: string;
   /** Null: the comparison failed (plan P32), the refresh still runs. */
   changes: RefreshChanges | null;
+  /** Spec 14 (UAW7): the step's skill changed since, or may have; absent: no sentence. */
+  method?: MethodChange;
+}
+
+export type MethodChange = 'changed' | 'may-have-changed';
+
+/**
+ * Spec 14 (UAW7): `changed` when a changed path is under the step skill's folder; `may-have-changed` when GitHub
+ * couldn't compare (null), or cut the list with none of the skill's files in it; else nothing.
+ */
+export function methodChange(
+  listed: { paths: string[]; complete: boolean } | null,
+  skillFolder: string,
+): MethodChange | undefined {
+  if (!listed) return 'may-have-changed';
+  const prefix = `${skillFolder.replace(/\/+$/, '')}/`;
+  if (listed.paths.some((path) => path.startsWith(prefix))) return 'changed';
+  return listed.complete ? undefined : 'may-have-changed';
 }
 
 export function refreshFrame({
@@ -32,6 +50,7 @@ export function refreshFrame({
   from,
   to,
   changes,
+  method,
 }: RefreshFrameValues): string {
   const name = kindName(kind);
   const max = DOCUMENT_MAX_CHARS.toLocaleString('en-US');
@@ -45,13 +64,26 @@ ${changedLine(name, from, changes)}
 
 Read what you need with read_file at ${to}. Then change only what the new code makes wrong or incomplete, and keep
 everything else exactly as written, including the edits people made: the same sections, wording and order. If the
-method below says how to update a ${name}, follow it.${planOnly}
+method below says how to update a ${name}, follow it.${methodSentence(name, method)}${planOnly}
 
 Answer with:
 - upToDate: true when nothing needs to change; then leave changes and document empty.
 - changes: what you changed and why, one short line each, at most ${MAX_REFRESH_CHANGES}.
 - document: the whole updated ${name}, at most ${max} characters, in its language. Write logins in backticks
   and add no HTML comments.`;
+}
+
+/** Spec 14 (UAW7): the method changed, so the sections it asks for may change too. */
+function methodSentence(
+  name: string,
+  method: MethodChange | undefined,
+): string {
+  if (!method) return '';
+  const verb = method === 'changed' ? 'changed' : 'may have changed';
+  return (
+    ` The method below ${verb} since the ${name} was written. Where the ${name} no longer follows it, change that ` +
+    'too, even when that adds, renames or removes a section; keep everything else as written.'
+  );
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { refreshFrame, refreshTurns } from './refresh-frame.js';
+import { methodChange, refreshFrame, refreshTurns } from './refresh-frame.js';
 
 const FROM = '4f2c1ab'.padEnd(40, '0');
 const TO = '9e1d0c2'.padEnd(40, '0');
@@ -125,5 +125,76 @@ describe('refreshTurns', () => {
         text: '# Plan',
       },
     ]);
+  });
+});
+
+describe('the method sentence (spec 14, UAW7)', () => {
+  const SENTENCE =
+    'If the\nmethod below says how to update a Spec, follow it. The method below changed since the Spec was ' +
+    'written. Where the Spec no longer follows it, change that too, even when that adds, renames or removes a ' +
+    'section; keep everything else as written.\n';
+  const frame = (paths: string[], method?: 'changed' | 'may-have-changed') =>
+    refreshFrame({
+      kind: 'spec',
+      from: FROM,
+      to: TO,
+      changes: { paths, read: [], complete: true },
+      method,
+    });
+
+  it('changed → the sentence right after "follow it."; absent → none', () => {
+    expect(frame(['src/index.ts'], 'changed')).toContain(SENTENCE);
+    expect(frame(['src/index.ts'])).not.toContain('The method below');
+  });
+
+  it('may-have-changed → the same sentence with "may have changed"; a Plan’s line follows it', () => {
+    expect(frame(['src/index.ts'], 'may-have-changed')).toContain(
+      'The method below may have changed since the Spec was written.',
+    );
+    expect(
+      refreshFrame({
+        kind: 'plan',
+        from: FROM,
+        to: TO,
+        changes: null,
+        method: 'changed',
+      }),
+    ).toContain(
+      'keep everything else as written.\nWhat to build still comes from the approved Spec below;',
+    );
+  });
+
+  it('only the skill’s hidden paths changed → "None of the files you can read changed since." and the sentence; no `.github-agent/` path', () => {
+    const text = frame(['.github-agent/skills/spec/SKILL.md'], 'changed');
+    expect(text).toContain('None of the files you can read changed since.');
+    expect(text).toContain('The method below changed since the Spec');
+    expect(text).not.toMatch(/github-agent/i);
+  });
+});
+
+describe('methodChange (spec 14, UAW7)', () => {
+  const FOLDER = '.github-agent/skills/spec';
+
+  it('a path under the step skill’s folder → changed, even in a cut list', () => {
+    expect(
+      methodChange(
+        { paths: ['src/a.ts', `${FOLDER}/SKILL.md`], complete: true },
+        FOLDER,
+      ),
+    ).toBe('changed');
+    expect(
+      methodChange({ paths: [`${FOLDER}/refs/x.md`], complete: false }, FOLDER),
+    ).toBe('changed');
+  });
+
+  it('none of its files: complete → nothing; cut → may-have-changed; not compared → may-have-changed', () => {
+    const others = ['src/a.ts', '.github-agent/skills/specs-other/SKILL.md'];
+    expect(methodChange({ paths: others, complete: true }, FOLDER)).toBe(
+      undefined,
+    );
+    expect(methodChange({ paths: others, complete: false }, FOLDER)).toBe(
+      'may-have-changed',
+    );
+    expect(methodChange(null, FOLDER)).toBe('may-have-changed');
   });
 });

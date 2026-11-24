@@ -433,19 +433,19 @@ files in it. The files line is unchanged (it never names those paths). T1's stor
 this task proves it end to end.
 
 **Acceptance criteria:**
-- [ ] Unit: the sentence present, absent, "may have changed"; only hidden paths changed → "None of the files you can
+- [x] Unit: the sentence present, absent, "may have changed"; only hidden paths changed → "None of the files you can
   read changed since." and the sentence; no `.github-agent/` path in the frame
-- [ ] A question, then `/refresh` → Spec v2 → `/approve` → Plan v1 at once, NO question
-- [ ] A question, then `/refresh` finds it up to date → `asked_commit` empty, `checked_commit` = now; an `/approve`
+- [x] A question, then `/refresh` → Spec v2 → `/approve` → Plan v1 at once, NO question
+- [x] A question, then `/refresh` finds it up to date → `asked_commit` empty, `checked_commit` = now; an `/approve`
   written before the question and processed after the refresh → counts (the question no longer applies)
-- [ ] The Plan waits: a question, `/refresh` → "both still up to date", the Plan's `asked_commit` empty → `/approve` →
+- [x] The Plan waits: a question, `/refresh` → "both still up to date", the Plan's `asked_commit` empty → `/approve` →
   the `workspace` stop, NO question
-- [ ] The Spec's step skill changed → the question names its `SKILL.md` "which it read" with "and its `spec` skill";
+- [x] The Spec's step skill changed → the question names its `SKILL.md` "which it read" with "and its `spec` skill";
   `/refresh` → the frame has the method sentence; while the Plan waits with only the `plan` skill changed → only the
   Plan's refresh gets it
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T6
 **Files:** `src/documents/refresh-frame.ts` (+ spec), `src/documents/document-refresh.ts`,
@@ -454,8 +454,8 @@ this task proves it end to end.
 
 ### Checkpoint 3 — `/refresh` on the sandbox
 
-- [ ] All four suites pass; `npm run build` passes
-- [ ] Matrix rows on the sandbox: `#C` (2 rows), `#D` (2 rows)
+- [x] All four suites pass; `npm run build` passes
+- [x] Matrix rows on the sandbox: `#C` (2 rows), `#D` (2 rows)
 - [ ] You review and commit
 
 ---

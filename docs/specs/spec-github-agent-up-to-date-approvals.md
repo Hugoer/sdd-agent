@@ -610,7 +610,9 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT action
 
 Checked so far: the config row at Checkpoint 1 (2026-11-23, port 3101, test database); Checkpoint 2 (2026-11-24)
 on `#A` = #72, `#B` = #73, `#E` = #74, `#F` = #75, `#G` = #71, `#H` = #76 (sandbox commits `56f564d`, `3d8fe8a`,
-`75d880f`, `57b81de`, `e2598a3`, `609b00e`, undone at Checkpoint 4).
+`75d880f`, `57b81de`, `e2598a3`, `609b00e`); Checkpoint 3 (2026-11-24) on `#C` = #77, `#D` = #78 (commits `313d5b1`,
+the rename, as `PACKAGE_NAME` in `src/index.ts` and its test; `dcc3067`, a comment line in `eslint.config.mjs`, on
+the Plan's "Read:" line; `785c866`, the `spec` skill's "## Risks"). Every sandbox commit is undone at Checkpoint 4.
 
 Each row: a sandbox issue named in the plan's checkpoints; commits to the sandbox's `main` made with `gh` as the
 developer (spec 7's practice) and undone at the end. "A file it read": a path on the document's "Read:" line; "an
@@ -641,17 +643,17 @@ with `main` unchanged)
   Spec v1 and Plan v1 up to date".
 
 **A question, then `/refresh`** (`#C`, `full-sdd`, Spec v1 waiting)
-- [ ] Question after a change that makes the Spec wrong (rename a function it names in `src/index.ts`); `/refresh`
+- [x] Question after a change that makes the Spec wrong (rename a function it names in `src/index.ts`); `/refresh`
   → Spec v2 (spec 7); `/approve` → Plan v1 at once, NO question.
-- [ ] Plan v1 waiting: question after a change to a file the Plan read that changes nothing for it (a comment line);
+- [x] Plan v1 waiting: question after a change to a file the Plan read that changes nothing for it (a comment line);
   `/refresh` → ONE "both still up to date" reply; the Plan's `asked_commit` empty, `checked_commit` = the commit
   now; `/approve` → the `workspace` stop, NO question.
 
 **The step skill** (`#D`, `full-sdd`, Spec v1 waiting)
-- [ ] Push a change to `.github-agent/skills/spec/SKILL.md` only (it now asks for a "## Risks" section), `/approve`
+- [x] Push a change to `.github-agent/skills/spec/SKILL.md` only (it now asks for a "## Risks" section), `/approve`
   → ONE question naming `.github-agent/skills/spec/SKILL.md` "which it read" and offering "`/refresh` to bring it up
   to date with `main` and its `spec` skill".
-- [ ] `/refresh` → Spec v2 with a "Risks" section, its "What changed" says so; the refresh call's prompt has "The
+- [x] `/refresh` → Spec v2 with a "Risks" section, its "What changed" says so; the refresh call's prompt has "The
   method below changed since the Spec was written" and its files line names no `.github-agent/` path. `/approve` →
   Plan v1, NO question. The skill change is undone at the end.
 
