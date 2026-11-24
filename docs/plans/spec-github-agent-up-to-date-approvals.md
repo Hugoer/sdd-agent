@@ -1,6 +1,6 @@
 # Implementation Plan — Spec #14: Up-to-date Approvals
 
-> **Created:** 2026-11-23 · **Status:** approved 2026-11-23, not built; fresh-context review 2026-11-23, its fixes
+> **Created:** 2026-11-23 · **Status:** approved 2026-11-23; built and verified 2026-11-24 (Checkpoints 1–4); fresh-context review 2026-11-23, its fixes
 > applied (see "Review"); UP1, UP2 and UP20 confirmed one at a time the same day, all as recommended
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-up-to-date-approvals.md` (spec 14,
@@ -186,7 +186,7 @@ above. The overview needs nothing (its rows were updated with the spec).
 - [x] The two `#H` matrix fixes are in; every matrix row can be checked as written
 
 **Verification:**
-- [ ] Manual: you read the spec's diff (Checkpoint 1)
+- [x] Manual: you read the spec's diff (Checkpoint 1)
 
 **Dependencies:** your approval of this plan
 **Files:** `docs/specs/spec-github-agent-up-to-date-approvals.md`
@@ -283,7 +283,7 @@ facts about the code no longer hold, follow the code at {commit}; what to build 
 - [x] Matrix `#H`, the config row: my instance (port 3101, the test database) with `APPROVAL_LARGE_CHANGE_FILES=14`,
   then `=151` → it doesn't start, the log names the setting and "must be an integer from 15 to 150"; unset → it
   starts (that the default is 15 shows in `#H`'s 16-file row at Checkpoint 2)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -415,7 +415,7 @@ reply). The refusal: `document_actions` `approve-refused`, result `before-questi
 - [x] All four suites pass; `npm run build` passes
 - [x] Matrix rows on the sandbox (plan "Verification matrix on the sandbox" below): `#A` (2 rows), `#B` (4), `#E`
   (2), `#F` (2), `#G` (1), `#H` (`not-compared`, `large-change`)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -456,7 +456,7 @@ this task proves it end to end.
 
 - [x] All four suites pass; `npm run build` passes
 - [x] Matrix rows on the sandbox: `#C` (2 rows), `#D` (2 rows)
-- [ ] You review and commit
+- [x] You review and commit
 
 ---
 
@@ -471,11 +471,11 @@ comments of the issues given; `APPROVAL_LARGE_CHANGE_FILES` from `.env` (default
 breaks each with a fixture and expects it to fail, and passes a clean one.
 
 **Acceptance criteria:**
-- [ ] The four invariants as the spec words them, each with a failing fixture and the clean one passing
-- [ ] Usage line and exit 1 on a missing argument or variable; exit 1 when any invariant fails
+- [x] The four invariants as the spec words them, each with a failing fixture and the clean one passing
+- [x] Usage line and exit 1 on a missing argument or variable; exit 1 when any invariant fails
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass (Vitest already includes `scripts/**/*.spec.mjs`)
+- [x] `npm run typecheck && npm run lint && npm test` pass (Vitest already includes `scripts/**/*.spec.mjs`)
 
 **Dependencies:** T7
 **Files:** `scripts/up-to-date-approvals-invariants.mjs`, `scripts/up-to-date-approvals-invariants.spec.mjs`
@@ -490,12 +490,12 @@ invariant script's command. `AGENTS.md` (State): spec 14 built; next: spec 12 (`
 (`bot-feedback`) interviews, then 8. `README.md`: one phrase on the question where it describes `/approve`.
 
 **Acceptance criteria:**
-- [ ] No text in the guide, `AGENTS.md` or the README still says the bot "never blocks" or posts a warning reply or a
+- [x] No text in the guide, `AGENTS.md` or the README still says the bot "never blocks" or posts a warning reply or a
   ⚠️ line
-- [ ] The example query runs on the dev database
+- [x] The example query runs on the dev database
 
 **Verification:**
-- [ ] Manual: you read the diff
+- [ ] Manual: you read the diff (Checkpoint 4)
 
 **Dependencies:** T8
 **Files:** `docs/guides/setup-github-agent-local.md`, `AGENTS.md`, `README.md`
@@ -509,13 +509,13 @@ sandbox's test commits undone in one commit back to `cf0e08c`'s files (`bulk/` a
 spec; the spec's and this plan's status lines "built and verified <date>".
 
 **Acceptance criteria:**
-- [ ] The four invariants pass on `#A`–`#H`; a wrong issue list fails
-- [ ] The sandbox's `main` has `cf0e08c`'s files (checked with `git ls-remote` and the files at the new commit)
-- [ ] Every matrix row ticked or written down with why (a row the real model doesn't follow after 2–3 tries, with
+- [x] The four invariants pass on `#A`–`#H`; a wrong issue list fails
+- [x] The sandbox's `main` has `cf0e08c`'s files (checked with `git ls-remote` and the files at the new commit)
+- [x] Every matrix row ticked or written down with why (a row the real model doesn't follow after 2–3 tries, with
   the integration test that covers it)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T9
 **Files:** `docs/specs/spec-github-agent-up-to-date-approvals.md`, this plan
@@ -523,7 +523,7 @@ spec; the spec's and this plan's status lines "built and verified <date>".
 
 ### Checkpoint 4 — Complete
 
-- [ ] Every success criterion of the spec holds
+- [x] Every success criterion of the spec holds
 - [ ] You review and commit
 
 ---

@@ -55,12 +55,18 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   instruction files). People edit the comment; `/approve` approves the text between its markers (an Approver; the
   `ApprovalGate` judges it: written before the document, already approved, deleted, empty); `/refresh` (a
   Participant) checks a document against `main` (v2 with a diff, or "still up to date"); a deleted waiting document
-  gets one explanation and `/restore` brings it back; `code-only` posts "Ready to code". Approvals compare the
-  commit a document read with `main` (the Plan's ⚠️ line, a warning reply on the last approval). Every reply links
-  the comment it answers. Two tables, `task_documents` and `document_actions` (`DocumentsStore`); the run-ended
-  comment links the run's documents; `node scripts/spec-plan-approvals-invariants.mjs <issues>` checks eight
-  invariants. Until spec 8, the last `/approve` stops the run at `workspace`. Next: spec 14 (`up-to-date-approvals`),
-  then 12, 13, 8 (overview build order; 14, 12 and 13 to interview). Repo:
+  gets one explanation and `/restore` brings it back; `code-only` posts "Ready to code". Every reply links the
+  comment it answers. Two tables, `task_documents` and `document_actions` (`DocumentsStore`); the run-ended comment
+  links the run's documents; `node scripts/spec-plan-approvals-invariants.mjs <issues>` checks eight invariants.
+  Until spec 8, the last `/approve` stops the run at `workspace`. Spec 14 (`up-to-date-approvals`) built
+  2026-11-24, in `src/documents`: an `/approve` doesn't count yet when files its document read (`context_loads`)
+  changed on `main` since its starting point (written, last found up to date by `/refresh`, or last asked), GitHub
+  can't compare, or more than `APPROVAL_LARGE_CHANGE_FILES` (15) files changed: the bot posts one question
+  (`approve-asked`, `IGNORED`; `/refresh`, or `/approve` again); an `/approve` written before it gets
+  `before-question`. No ⚠️ line, no warning reply; the Plan's prompt reads its range from `approved_from_commit`;
+  `/refresh` gets a method sentence when the step's skill changed. `node scripts/up-to-date-approvals-invariants.mjs
+  <issues>` checks four invariants. Next: the interviews of spec 12 (`bot-data-protection`) and spec 13
+  (`bot-feedback`, with `status: plan-review`), then 8 (overview build order). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 

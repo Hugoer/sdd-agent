@@ -20,8 +20,9 @@ questions per comment, each with its guess, reads their answers, and stops at a 
 the target repo's own instructions: its root `AGENTS.md` is always in the prompt, and the model loads the repo's
 skills and other `AGENTS.md` files when the issue needs them, within a limit per answer; the comment says what it
 read, and every file it got is recorded with its size and tokens. After Grill Me the bot writes the Spec and, in
-`full-sdd`, the Plan as issue comments people edit and approve with `/approve`; `/refresh` brings one up to date
-with `main`, `/restore` brings back a deleted one, and every reply links the comment it answers. The code steps are
+`full-sdd`, the Plan as issue comments people edit and approve with `/approve`; when `main` changed files a
+document read, the bot asks before an `/approve` counts. `/refresh` brings one up to date with `main`, `/restore`
+brings back a deleted one, and every reply links the comment it answers. The code steps are
 not built yet, so the last `/approve` stops the run at the `workspace` step.
 
 ## Get started

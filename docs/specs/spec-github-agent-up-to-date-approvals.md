@@ -1,6 +1,7 @@
 # Spec #14 — GitHub AI Agent: Up-to-date Approvals
 
-> **Created:** 2026-11-23 · **Status:** approved 2026-11-23 (draft the same day); not built. UA1–UA7 come from the interview of 2026-11-23
+> **Created:** 2026-11-23 · **Status:** approved 2026-11-23 (draft the same day); built and verified 2026-11-24 (every
+> matrix row on sandbox issues #71–#78; the invariants on #71–#78, and failing with #78 left out). UA1–UA7 come from the interview of 2026-11-23
 > and were confirmed by the developer; UAW1–UAW12 were decided while writing. A fresh-context review's fixes are
 > applied (marked "2026-11-23, review"). In the write-time interview of 2026-11-23 the developer confirmed UAW4 and
 > changed UAW5 (a large change asks too, with a setting); the other UAW decisions follow from rules already settled
@@ -612,7 +613,8 @@ Checked so far: the config row at Checkpoint 1 (2026-11-23, port 3101, test data
 on `#A` = #72, `#B` = #73, `#E` = #74, `#F` = #75, `#G` = #71, `#H` = #76 (sandbox commits `56f564d`, `3d8fe8a`,
 `75d880f`, `57b81de`, `e2598a3`, `609b00e`); Checkpoint 3 (2026-11-24) on `#C` = #77, `#D` = #78 (commits `313d5b1`,
 the rename, as `PACKAGE_NAME` in `src/index.ts` and its test; `dcc3067`, a comment line in `eslint.config.mjs`, on
-the Plan's "Read:" line; `785c866`, the `spec` skill's "## Risks"). Every sandbox commit is undone at Checkpoint 4.
+the Plan's "Read:" line; `785c866`, the `spec` skill's "## Risks"). Checkpoint 4 (2026-11-24): the invariants on
+#71–#78 pass, and invariant 1 fails with #78 left out; every sandbox commit undone by `872da41` (`cf0e08c`'s tree).
 
 Each row: a sandbox issue named in the plan's checkpoints; commits to the sandbox's `main` made with `gh` as the
 developer (spec 7's practice) and undone at the end. "A file it read": a path on the document's "Read:" line; "an
@@ -687,16 +689,16 @@ with `main` unchanged)
 live: the `finished_at` of its migration in `_prisma_migrations`; invariants 2 and 3 read only the given issues'
 rows, 1 and 4 every row since the migration, since the dev bot runs spec 7's approval code between the migration and
 the question's build (plan UP20, 2026-11-23); test once that it can fail, e.g. with a wrong issue list)
-- [ ] Every `approve-asked` row answers an `/approve` that approved nothing (no `task_documents.approve_comment_id`
+- [x] Every `approve-asked` row answers an `/approve` that approved nothing (no `task_documents.approve_comment_id`
   equals its `source_comment_id`) and got no other reply, and its reply was posted exactly once.
-- [ ] Every Spec or Plan approved since spec 14 went live with `stale_files` not empty, `changed_files` above
+- [x] Every Spec or Plan approved since spec 14 went live with `stale_files` not empty, `changed_files` above
   `APPROVAL_LARGE_CHANGE_FILES` (the script reads `.env`, default 15), `changed_complete` false, or
   `changed_complete` empty while `approved_commit` differs from `approved_from_commit` (a compare that failed) has an
   `approve-asked` row for its version whose reply was posted no later than the approving `/approve` was written
   (GitHub's second: the same second counts).
-- [ ] No `approve-warning` row, and no Plan comment with a ⚠️ line in its header (either form), since spec 14 went
+- [x] No `approve-warning` row, and no Plan comment with a ⚠️ line in its header (either form), since spec 14 went
   live.
-- [ ] Every `before-question` reply answers an `/approve` written before a question of its version that was posted
+- [x] Every `before-question` reply answers an `/approve` written before a question of its version that was posted
   before that reply.
 
 ## Success criteria

@@ -24,6 +24,9 @@
 > **Updated:** 2026-11-23 for spec #7 (`docs/specs/spec-github-agent-spec-plan-approvals.md`): the real `spec` and
 > `plan` skills, "When the bot writes a Spec and a Plan" (editing, `/approve`, `/refresh`, `/restore`, the replies),
 > the two document tables in "Usage data", the new ignore reasons, the bad-model test branch, the invariant script.
+> **Updated:** 2026-11-24 for spec #14 (`docs/specs/spec-github-agent-up-to-date-approvals.md`): an `/approve` asks
+> first when `main` changed files the document read (the question, `before-question`, the method sentence of
+> `/refresh`), `APPROVAL_LARGE_CHANGE_FILES`, the new columns and a query in "Usage data", the invariant script.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
 and accepted: `npm run db:events` shows the row `DONE`, the app log shows `accepted ISSUE_OPENED`, and the issue
@@ -367,6 +370,7 @@ GRILL_MAX_QUESTIONS_PER_ROUND=3
 GRILL_CONFIDENCE_THRESHOLD=95
 SKILL_DISCOVERY_MAX_LOADS=10
 SKILL_DISCOVERY_MAX_BYTES=204800
+APPROVAL_LARGE_CHANGE_FILES=15
 ```
 
 `.env` and `*.pem` are gitignored. Never commit them. Use an absolute path for the key: `~` is not expanded.
@@ -387,6 +391,9 @@ SKILL_DISCOVERY_MAX_BYTES=204800
   - `SKILL_DISCOVERY_MAX_LOADS` (default `10`, 1–50): requests to load a skill or a file. Every request counts,
     even one that finds nothing.
   - `SKILL_DISCOVERY_MAX_BYTES` (default `204800`, 1,024–1,048,576): bytes loaded in all.
+- `APPROVAL_LARGE_CHANGE_FILES` (default `15`, 15–150, a whole number): an `/approve` asks first when more files
+  than this changed on `main` since the document's starting point, even when none of them is one it read ("When the
+  bot writes a Spec and a Plan"). A value outside its range makes the app refuse to start, naming it.
 - **Never set a LangChain tracing switch** (`LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2`, `LANGCHAIN_TRACING`,
   `LANGCHAIN_TRACING_V2`) to `true`, in `.env` or in your shell: it would send every prompt to LangSmith. The app
   refuses to start and names the switch.
@@ -640,8 +647,20 @@ node --env-file-if-exists=.env scripts/spec-plan-approvals-invariants.mjs 48 49 
 ```
 
 It prints PASS or FAIL for eight invariants (one comment per version, approvals after their version, at most one
-answer per command, the warning replies, the `CLAUDE.md` canary, the sizes, every Spec and Plan call owned by a row,
-no `workspace` step without an approval) and exits 1 on any FAIL.
+answer per command, spec 7's warning replies, the `CLAUDE.md` canary, the sizes, every Spec and Plan call owned by a
+row, no `workspace` step without an approval) and exits 1 on any FAIL.
+
+**Spec 14's invariant check**, the same way, over the rows stored since spec 14's migration ran:
+
+```sh
+node --env-file-if-exists=.env scripts/up-to-date-approvals-invariants.mjs 71 72 73   # every issue number
+```
+
+Four invariants: every question answers an `/approve` that approved nothing and got no other reply, posted once;
+every approval of a document whose read files changed (or that couldn't be compared, or saw more than
+`APPROVAL_LARGE_CHANGE_FILES` changes) came after a question about it; no warning reply and no ⚠️ line in a Plan's
+header; every "written before the bot's question" reply is right. The second and third read only the issues you
+name; the others read every row, so a missing issue fails them.
 
 ## 11. Check the GitHub App with the smoke script
 
@@ -825,14 +844,16 @@ grill_of 14
 exists, the commit it read, the text posted and the text approved, who approved it and when, the lines people
 changed, the files that changed on `main` before the approval) and `document_actions` (one row per human action
 answered: a refused `/approve`, the hint, a late comment, a `/refresh` with each call's result, a deletion, a
-`/restore`, a warning reply). Every version and action of one issue, oldest first:
+`/restore`; spec 14: a question, `approve-asked`, with the commits it compared, the flagged files, how many files
+changed and whether GitHub cut the list; spec 7's `approve-warning` rows are no longer written). Every version and
+action of one issue, oldest first:
 
 ```sh
 set -a; source .env; set +a
 docs_of() {   # docs_of <issue number>
   docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT d.created_at::time(0) AS at, \
     r.number AS run, d.kind, d.version AS v, d.origin, d.post_state AS posted, left(d.commit, 7) AS commit, \
-    left(d.checked_commit, 7) AS checked, d.approved_by, date_trunc('second', d.approved_at - d.posted_at) AS waited, \
+    left(d.checked_commit, 7) AS checked, left(d.asked_commit, 7) AS asked, d.approved_by, date_trunc('second', d.approved_at - d.posted_at) AS waited, \
     d.lines_added AS added, d.lines_removed AS removed, d.stale_files, d.superseded_at IS NOT NULL AS superseded, \
     d.deleted_at IS NOT NULL AS deleted FROM task_documents d JOIN runs r ON r.id = d.run_id \
     JOIN tasks t ON t.id = d.task_id WHERE t.external_ref = '$TARGET_REPO#$1' ORDER BY d.created_at"
@@ -840,7 +861,8 @@ docs_of() {   # docs_of <issue number>
 actions_of() {  # actions_of <issue number>
   docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT a.created_at::time(0) AS at, \
     r.number AS run, a.action, a.result, a.sender, a.source_comment_id AS comment, cardinality(a.log_ids) AS calls, \
-    a.reply_post_state AS reply FROM document_actions a LEFT JOIN runs r ON r.id = a.run_id \
+    a.reply_post_state AS reply, left(a.from_commit, 7) AS from_c, left(a.to_commit, 7) AS to_c, a.files, \
+    a.changed_files FROM document_actions a LEFT JOIN runs r ON r.id = a.run_id \
     JOIN tasks t ON t.id = a.task_id WHERE t.external_ref = '$TARGET_REPO#$1' ORDER BY a.created_at"
 }
 docs_of 14; actions_of 14
@@ -849,7 +871,11 @@ docs_of 14; actions_of 14
 - `origin`: `written` (the model wrote it), `refreshed` (a `/refresh` changed it: the next number) or `restored`
   (`/restore`: the same number). `checked`: the commit a refresh last found it up to date at. `waited`: from the
   comment to its approval. `added` and `removed`: the lines people changed before `/approve` (0 and 0 = approved as
-  written). `stale_files`: files it read that changed on `main` before the approval.
+  written). `stale_files`: files it read that changed on `main` before the approval (since spec 14, an Approver
+  approved them after a question). `asked`: the commit of the bot's open question, empty once a refresh closes it.
+- `result` of an `approve-asked` (spec 14): `stale` (files it read changed; `files` names them with who read them),
+  `not-compared` (GitHub couldn't compare), `large-change` (`changed_files` above the setting, none read);
+  `approve-refused` gains `before-question`.
 - `result` of a `refresh`: `nothing-changed`, `up-to-date`, `spec-changed`, `plan-changed`, or `deleted`, `empty`,
   `already-approved` (nothing done); of a `restore`: `restored`, `restored-last-version`, `nothing-deleted`,
   `approved`; of the `-refused` rows: the status. `calls`: the refresh's model calls (one or two).
@@ -868,6 +894,12 @@ q "SELECT action, result, count(*) FROM document_actions GROUP BY action, result
 q "SELECT d.kind, d.origin, count(DISTINCT d.id) AS versions, count(e.id) AS requests, sum(e.input_tokens) AS input, \
   sum(e.output_tokens) AS output FROM task_documents d JOIN execution_logs l ON l.id = d.log_id \
   JOIN execution_logs e ON e.call_id = l.call_id GROUP BY d.kind, d.origin ORDER BY 1, 2"
+# Spec 14: the questions by kind and result, and what people did next (a later /refresh on the issue, the approval)
+q "SELECT d.kind, a.result, count(*) AS questions, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM document_actions n \
+  WHERE n.task_id = a.task_id AND n.action = 'refresh' AND n.created_at > a.created_at)) AS then_refreshed, \
+  count(*) FILTER (WHERE d.approved_at > a.created_at) AS then_approved, \
+  date_trunc('second', avg(d.approved_at - a.created_at)) AS avg_delay FROM document_actions a \
+  JOIN task_documents d ON d.id = a.document_id WHERE a.action = 'approve-asked' GROUP BY d.kind, a.result ORDER BY 1, 2"
 ```
 
 ## When the bot asks questions
@@ -936,13 +968,23 @@ what it read.
   for the Plan, the next step is the code: until spec 8 the run stops at `workspace` (step 9, "The `workspace`
   stop"). `/approve please` gets a hint once; an `/approve` written before the document was posted, on a document
   that is gone or empty, or where nothing waits, gets one reply saying why. Every reply links the comment it answers.
-- **When `main` changed files a document read**, the bot says so but never blocks (until spec 14): the Plan's
-  header has a ⚠️ line naming the files with a compare link, and the last `/approve` before code gets one warning
-  reply naming them ("which it read", "which the approved Spec read"). The code is written from today's `main`.
+- **When `main` changed files a document read**, its `/approve` doesn't count yet: the bot asks first, in one reply
+  that names the files ("which it read", "which the approved Spec read"; a step skill's file names its skill), a
+  compare link, and two ways on: `/refresh` (bring it up to date) or `/approve` again (approve it as it is). Nothing
+  else changes: the status stays, the Plan isn't written. It also asks when GitHub can't compare the commits ("the
+  bot couldn't compare `4f2c1ab` …", e.g. after a force-push) and when more than `APPROVAL_LARGE_CHANGE_FILES` (15)
+  files changed even though none was read. The comparison starts where the document was written, where a
+  `/refresh` last found it up to date, or where the bot last asked: if `main` changes again before the next
+  `/approve`, a second question names only the new changes ("since the bot asked"). An `/approve` written before the
+  bot's question was posted gets "was written before the bot's question" and doesn't count. Once an `/approve`
+  counts, the Plan's prompt lists what changed since the Spec was written; nothing is posted about it.
 - **`/refresh`** (a Participant) checks the waiting document against today's `main`: nothing changed → one reply,
   no model call; still right → "still up to date" (that commit becomes its starting point); otherwise **v2**, a new
   comment that "replaces v1 above", with "What changed" and a folded diff. While the Plan waits, the approved Spec
   is checked first: if it changes, Spec v2 sends the issue back to `spec-review` and the Plan no longer counts.
+  After a question, "still up to date" closes it (the next `/approve` compares from there). When the step's own
+  skill changed (e.g. `.github-agent/skills/spec/SKILL.md` asks for a new section), the refresh is told the method
+  changed, so v2 may add, rename or remove a section to follow it.
 - **A deleted Spec or Plan** (only the one waiting for `/approve`) gets one explanation naming who deleted it.
   **`/restore`** (a Participant) posts it again as it read when deleted (or, if the bot missed the deletion, its own
   last version, saying edits are lost); after that, `/approve` counts again. Any other deleted comment changes

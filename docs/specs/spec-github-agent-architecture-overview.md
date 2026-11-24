@@ -208,7 +208,9 @@ comments, without acting under the developer's identity or touching their checko
   longer counts), a new version as a new comment with the model's "What changed" list and a diff computed by the
   bot, or one "still up to date" reply; no model call when the branch hasn't moved. The bot owns the refresh frame;
   the method still comes from the step skill. Reason (the developer): the Spec is the most important document and
-  must never stay stale while only the Plan is updated; a restart is too much for a small change.
+  must never stay stale while only the Plan is updated; a restart is too much for a small change. 2026-11-24
+  (spec 14 built, D34): "It never blocks" no longer holds: an `/approve` whose document's read files changed asks
+  first (one question; `/refresh`, or `/approve` again), and the header line and the warning reply are gone.
 - **D30 A deleted waiting document can be restored (2026-11-21, spec 7 SP9).** Deleting the document that waits
   for approval gets one explanation at once (who deleted it; `/restore`, or restart); GitHub's deletion event
   carries the last text, edits included, and the bot stores it. `/restore` (a Participant) posts it again with no
