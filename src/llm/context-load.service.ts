@@ -106,10 +106,16 @@ export class ContextLoadService {
   /**
    * Spec 7 (SP3, plan P20): the files the calls of these `execution_logs` rows loaded (outcome `loaded`, with a path;
    * listings left out), each with the row it belongs to: what a document's approval compares with the changed files.
+   * Spec 14 (plan UP5): with its `kind` and `skill`, so a step skill's file is known as one.
    */
-  async loadedPaths(
-    logIds: string[],
-  ): Promise<{ logId: string; path: string }[]> {
+  async loadedPaths(logIds: string[]): Promise<
+    {
+      logId: string;
+      path: string;
+      kind: string | null;
+      skill: string | null;
+    }[]
+  > {
     if (logIds.length === 0) return [];
     const logs = await this.prisma.executionLog.findMany({
       where: { id: { in: logIds }, callId: { not: null } },
@@ -123,12 +129,14 @@ export class ContextLoadService {
         path: { not: null },
         kind: { not: 'listing' },
       },
-      select: { callId: true, path: true },
+      select: { callId: true, path: true, kind: true, skill: true },
       orderBy: { createdAt: 'asc' },
     });
-    return rows.map(({ callId, path }) => ({
+    return rows.map(({ callId, path, kind, skill }) => ({
       logId: logOfCall.get(callId)!,
       path: path!,
+      kind,
+      skill,
     }));
   }
 

@@ -35,6 +35,7 @@ import {
   type NothingWaits,
 } from './document-comments.js';
 import {
+  APPROVE_ASKED,
   APPROVE_REFUSED,
   DocumentPosts,
   REFRESH_REFUSED,
@@ -296,10 +297,13 @@ export class DocumentsHandler implements StepHandler {
     });
   }
 
-  private reply(context: StepContext): Promise<StepOutcome> {
+  private async reply(context: StepContext): Promise<StepOutcome> {
     const { input } = context;
     switch (input.type) {
       case 'APPROVE':
+        // Spec 14 (plan UP21): an `/approve` that already asked (a retry) gets only its question, whatever the run's
+        // state is now.
+        if (await this.posts.replayQuestion(context)) return APPROVE_ASKED;
         return context.approval === null
           ? this.nothingWaits(context, 'approve', input.comment)
           : this.refuseApprove(context);

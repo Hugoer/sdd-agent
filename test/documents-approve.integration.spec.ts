@@ -274,16 +274,21 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
     );
   });
 
-  it('a file the Spec read changed → in `stale_files` and `changed_paths`; a changed file it didn’t read → only in `changed_paths`', async () => {
+  it('a file the Spec read changed → a question first (spec 14); `/approve` again → in `stale_files` and `changed_paths`, a changed file it didn’t read only in `changed_paths`; two compares in all', async () => {
     t.repo.seedFile('main', 'src/t43-read.ts', 'export const a = 1;\n');
     t.repo.seedFile('main', 'src/t43-other.ts', 'export const b = 1;\n');
     await specWritten(t, 43, { reads: ['src/t43-read.ts'] });
     const written = (await specRow()).commit;
     t.repo.seedFile('main', 'src/t43-read.ts', 'export const a = 2;\n');
     t.repo.seedFile('main', 'src/t43-other.ts', 'export const b = 2;\n');
+    expect(await deliver(t, commentNow(43, 4301, '/approve'))).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: 'approve-asked',
+    });
+    expect(await specRow()).toMatchObject({ approvedAt: null });
     t.models.reply({ answer: PLAN_TEXT });
 
-    await deliver(t, commentNow(43, 4301, '/approve'));
+    await deliver(t, commentNow(43, 4302, '/approve'));
 
     expect(await specRow()).toMatchObject({
       staleFiles: ['src/t43-read.ts'],
@@ -293,7 +298,7 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
       approvedCommit: await t.repo.resolveRef('main'),
       approvedFromCommit: written,
     });
-    expect(compares()).toHaveLength(1);
+    expect(compares()).toHaveLength(2);
     expect(logs).toContain(
       `#43 run 1 spec: v1 approved by ${HUMAN} (1 file flagged, +0 −0 lines)`,
     );
@@ -301,17 +306,31 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
     t.repo.removeFile('main', 'src/t43-other.ts');
   });
 
-  it('GitHub doesn’t know the commit (404) → not compared, the approval counts (SPW22, P32)', async () => {
+  it('GitHub doesn’t know the commit (404) → a `not-compared` question (spec 14, UA3); `/approve` again counts, not compared', async () => {
     await specWritten(t, 44);
     t.repo.seedFile('main', 'src/t44.ts', 'x');
-    vi.spyOn(t.repo, 'changedFiles').mockRejectedValueOnce(
-      new ProviderError('GitHub GET compare → 404: Not Found', 'permanent', {
-        status: 404,
-      }),
+    const notFound = new ProviderError(
+      'GitHub GET compare → 404: Not Found',
+      'permanent',
+      { status: 404 },
     );
+    vi.spyOn(t.repo, 'changedFiles')
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(notFound);
+
+    expect(await deliver(t, commentNow(44, 4401, '/approve'))).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: 'approve-asked',
+    });
+    expect((await actionRows(t))[0]).toMatchObject({
+      action: 'approve-asked',
+      result: 'not-compared',
+      changedFiles: null,
+      filesComplete: null,
+    });
     t.models.reply({ answer: PLAN_TEXT });
 
-    await deliver(t, commentNow(44, 4401, '/approve'));
+    await deliver(t, commentNow(44, 4402, '/approve'));
 
     const approved = await specRow();
     expect(approved.approvedAt).not.toBeNull();

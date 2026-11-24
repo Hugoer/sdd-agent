@@ -1,6 +1,7 @@
-// Spec 7 "Approving" (SP3, SPW5, SPW14, SPW21, SPW22; plan P4, P16, P20, P32, P33): an `/approve` the gate found
-// valid becomes the approved snapshot. The comment is read again, its text between the markers redacted; the base
-// branch is compared with the commit the document read; the edits are counted; one transaction stores all of it.
+// Spec 7 "Approving" (SP3, SPW5, SPW14, SPW21; plan P4, P16, P20, P33): an `/approve` the gate found valid becomes
+// the approved snapshot. Spec 14 (UA1–UA3, UAW3, UAW5, UAW9): first the comment is read again; then, when `main`
+// moved since the document's starting point, the files it read are compared, and a question is asked instead when
+// one changed, GitHub can't compare, or the change is large. An approval that counts stores the full range.
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -21,28 +22,38 @@ import type { StepContext } from '../workflow/step-handler.registry.js';
 import {
   chainReads,
   flaggedFiles,
+  questionFor,
+  startOf,
   type ChainVersion,
   type FlaggedFile,
+  type Question,
+  type Read,
+  type StartingPoint,
 } from './commit-check.js';
-import {
-  approveWarningReply,
-  type ApproveWarning,
-} from './document-comments.js';
+import { approveAskedReply } from './document-comments.js';
 import { DocumentPosts } from './document-posts.js';
 import { documentText, lineCounts } from './document-text.js';
 import { DocumentsStore } from './documents.store.js';
 
-/** What an approval found: the stored row, the files it flagged (with who read them), whether it compared. */
-export interface Approved {
-  row: TaskDocument;
-  flagged: FlaggedFile[];
-  /** False when GitHub couldn't compare the two commits (SPW22). */
-  compared: boolean;
-}
+/** Spec 14 "Contracts": what an `/approve` the gate found valid came to. */
+export type ApprovalResult =
+  | {
+      kind: 'approved';
+      row: TaskDocument;
+      flagged: FlaggedFile[];
+      /** False when GitHub couldn't compare the full range (stored as not compared). */
+      compared: boolean;
+    }
+  | { kind: 'asked'; result: Question['result'] }
+  /** Spec 7 plan P16: gone or empty since the gate read it. */
+  | { kind: 'refused' };
+
+type Changed = { paths: string[]; complete: boolean } | 'not-compared';
 
 @Injectable()
 export class DocumentApprovals {
   private readonly base: string;
+  private readonly largeChange: number;
 
   constructor(
     @Inject(ISSUE_PROVIDER) private readonly issues: IssueProvider,
@@ -54,19 +65,22 @@ export class DocumentApprovals {
     config: ConfigService<Env, true>,
   ) {
     this.base = config.get('TARGET_BASE_BRANCH', { infer: true });
+    this.largeChange = config.get('APPROVAL_LARGE_CHANGE_FILES', {
+      infer: true,
+    });
   }
 
   /**
-   * Steps 1–4 for the waiting document. Plan P16: the comment is read again and that text is approved; gone or empty
-   * since the gate read it → the refusal reply and null (nothing approved, the next step isn't called). `last`: the
-   * last document before code (`spec-code`'s Spec, `full-sdd`'s Plan), whose approval gets SPW13's warning reply
-   * when files it read changed or the comparison failed.
+   * The waiting Spec or Plan. Spec 7 plan P16: the comment is read again and that text is approved; gone or empty
+   * since the gate read it → the refusal reply. Spec 14: `main` moved since the starting point and a file it read
+   * changed, GitHub can't compare, or more than `APPROVAL_LARGE_CHANGE_FILES` changed → one question instead (UAW9:
+   * `asked_commit` and its row in one transaction, then the reply). Else the approval, with the full range since
+   * `checked_commit ?? commit` (UAW3, plan UP9); no reply (UAW10).
    */
   async approve(
     context: StepContext,
     doc: TaskDocument,
-    { last }: { last: boolean },
-  ): Promise<Approved | null> {
+  ): Promise<ApprovalResult> {
     const { input, lease, task } = context;
     if (input.type !== 'APPROVE')
       throw new Error(`an approval for a ${input.type} event`);
@@ -82,71 +96,55 @@ export class DocumentApprovals {
         comment ? 'empty' : 'deleted',
         doc,
       );
-      return null;
+      return { kind: 'refused' };
     }
 
-    // Step 2: the commit check (SP3), from where the document was last found up to date (SPW11).
     const now = await this.repo.resolveRef(this.base);
+    const start = startOf(doc);
     const from = doc.checkedCommit ?? doc.commit;
-    if (from === null)
+    if (start === null || from === null)
       throw new Error(`approval: ${doc.kind} ${doc.id} has no commit`);
-    const changed = from === now ? null : await this.changedSince(from, now);
-    const flagged =
-      changed === null || changed === 'not-compared'
-        ? []
-        : flaggedFiles(changed.paths, await this.readsOf(doc));
-    const compared = changed !== 'not-compared';
+    let reads: Read[] | null = null;
+    const readsOnce = async () => (reads ??= await this.readsOf(doc));
+    let sinceStart: Changed | null = null;
+    if (start.commit !== now) {
+      sinceStart = await this.changedSince(start.commit, now);
+      const question = questionFor({
+        changed: sinceStart,
+        reads: await readsOnce(),
+        threshold: this.largeChange,
+      });
+      if (question) {
+        await this.ask(context, doc, start, now, question);
+        return { kind: 'asked', result: question.result };
+      }
+    }
+
+    // The full range: the decision's own list when it started there too (no question before), else one more compare.
+    const changed =
+      from === now
+        ? null
+        : from === start.commit
+          ? sinceStart
+          : await this.changedSince(from, now);
     const listed =
       changed === null || changed === 'not-compared' ? null : changed;
-
-    const warning: ApproveWarning | null = !last
-      ? null
-      : !compared
-        ? { kind: 'not-compared', from }
-        : flagged.length > 0
-          ? {
-              kind: 'stale',
-              from,
-              flagged,
-              complete: listed?.complete ?? true,
-              compareUrl: this.repo.compareUrl(from, now),
-            }
-          : null;
+    const flagged = listed ? flaggedFiles(listed.paths, await readsOnce()) : [];
+    const compared = changed !== 'not-compared';
     const { linesAdded, linesRemoved } = lineCounts(doc.text, text);
-    const { row, warning: reply } = await this.store.approve(
-      lease,
-      doc.id,
-      {
-        approvedText: text,
-        approvedBy: input.sender,
-        approveCommentId: input.comment.id,
-        approvedCommit: now,
-        approvedFromCommit: from,
-        staleFiles: flagged.map(({ path }) => path),
-        changedFiles: listed?.paths.length ?? null,
-        changedPaths: listed?.paths ?? [],
-        changedComplete: listed?.complete ?? null,
-        linesAdded,
-        linesRemoved,
-      },
-      warning && {
-        id: randomUUID(),
-        runId: context.run.id,
-        documentId: doc.id,
-        action: 'approve-warning',
-        result: warning.kind,
-        sourceCommentId: input.comment.id,
-        sender: input.sender,
-        replyBody: approveWarningReply({
-          versionId: doc.id,
-          approve: input.comment,
-          document: { kind: doc.kind as 'spec' | 'plan', version: doc.version },
-          lane: context.run.lane,
-          base: this.base,
-          warning,
-        }),
-      },
-    );
+    const row = await this.store.approve(lease, doc.id, {
+      approvedText: text,
+      approvedBy: input.sender,
+      approveCommentId: input.comment.id,
+      approvedCommit: now,
+      approvedFromCommit: from,
+      staleFiles: flagged.map(({ path }) => path),
+      changedFiles: listed?.paths.length ?? null,
+      changedPaths: listed?.paths ?? [],
+      changedComplete: listed?.complete ?? null,
+      linesAdded,
+      linesRemoved,
+    });
     const files = compared
       ? `${flagged.length} file${flagged.length === 1 ? '' : 's'} flagged`
       : 'not compared';
@@ -155,25 +153,63 @@ export class DocumentApprovals {
       `v${doc.version} approved by ${input.sender} (${files}, +${linesAdded} −${linesRemoved} lines)`,
       doc.kind,
     );
-    if (reply) await this.posts.postReply(context, reply);
-    return { row, flagged, compared };
+    return { kind: 'approved', row, flagged, compared };
   }
 
-  /** SPW13: a warning reply this event stored and didn't post (a crash, then the event again): posted once now. */
-  async postPendingWarning(context: StepContext): Promise<void> {
-    if (context.input.type !== 'APPROVE') return;
-    const warning = await this.store.actionFor(
-      'approve-warning',
-      context.input.comment.id,
+  /** Spec 14 "The question": `asked_commit` and the `approve-asked` row in one transaction, the log line, the reply. */
+  private async ask(
+    context: StepContext,
+    doc: TaskDocument,
+    start: StartingPoint,
+    now: string,
+    question: Question,
+  ): Promise<void> {
+    const { input, run } = context;
+    if (input.type !== 'APPROVE')
+      throw new Error(`a question for a ${input.type} event`);
+    const kind = doc.kind as 'spec' | 'plan';
+    const last =
+      start.kind === 'asked' ? await this.store.lastQuestion(doc.id) : null;
+    const spec =
+      kind === 'plan' ? await this.store.current(run.id, 'spec') : null;
+    const counted = question.result !== 'not-compared';
+    const row = await this.store.ask(context.lease, doc.id, now, {
+      id: randomUUID(),
+      runId: run.id,
+      documentId: doc.id,
+      action: 'approve-asked',
+      result: question.result,
+      sourceCommentId: input.comment.id,
+      sender: input.sender,
+      fromCommit: start.commit,
+      toCommit: now,
+      files: question.result === 'stale' ? question.flagged : [],
+      changedFiles: counted ? question.changedFiles : null,
+      filesComplete: counted ? question.complete : null,
+      replyBody: approveAskedReply({
+        approve: input.comment,
+        document: { kind, version: doc.version },
+        ...(spec && { specVersion: spec.version }),
+        base: this.base,
+        start,
+        questionUrl: last?.replyCommentUrl ?? null,
+        question,
+        compareUrl: this.repo.compareUrl(start.commit, now),
+      }),
+    });
+    this.posts.log(
+      context,
+      `v${doc.version} /approve asked (${questionLog(question, start)})`,
+      kind,
     );
-    if (warning) await this.posts.postReply(context, warning);
+    await this.posts.postReply(context, row);
   }
 
   /**
    * Plan P4: what the document's calls read, and every version it is based on (`basedOnId`, back to the first
    * writer; a Plan's chain goes on into its approved Spec's), each with who read it.
    */
-  async readsOf(doc: TaskDocument): Promise<ReturnType<typeof chainReads>> {
+  async readsOf(doc: TaskDocument): Promise<Read[]> {
     const chain: ChainVersion[] = [];
     for (
       let version: TaskDocument | null = doc;
@@ -191,10 +227,7 @@ export class DocumentApprovals {
    * The files changed from one commit to another (an approval's commit check, a refresh's list). Plan P32: only
    * GitHub's "unknown commit" (404, 422) counts as not compared; any other error passes through.
    */
-  async changedSince(
-    from: string,
-    to: string,
-  ): Promise<{ paths: string[]; complete: boolean } | 'not-compared'> {
+  async changedSince(from: string, to: string): Promise<Changed> {
     try {
       return await this.repo.changedFiles(from, to);
     } catch (error) {
@@ -206,5 +239,19 @@ export class DocumentApprovals {
         return 'not-compared';
       throw error;
     }
+  }
+}
+
+/** UP19: "stale, 1 file read changed since 4f2c1ab", "not-compared", "large-change, 42 files". */
+function questionLog(question: Question, start: StartingPoint): string {
+  switch (question.result) {
+    case 'stale': {
+      const count = question.flagged.length;
+      return `stale, ${count} file${count === 1 ? '' : 's'} read changed since ${start.commit.slice(0, 7)}`;
+    }
+    case 'not-compared':
+      return 'not-compared';
+    case 'large-change':
+      return `large-change, ${question.complete ? '' : 'more than '}${question.changedFiles} files`;
   }
 }

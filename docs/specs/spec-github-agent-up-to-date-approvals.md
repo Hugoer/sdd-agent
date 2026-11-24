@@ -608,31 +608,35 @@ docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT kind, 
 docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT action, result, left(from_commit,7) AS from_c, left(to_commit,7) AS to_c, files, files_complete, reply_post_state, created_at FROM document_actions ORDER BY created_at DESC LIMIT 10"
 ```
 
+Checked so far: the config row at Checkpoint 1 (2026-11-23, port 3101, test database); Checkpoint 2 (2026-11-24)
+on `#A` = #72, `#B` = #73, `#E` = #74, `#F` = #75, `#G` = #71, `#H` = #76 (sandbox commits `56f564d`, `3d8fe8a`,
+`75d880f`, `57b81de`, `e2598a3`, `609b00e`, undone at Checkpoint 4).
+
 Each row: a sandbox issue named in the plan's checkpoints; commits to the sandbox's `main` made with `gh` as the
 developer (spec 7's practice) and undone at the end. "A file it read": a path on the document's "Read:" line; "an
 unrelated file": a path on no "Read:" line of the run (e.g. a new `notes/spec-14.md`).
 
 **An unrelated change, then the Plan** (`#A`, `full-sdd`, Spec v1 waiting; spec 7's rows already cover `/approve`
 with `main` unchanged)
-- [ ] Push a change to an unrelated file, `/approve` → Plan v1 at once, NO question; `stale_files` empty,
+- [x] Push a change to an unrelated file, `/approve` → Plan v1 at once, NO question; `stale_files` empty,
   `changed_paths` has the file.
-- [ ] Plan v1 waiting: push a change to a file on the Plan's "Read:" line, `/approve` → ONE question naming it
+- [x] Plan v1 waiting: push a change to a file on the Plan's "Read:" line, `/approve` → ONE question naming it
   "which it read" (or "which it and the approved Spec read" when the Spec's "Read:" line has it too); `/approve`
   again → the `workspace` stop and NO other reply; NO `approve-warning` row.
 
 **The question, and `main` moving after it** (`#B`, `full-sdd`, Spec v1 waiting)
-- [ ] Push a change to a file Spec v1 read (`src/index.ts`), `/approve` → ONE reply "[Your `/approve`](…) didn't
+- [x] Push a change to a file Spec v1 read (`src/index.ts`), `/approve` → ONE reply "[Your `/approve`](…) didn't
   count yet: since Spec v1 was written (`<A>`), `main` changed `src/index.ts`, which it read ([compare](…)) …"; the
   compare link opens `<A>...<now>`; status stays `spec-review`; NO Plan; NO new `execution_logs` row; `db:events`:
   `IGNORED` `approve-asked`; `document_actions` `approve-asked` `stale`, `files` `[{src/index.ts, [own]}]`;
   `asked_commit` = the commit now.
-- [ ] Push a change to another file it read (`src/index.test.ts`), `/approve` → ONE second question "since [the bot
+- [x] Push a change to another file it read (`src/index.test.ts`), `/approve` → ONE second question "since [the bot
   asked](…) (`<q1>`), `main` changed `src/index.test.ts`, which Spec v1 read", NOT naming `src/index.ts`;
   `from_commit` = the first question's `to_commit`.
-- [ ] Push a change to an unrelated file, `/approve` → counts: Plan v1 with NO ⚠️ line in its header; NO reply to
+- [x] Push a change to an unrelated file, `/approve` → counts: Plan v1 with NO ⚠️ line in its header; NO reply to
   that `/approve`; `stale_files` has both read files (the whole range since the Spec was written); the Plan call's
   prompt (`execution_logs`) has the "The Spec was written at commit …" paragraph naming them.
-- [ ] Plan v1 waiting: push a change to a file only the approved Spec read (its "Read:" line has it, the Plan's
+- [x] Plan v1 waiting: push a change to a file only the approved Spec read (its "Read:" line has it, the Plan's
   doesn't), `/approve` → ONE question naming it "which the approved Spec read" and offering "`/refresh` to bring
   Spec v1 and Plan v1 up to date".
 
@@ -652,29 +656,29 @@ with `main` unchanged)
   Plan v1, NO question. The skill change is undone at the end.
 
 **Written before the question** (`#E`, `full-sdd`, Spec v1 waiting, a file it read changed)
-- [ ] Hold the issue's lease (SQL), comment `/approve` twice, release → the first gets ONE question; the second ONE
+- [x] Hold the issue's lease (SQL), comment `/approve` twice, release → the first gets ONE question; the second ONE
   "[Your `/approve`](…) was written before [the bot's question](…), so it didn't count" reply; NO Plan;
   `document_actions` `approve-refused` `before-question`.
-- [ ] `/approve` after both replies → counts: Plan v1.
+- [x] `/approve` after both replies → counts: Plan v1.
 
 **`spec-code` and `code-only`**
-- [ ] (`#F`, `spec-code`, Spec v1 waiting) push a change to a file it read, `/approve` → ONE question; `/approve`
+- [x] (`#F`, `spec-code`, Spec v1 waiting) push a change to a file it read, `/approve` → ONE question; `/approve`
   again → the `workspace` stop, NO other reply.
-- [ ] `/retry` of `#F`'s `workspace` stop after another change to a file it read → the same stop, NO question.
-- [ ] (`#G`, `code-only`) push any change, `/approve` on the go-signal → the `workspace` stop, NO question.
+- [x] `/retry` of `#F`'s `workspace` stop after another change to a file it read → the same stop, NO question.
+- [x] (`#G`, `code-only`) push any change, `/approve` on the go-signal → the `workspace` stop, NO question.
 
 **Can't tell** (`#H`, `full-sdd`, Spec v1 waiting)
-- [ ] Set the Spec's `commit` to an unknown SHA (`UPDATE task_documents SET commit = repeat('0', 40) …`),
+- [x] Set the Spec's `commit` to an unknown SHA (`UPDATE task_documents SET commit = repeat('0', 40) …`),
   `/approve` → ONE "couldn't compare `0000000`, where Spec v1 was written, with `main`" question, no compare link;
   `result` `not-compared`; `/approve` again → Plan v1; the approval's `changed_complete` is empty; the Plan's prompt
   has the "couldn't list the files changed" paragraph (UAW3), with no list (2026-11-23, plan Task 0: the row had
   "the commit Spec v1 read" and "no 'files changed' paragraph").
-- [ ] Plan v1 waiting: one commit adding 16 small files under `bulk/` that no document read (Git Data API),
+- [x] Plan v1 waiting: one commit adding 16 small files under `bulk/` that no document read (Git Data API),
   `/approve` → ONE `large-change` question "16 files changed on `main` …, none of them one it or the approved Spec
   read" (plan UP3, 2026-11-23); `changed_files`
   16; `/approve` again → the `workspace` stop. The files are removed in one commit at the end. (More than 300
   files: the integration tests.)
-- [ ] (Config, signed requests are not needed) start the app with `APPROVAL_LARGE_CHANGE_FILES=14`, then `=151` → it
+- [x] (Config, signed requests are not needed) start the app with `APPROVAL_LARGE_CHANGE_FILES=14`, then `=151` → it
   doesn't start, the log names the setting and its range; unset → 15.
 
 **Invariants** (`node scripts/up-to-date-approvals-invariants.mjs <issues>`; scoped to rows stored since spec 14 went

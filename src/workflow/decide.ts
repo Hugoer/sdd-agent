@@ -121,6 +121,8 @@ export type RouterIgnoreReason =
   | 'lane-conflict'
   // Spec 7: a command or comment the `documents` handler answered with a reply (plan P6).
   | 'approve-refused'
+  // Spec 14: an `/approve` the bot asked about first (the question).
+  | 'approve-asked'
   | 'approve-hint'
   | 'late-comment'
   | 'refresh-refused'
@@ -136,7 +138,9 @@ export type ApprovalVerdict =
   | 'already-approved'
   | 'before-document'
   | 'deleted'
-  | 'empty';
+  | 'empty'
+  // Spec 14 (UA5): written before the bot's last question about the waiting document, while it is open.
+  | 'before-question';
 
 export type StopDecision =
   | {

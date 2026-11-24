@@ -590,6 +590,11 @@ describe('/refresh while the Plan waits (spec 7, full-sdd)', () => {
     await specWritten(t, 144, { reads: ['src/f-spec.ts'] });
     t.repo.seedFile('main', 'src/f-spec.ts', 'export const s = 3;\n');
     const now = await t.repo.resolveRef('main');
+    // Spec 14: a question first, then `/approve` again writes the Plan.
+    expect(await deliver(t, commentNow(144, 14399, '/approve'))).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: 'approve-asked',
+    });
     t.models.reply({ answer: PLAN_TEXT });
     const later = await deliver(t, commentNow(144, 14400, '/approve'));
     expect(later).toMatchObject({ status: 'DONE' });

@@ -5,7 +5,13 @@ import type { TaskComment } from '../contracts/workflow-input.js';
 import { laneLabel } from '../github/labels.js';
 import { withNotes } from '../llm/prompt.js';
 import type { RunEnd } from '../workflow/workflow-comments.js';
-import { namedFiles, type FlaggedFile, type Reader } from './commit-check.js';
+import {
+  namedFiles,
+  type FlaggedFile,
+  type Question,
+  type Reader,
+  type StartingPoint,
+} from './commit-check.js';
 import {
   DIFF_BLOCK_MAX_COMMENT_CHARS,
   DOCUMENT_END,
@@ -263,14 +269,22 @@ export interface RepliedDocument {
 }
 
 export type ApproveRefusal =
-  'already-approved' | 'before-document' | 'deleted' | 'empty';
+  | 'already-approved'
+  | 'before-document'
+  | 'deleted'
+  | 'empty'
+  | 'before-question';
 
-/** Spec "`/approve`", the verdict table: one reply per refused `/approve` comment, naming the waiting document. */
+/**
+ * Spec "`/approve`", the verdict table: one reply per refused `/approve` comment, naming the waiting document.
+ * `questionUrl`: the bot's last question, which a `before-question` refusal links (spec 14, UA5; plan UP2).
+ */
 export function approveRefusedReply(
   comment: AnsweredComment,
   refusal: ApproveRefusal,
   document: RepliedDocument,
   lane: Lane,
+  questionUrl: string | null = null,
 ): string {
   const name = documentName(document);
   const yours = yourApprove(comment);
@@ -285,6 +299,9 @@ export function approveRefusedReply(
     empty:
       `${yours} has nothing to approve: ${name}'s comment has no text left between its markers. Edit the ` +
       `comment to put the ${kindName(document.kind)} back, then comment \`/approve\`.`,
+    'before-question':
+      `${yours} was written before ${linked("the bot's question", questionUrl ?? undefined)}, so it didn't count: ` +
+      'read it, then comment `/refresh`, or `/approve` again.',
   }[refusal];
   return `${approveRefusedMarker(comment.id)}\n${text}`;
 }
@@ -300,56 +317,18 @@ function kindName(kind: DocumentKind): string {
   return kind === 'plan' ? 'Plan' : 'Spec';
 }
 
-export const approveWarningMarker = (versionId: string): string =>
-  marker(`approve-warning:${versionId}`);
-
-export type ApproveWarning =
-  | {
-      kind: 'stale';
-      /** The commit the approval compared from (the document's `checkedCommit` or `commit`). */
-      from: string;
-      flagged: FlaggedFile[];
-      complete: boolean;
-      compareUrl: string;
-    }
-  | { kind: 'not-compared'; from: string };
-
-export interface ApproveWarningInput {
-  versionId: string;
-  /** The `/approve` comment the reply answers (plan P39). */
-  approve: Pick<TaskComment, 'url'>;
-  /** The last document before code: `spec-code`'s Spec or `full-sdd`'s Plan. */
-  document: { kind: 'spec' | 'plan'; version: number };
-  lane: Lane;
-  base: string;
-  warning: ApproveWarning;
-}
-
 /**
- * SPW13 with plan P4: the one reply to the last approval before code when files it (or, for a Plan, the approved
- * Spec) read changed since it was written, or the comparison failed. It never blocks: the approval is stored.
+ * Plan P4: the files grouped by who read them: "`a`, which it read, and `b`, which the approved Spec read"; `own`
+ * names the document's own reader ("it", or "Spec v1" where "it" would be unclear).
  */
-export function approveWarningReply(input: ApproveWarningInput): string {
-  const { document, warning, base } = input;
-  const name = `${kindName(document.kind)} v${document.version}`;
-  const from = `\`${warning.from.slice(0, 7)}\``;
-  const approved = `${yourApprove(input.approve)} approved ${name}.`;
-  const text =
-    warning.kind === 'not-compared'
-      ? `${approved} The bot couldn't compare ${from} with \`${base}\`, so it can't tell whether files it read ` +
-        'have changed.'
-      : `${approved} Since it was written (${from}), \`${base}\` changed ${readFiles(warning.flagged, warning.complete)} ` +
-        `([compare](${warning.compareUrl})). The code is written from today's \`${base}\`, and the Coder is told ` +
-        `which files changed. To write the ${kindName(document.kind)} again instead, remove the ` +
-        `\`${laneLabel(input.lane)}\` label and add it again.`;
-  return `${approveWarningMarker(input.versionId)}\n${text}`;
-}
-
-/** Plan P4: the files grouped by who read them: "`a`, which it read, and `b`, which the approved Spec read". */
-function readFiles(flagged: FlaggedFile[], complete: boolean): string {
+function readFiles(
+  flagged: FlaggedFile[],
+  complete: boolean,
+  own = 'it',
+): string {
   const groups = new Map<string, string[]>();
   for (const { path, readers } of flagged) {
-    const who = readerText(readers);
+    const who = readerText(readers, own);
     groups.set(who, [...(groups.get(who) ?? []), path]);
   }
   const entries = [...groups];
@@ -361,10 +340,85 @@ function readFiles(flagged: FlaggedFile[], complete: boolean): string {
     .join(', and ');
 }
 
-function readerText(readers: Reader[]): string {
+function readerText(readers: Reader[], own: string): string {
   if (readers.includes('own') && readers.includes('spec'))
-    return 'it and the approved Spec read';
-  return readers.includes('own') ? 'it read' : 'the approved Spec read';
+    return `${own} and the approved Spec read`;
+  return readers.includes('own') ? `${own} read` : 'the approved Spec read';
+}
+
+export const approveAskedMarker = (commentId: string): string =>
+  marker(`approve-asked:${commentId}`);
+
+export interface ApproveAskedInput {
+  /** The `/approve` the question answers (its id names the marker, plan P39). */
+  approve: AnsweredComment;
+  document: { kind: 'spec' | 'plan'; version: number };
+  /** A Plan: the approved Spec version it comes from. */
+  specVersion?: number;
+  base: string;
+  start: StartingPoint;
+  /** The bot's last question (UP2), which a starting point `asked` links. */
+  questionUrl: string | null;
+  question: Question;
+  /** GitHub's compare page from the starting point to now; unused for `not-compared`. */
+  compareUrl: string;
+}
+
+/**
+ * Spec 14 "The question" (UA1–UA3, UAW5, UAW6; plan UP3, UP4): the `/approve` didn't count yet, why (the read files
+ * that changed, GitHub couldn't compare, or a large change), and the two ways on: `/refresh`, or `/approve` again.
+ */
+export function approveAskedReply(input: ApproveAskedInput): string {
+  const { document, start, question, base } = input;
+  const name = `${kindName(document.kind)} v${document.version}`;
+  const plan = document.kind === 'plan';
+  const both = plan ? `Spec v${input.specVersion ?? 1} and ${name}` : 'it';
+  const asked = linked('the bot asked', input.questionUrl ?? undefined);
+  const commit = `\`${start.commit.slice(0, 7)}\``;
+  // After "since the bot asked", "it" would read as the bot: the document is named instead.
+  const own = start.kind === 'asked' ? name : 'it';
+  const since = {
+    asked: `since ${asked} (${commit})`,
+    checked: `since ${name} was last checked (${commit})`,
+    written: `since ${name} was written (${commit})`,
+  }[start.kind];
+  const approveAgain = `\`/approve\` again to approve ${plan ? name : 'it'} as it is.`;
+  const head = `${yourApprove(input.approve)} didn't count yet:`;
+  const compare = `[compare](${input.compareUrl})`;
+  let text: string;
+  if (question.result === 'stale') {
+    const skills = question.skills;
+    const skill =
+      skills.length === 0
+        ? ''
+        : plan
+          ? ` and the ${skills.map((step) => `\`${step}\``).join(' and ')} skill${skills.length > 1 ? 's' : ''}`
+          : ` and its \`${skills[0]}\` skill`;
+    text =
+      `${head} ${since}, \`${base}\` changed ${readFiles(question.flagged, question.complete, own)} (${compare}). ` +
+      `Comment \`/refresh\` to bring ${both} up to date with \`${base}\`${skill}, or ${approveAgain}`;
+  } else {
+    const readers = plan ? `${own} or the approved Spec` : own;
+    const check = `Comment \`/refresh\` to check ${both} against today's \`${base}\`, or ${approveAgain}`;
+    if (question.result === 'not-compared') {
+      const where = {
+        asked: `the commit of ${linked("the bot's question", input.questionUrl ?? undefined)}`,
+        checked: `where ${name} was last checked`,
+        written: `where ${name} was written`,
+      }[start.kind];
+      const whose = plan ? `${own} or the approved Spec` : own;
+      text =
+        `${head} the bot couldn't compare ${commit}, ${where}, with \`${base}\` (that commit is no longer on ` +
+        `GitHub, e.g. after a force-push), so it can't tell whether files ${whose} read changed. ${check}`;
+    } else {
+      const count = question.complete
+        ? `${question.changedFiles} files changed on \`${base}\` (${compare}), none of them one ${readers} read.`
+        : `more than ${question.changedFiles} files changed on \`${base}\` (${compare}); none of the ` +
+          `${question.changedFiles} GitHub lists is one ${readers} read.`;
+      text = `${head} ${since}, ${count} A change this size may still affect ${plan ? 'them' : 'it'}. ${check}`;
+    }
+  }
+  return `${approveAskedMarker(input.approve.id)}\n${text}`;
 }
 
 export const goSignalMarker = (runId: string): string =>

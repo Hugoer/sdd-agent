@@ -27,16 +27,21 @@ export type WaitingDocument = Pick<
 >;
 
 /**
- * The spec's table, in its order: this event's own approval (a retry) → valid, or `done` when it approved an earlier
+ * The spec's table, in its order: this event already asked (spec 14, a retry: its approval posts the stored
+ * question, UAW2) → valid; this event's own approval (a retry) → valid, or `done` when it approved an earlier
  * document of the run; then already approved, written before the document's comment (GitHub's second: the same
- * second counts), deleted, empty. The go-signal checks only the time and the approval.
+ * second counts), deleted, empty; then (spec 14, UA5) written before the bot's last question about the version while
+ * it is open, the same second counting too. The go-signal checks only the time and the approval.
  */
 export function approvalVerdict(
   waiting: WaitingDocument,
   approve: { createdAt: Date },
   comment: { body: string } | null,
   thisEventApproved: 'waiting' | 'earlier' | null,
+  thisEventAsked: boolean,
+  lastQuestion: { postedAt: Date } | null,
 ): ApprovalVerdict {
+  if (thisEventAsked) return 'valid';
   if (thisEventApproved === 'waiting') return 'valid';
   if (thisEventApproved === 'earlier') return 'done';
   if (waiting.approvedAt) return 'already-approved';
@@ -44,7 +49,10 @@ export function approvalVerdict(
     return 'before-document';
   if (waiting.kind === 'go-signal') return 'valid';
   if (!comment || waiting.deletedAt) return 'deleted';
-  return documentText(comment.body) === '' ? 'empty' : 'valid';
+  if (documentText(comment.body) === '') return 'empty';
+  return lastQuestion && approve.createdAt < lastQuestion.postedAt
+    ? 'before-question'
+    : 'valid';
 }
 
 const COMMANDS = {
@@ -64,10 +72,12 @@ export class DocumentsGate implements ApprovalGate {
 
   /**
    * Row 5 (plan P7, P36): an `/approve`, `/refresh` or `/restore` on an issue with no run gets one reply, and a
-   * `document_actions` row with no run, counted with the other wasted actions.
+   * `document_actions` row with no run, counted with the other wasted actions. Spec 14 (plan UP21): an `/approve`
+   * that already asked (a retry after the run ended) gets only its question.
    */
   async replyWithoutRun(context: NoRunContext): Promise<RouterIgnoreReason> {
     const { input, lanes } = context;
+    if (await this.posts.replayQuestion(context)) return 'approve-asked';
     if (
       input.type !== 'APPROVE' &&
       input.type !== 'REFRESH' &&
@@ -117,6 +127,33 @@ export class DocumentsGate implements ApprovalGate {
       waiting.kind === 'go-signal' || !waiting.commentId
         ? null
         : await this.issues.getComment(task.ref, waiting.commentId);
-    return approvalVerdict(waiting, input.comment, comment, thisEvent);
+    const asked = await this.store.actionFor('approve-asked', input.comment.id);
+    return approvalVerdict(
+      waiting,
+      input.comment,
+      comment,
+      thisEvent,
+      asked !== null,
+      asked ? null : await this.openQuestion(context, waiting),
+    );
+  }
+
+  /**
+   * Spec 14 (UA5, UAW9): the version's last question while it is open (`asked_commit` set). One stored but not
+   * posted yet (its event waits to be retried) is posted first, so this `/approve` is judged against a posted time.
+   */
+  private async openQuestion(
+    context: GateContext,
+    waiting: TaskDocument,
+  ): Promise<{ postedAt: Date } | null> {
+    if (!waiting.askedCommit) return null;
+    let question = await this.store.lastQuestion(waiting.id);
+    if (question?.replyPostState === 'PENDING_POST') {
+      await this.posts.postReply(context, question);
+      question = await this.store.lastQuestion(waiting.id);
+    }
+    return question?.replyPostedAt
+      ? { postedAt: question.replyPostedAt }
+      : null;
   }
 }

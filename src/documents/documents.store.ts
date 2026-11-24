@@ -20,7 +20,6 @@ export type DocumentActionName =
   | 'approve-refused'
   | 'approve-hint'
   | 'approve-asked'
-  | 'approve-warning'
   | 'late-comment'
   | 'refresh'
   | 'refresh-refused'
@@ -342,33 +341,24 @@ export class DocumentsStore {
   }
 
   /**
-   * Spec "Approving" step 4: one transaction stores the approval, with the event that made it (a retry knows it),
-   * and (SPW13) the warning reply that answers it, stored before it is posted.
+   * Spec "Approving" step 4: one transaction stores the approval, with the event that made it (a retry knows it).
+   * Spec 14 (UAW10): no warning reply.
    */
   approve(
     lease: HeldLease,
     id: string,
     record: ApprovalRecord,
-    warning: ActionRecord | null = null,
-  ): Promise<{ row: TaskDocument; warning: DocumentAction | null }> {
-    return this.write(lease, async (tx) => {
-      const row = await tx.taskDocument.update({
+  ): Promise<TaskDocument> {
+    return this.write(lease, async (tx) =>
+      tx.taskDocument.update({
         where: { id },
         data: {
           ...record,
           approvedAt: await dbNow(tx),
           approveEventId: lease.eventId,
         },
-      });
-      return {
-        row,
-        warning:
-          warning &&
-          (await tx.documentAction.create({
-            data: actionData(lease, warning),
-          })),
-      };
-    });
+      }),
+    );
   }
 
   /**

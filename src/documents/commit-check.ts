@@ -1,5 +1,5 @@
 // Spec 7 "Approving" step 2 (SP3; plan P4, P33): the changed files a document's calls read, and the pieces of the
-// warning line and reply that name them. Pure.
+// replies that name them. Spec 14 (UAW3–UAW6): an `/approve`'s starting point and whether it asks first. Pure.
 
 /** Who read a file: the document's own versions, or (a Plan, plan P4) the approved Spec it is based on. */
 export type Reader = 'own' | 'spec';
@@ -16,6 +16,21 @@ export interface FlaggedFile {
   readers: Reader[];
 }
 
+/** A file a document's chain read; `skill`: the step whose skill it belongs to (spec 14, plan UP5), else null. */
+export interface Read {
+  path: string;
+  reader: Reader;
+  skill: string | null;
+}
+
+/** A `context_loads` row of a call: its `kind` and `skill` say whether it is a file of the step's skill. */
+export interface LoadedPath {
+  logId: string;
+  path: string;
+  kind: string | null;
+  skill: string | null;
+}
+
 /**
  * The files each version of the chain loaded (`loads`: the `context_loads` rows of their calls), with who read them:
  * a version of the document's own kind is `own`, an approved Spec under a Plan is `spec`.
@@ -23,8 +38,8 @@ export interface FlaggedFile {
 export function chainReads(
   kind: string,
   chain: ChainVersion[],
-  loads: { logId: string; path: string }[],
-): { path: string; reader: Reader }[] {
+  loads: LoadedPath[],
+): Read[] {
   const readerOf = new Map(
     chain
       .filter(({ logId }) => logId !== null)
@@ -35,13 +50,17 @@ export function chainReads(
   );
   return loads
     .filter(({ logId }) => readerOf.has(logId))
-    .map(({ logId, path }) => ({ path, reader: readerOf.get(logId)! }));
+    .map(({ logId, path, kind: loadKind, skill }) => ({
+      path,
+      reader: readerOf.get(logId)!,
+      skill: loadKind === 'step-skill' ? skill : null,
+    }));
 }
 
 /** SP3: the changed paths that were read, in the changed list's order, each with its readers (own first). */
 export function flaggedFiles(
   changedPaths: string[],
-  reads: { path: string; reader: Reader }[],
+  reads: Pick<Read, 'path' | 'reader'>[],
 ): FlaggedFile[] {
   return changedPaths.flatMap((path) => {
     const readers = (['own', 'spec'] as const).filter((reader) =>
@@ -66,4 +85,76 @@ export function namedFiles(paths: string[], complete: boolean): string {
   return items.length === 1
     ? items[0]
     : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+
+/** Spec 14 (UAW3): where an `/approve` compares from, and how its question names it. */
+export interface StartingPoint {
+  commit: string;
+  /** `asked`: the version's last question; `checked`: a refresh found it up to date; `written`: its own commit. */
+  kind: 'asked' | 'checked' | 'written';
+}
+
+/** The last question's commit, else where a refresh found it up to date, else where it was written; null: no commit. */
+export function startOf(doc: {
+  askedCommit: string | null;
+  checkedCommit: string | null;
+  commit: string | null;
+}): StartingPoint | null {
+  if (doc.askedCommit) return { commit: doc.askedCommit, kind: 'asked' };
+  if (doc.checkedCommit) return { commit: doc.checkedCommit, kind: 'checked' };
+  return doc.commit ? { commit: doc.commit, kind: 'written' } : null;
+}
+
+/** Spec 14 "The question": why an `/approve` asks first. */
+export type Question =
+  | {
+      result: 'stale';
+      /** Every read file that changed, with its readers. */
+      flagged: FlaggedFile[];
+      /** The steps whose skill files are among them (UAW6), `spec` before `plan`. */
+      skills: string[];
+      /** False when GitHub cut the list. */
+      complete: boolean;
+      changedFiles: number;
+    }
+  | { result: 'not-compared' }
+  | { result: 'large-change'; changedFiles: number; complete: boolean };
+
+/**
+ * UA1, UA3, UAW5: GitHub couldn't compare → `not-compared`; a file the chain read changed → `stale` (whatever the
+ * count); else more than `threshold` paths (GitHub's cut list, 300, is always above it) → `large-change`; else none.
+ */
+export function questionFor({
+  changed,
+  reads,
+  threshold,
+}: {
+  changed: { paths: string[]; complete: boolean } | 'not-compared';
+  reads: Read[];
+  threshold: number;
+}): Question | null {
+  if (changed === 'not-compared') return { result: 'not-compared' };
+  const flagged = flaggedFiles(changed.paths, reads);
+  if (flagged.length > 0) {
+    const paths = new Set(flagged.map(({ path }) => path));
+    const skills = new Set(
+      reads.flatMap(({ path, skill }) =>
+        skill !== null && paths.has(path) ? [skill] : [],
+      ),
+    );
+    return {
+      result: 'stale',
+      flagged,
+      skills: ['spec', 'plan'].filter((step) => skills.has(step)),
+      complete: changed.complete,
+      changedFiles: changed.paths.length,
+    };
+  }
+  return changed.paths.length > threshold
+    ? {
+        result: 'large-change',
+        changedFiles: changed.paths.length,
+        complete: changed.complete,
+      }
+    : null;
 }

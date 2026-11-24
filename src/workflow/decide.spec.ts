@@ -487,6 +487,7 @@ describe('decide(): overview §3 rows 1–31', () => {
       'before-document',
       'deleted',
       'empty',
+      'before-question',
     ] as const) {
       it(`${verdict} → one reply by the documents handler, no status change`, () => {
         for (const status of ['spec-review', 'ready-for-dev'] as const)
@@ -687,6 +688,7 @@ describe('decide(): spec 7 seam (plan T7)', () => {
   it('a step outcome IGNORED → the event ends IGNORED with that reason (plan P6)', () => {
     for (const reason of [
       'approve-refused',
+      'approve-asked',
       'approve-hint',
       'late-comment',
       'refresh-refused',

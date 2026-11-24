@@ -30,6 +30,7 @@ import {
 } from './document-comments.js';
 import { DocumentApprovals } from './document-approval.js';
 import {
+  APPROVE_ASKED,
   APPROVE_REFUSED,
   DocumentPosts,
   REFRESH_REFUSED,
@@ -151,21 +152,21 @@ export class PlanHandler implements StepHandler {
   }
 
   /**
-   * Row 19 (spec "Approving", SPW13): the waiting Plan becomes the approved snapshot; it is the last document before
-   * code, so files it or the approved Spec read that changed since it was written get one warning reply. This
-   * event's approval already recorded (a `/retry` of the `workspace` stop) → only a warning still to post.
+   * Row 19 (spec "Approving", spec 14): the waiting Plan becomes the approved snapshot, or the bot asks first. This
+   * event already asked (a retried event) → its question posted if it isn't yet (UAW9); its approval already
+   * recorded (a retry after a failure in the step that follows, a `/retry` of the `workspace` stop) → nothing more
+   * (UAW8, plan UP8).
    */
   private async approve(context: StepContext): Promise<StepOutcome | void> {
     const { run, status, statusBeforeStop, lease } = context;
+    if (await this.posts.replayQuestion(context)) return APPROVE_ASKED;
     const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
     if (waiting?.kind !== 'plan')
       throw new Error(`plan approve: no waiting Plan in ${status}`);
-    if (waiting.approveEventId === lease.eventId)
-      return this.approvals.postPendingWarning(context);
-    const approved = await this.approvals.approve(context, waiting, {
-      last: true,
-    });
-    if (!approved) return APPROVE_REFUSED;
+    if (waiting.approveEventId === lease.eventId) return;
+    const result = await this.approvals.approve(context, waiting);
+    if (result.kind === 'asked') return APPROVE_ASKED;
+    if (result.kind === 'refused') return APPROVE_REFUSED;
   }
 
   /**

@@ -140,9 +140,12 @@ describe('The Plan (spec 7, full-sdd)', () => {
     t.repo.seedFile('main', 'src/t62-read.ts', 'export const a = 2;\n');
     t.repo.seedFile('main', 'src/t62-other.ts', 'export const b = 2;\n');
     const now = await t.repo.resolveRef('main');
+    // Spec 14: a question first, then `/approve` again counts.
+    await deliver(t, commentNow(62, 6201, '/approve'));
+    expect(await rows('plan')).toEqual([]);
     t.models.reply({ answer: PLAN_TEXT });
 
-    await deliver(t, commentNow(62, 6201, '/approve'));
+    await deliver(t, commentNow(62, 6202, '/approve'));
 
     const [plan] = await rows('plan');
     expect(plan.body).not.toContain('⚠️');
@@ -164,14 +167,20 @@ describe('The Plan (spec 7, full-sdd)', () => {
     await specWritten(t, 63);
     const [spec] = await rows('spec');
     t.repo.seedFile('main', 'src/t63.ts', 'x');
-    vi.spyOn(t.repo, 'changedFiles').mockRejectedValueOnce(
-      new ProviderError('GitHub GET compare → 404: Not Found', 'permanent', {
-        status: 404,
-      }),
+    const notFound = new ProviderError(
+      'GitHub GET compare → 404: Not Found',
+      'permanent',
+      { status: 404 },
     );
+    vi.spyOn(t.repo, 'changedFiles')
+      .mockRejectedValueOnce(notFound)
+      .mockRejectedValueOnce(notFound);
+    // Spec 14: a `not-compared` question first, then `/approve` again counts (the full range fails too).
+    await deliver(t, commentNow(63, 6301, '/approve'));
+    expect(await rows('plan')).toEqual([]);
     t.models.reply({ answer: PLAN_TEXT });
 
-    await deliver(t, commentNow(63, 6301, '/approve'));
+    await deliver(t, commentNow(63, 6302, '/approve'));
 
     const [plan] = await rows('plan');
     expect(plan.body).not.toContain('⚠️');
@@ -265,14 +274,16 @@ describe('The Plan (spec 7, full-sdd)', () => {
   });
 });
 
-describe('The last approval before code: the warning reply and the `workspace` stop (spec 7, SPW13)', () => {
+describe('The last approval before code: the question and the `workspace` stop (spec 14)', () => {
   let t: TestApp;
 
   const run = () => t.prisma.run.findFirstOrThrow();
   const rows = async (kind: string) =>
     (await documentRows(t)).filter((row) => row.kind === kind);
-  const warnings = (issue: Parameters<typeof withMarker>[1]) =>
-    withMarker(t, issue, 'sdd-agent:approve-warning:');
+  const questions = (issue: Parameters<typeof withMarker>[1]) =>
+    withMarker(t, issue, 'sdd-agent:approve-asked:');
+  const compares = () =>
+    t.repo.calls.filter(({ method }) => method === 'changedFiles').length;
 
   /** Issue `number`: Spec v1 (reading `specReads`), approved, then Plan v1 (reading `planReads`) waits. */
   async function planWaiting(
@@ -311,37 +322,47 @@ describe('The last approval before code: the warning reply and the `workspace` s
     await t.app.close();
   });
 
-  it('Plan v1 approved after a file it read changed → ONE "[Your `/approve`](…) approved Plan v1. Since it was written …" reply with the compare link, then the stop at `workspace`', async () => {
+  it('Plan v1, a file it read changed → ONE question with the compare link, no stop; `/approve` again → the `workspace` stop, NO other reply, NO `approve-warning` row', async () => {
     const issue = await planWaiting(71, [], ['src/w-plan.ts']);
     const [plan] = await rows('plan');
     t.repo.seedFile('main', 'src/w-plan.ts', 'export const p = 2;\n');
     const now = await t.repo.resolveRef('main');
 
-    const event = await deliver(t, commentNow(71, 7102, '/approve'));
+    const asked = await deliver(t, commentNow(71, 7102, '/approve'));
 
-    expect(event).toMatchObject({ status: 'FAILED' });
-    expect(warnings(issue)).toEqual([
+    expect(asked).toMatchObject({
+      status: 'IGNORED',
+      ignoreReason: 'approve-asked',
+    });
+    expect(questions(issue)).toEqual([
       expect.objectContaining({
         body:
-          `<!-- sdd-agent:approve-warning:${plan.id} -->\n${yours('`/approve`', 71, 7102)} approved Plan v1. ` +
-          'Since it was written ' +
-          `(\`${plan.commit!.slice(0, 7)}\`), \`main\` changed \`src/w-plan.ts\`, which it read ` +
-          `([compare](https://github.com/test-owner/test-repo/compare/${plan.commit}...${now})). The code is ` +
-          "written from today's `main`, and the Coder is told which files changed. To write the Plan again " +
-          'instead, remove the `workflow: full-sdd` label and add it again.',
+          `<!-- sdd-agent:approve-asked:7102 -->\n${yours('`/approve`', 71, 7102)} didn't count yet: since Plan v1 ` +
+          `was written (\`${plan.commit!.slice(0, 7)}\`), \`main\` changed \`src/w-plan.ts\`, which it read ` +
+          `([compare](https://github.com/test-owner/test-repo/compare/${plan.commit}...${now})). Comment ` +
+          '`/refresh` to bring Spec v1 and Plan v1 up to date with `main`, or `/approve` again to approve Plan v1 ' +
+          'as it is.',
       }),
     ]);
+    expect(await run()).toMatchObject({ stopStep: null });
+    expect((await rows('plan'))[0]).toMatchObject({ approvedAt: null });
+
+    const event = await deliver(t, commentNow(71, 7103, '/approve'));
+
+    expect(event).toMatchObject({ status: 'FAILED' });
     expect(await run()).toMatchObject({
       stopStep: 'workspace',
       stopCause: 'step-not-built',
     });
     expect((await rows('plan'))[0]).toMatchObject({
       approvedBy: HUMAN,
+      approveCommentId: '7103',
       staleFiles: ['src/w-plan.ts'],
     });
+    expect(questions(issue)).toHaveLength(1);
     expect(await actionRows(t)).toEqual([
       expect.objectContaining({
-        action: 'approve-warning',
+        action: 'approve-asked',
         result: 'stale',
         documentId: plan.id,
         sourceCommentId: '7102',
@@ -350,16 +371,22 @@ describe('The last approval before code: the warning reply and the `workspace` s
     ]);
   });
 
-  it('P4: only the approved Spec read the changed file → ONE reply naming "which the approved Spec read"', async () => {
+  it('P4: only the approved Spec read the changed file → ONE question naming "which the approved Spec read"', async () => {
     const issue = await planWaiting(72, ['src/w-spec.ts'], ['src/w-plan.ts']);
     t.repo.seedFile('main', 'src/w-spec.ts', 'export const s = 2;\n');
 
     await deliver(t, commentNow(72, 7202, '/approve'));
 
-    expect(warnings(issue)).toHaveLength(1);
-    expect(warnings(issue)[0].body).toContain(
+    expect(questions(issue)).toHaveLength(1);
+    expect(questions(issue)[0].body).toContain(
       'changed `src/w-spec.ts`, which the approved Spec read ([compare]',
     );
+    expect(questions(issue)[0].body).toContain(
+      'Comment `/refresh` to bring Spec v1 and Plan v1 up to date with `main`',
+    );
+    expect((await actionRows(t))[0]).toMatchObject({
+      files: [{ path: 'src/w-spec.ts', readers: ['spec'] }],
+    });
   });
 
   it('no file it or the Spec read changed → NO reply, only the stop', async () => {
@@ -368,7 +395,7 @@ describe('The last approval before code: the warning reply and the `workspace` s
 
     await deliver(t, commentNow(73, 7302, '/approve'));
 
-    expect(warnings(issue)).toEqual([]);
+    expect(questions(issue)).toEqual([]);
     expect(await run()).toMatchObject({ stopStep: 'workspace' });
     expect((await rows('plan'))[0]).toMatchObject({
       staleFiles: [],
@@ -376,7 +403,7 @@ describe('The last approval before code: the warning reply and the `workspace` s
     });
   });
 
-  it('spec-code: the Spec’s approval after a file it read changed → the reply names `workflow: spec-code`; NO Plan, ever', async () => {
+  it('spec-code: a file the Spec read changed → ONE question, NO Plan; `/approve` again → the `workspace` stop, NO other reply, NO Plan, ever', async () => {
     const issue = await specWritten(t, 74, {
       lane: 'spec-code',
       reads: ['src/w-spec.ts'],
@@ -385,23 +412,26 @@ describe('The last approval before code: the warning reply and the `workspace` s
 
     await deliver(t, commentNow(74, 7401, '/approve'));
 
-    expect(warnings(issue)).toHaveLength(1);
-    expect(warnings(issue)[0].body).toContain(
-      `${yours('`/approve`', 74, 7401)} approved Spec v1. Since it was written`,
+    expect(questions(issue)).toHaveLength(1);
+    expect(questions(issue)[0].body).toContain(
+      `${yours('`/approve`', 74, 7401)} didn't count yet: since Spec v1 was written`,
     );
-    expect(warnings(issue)[0].body).toContain(
-      'To write the Spec again instead, remove the `workflow: spec-code` label and add it again.',
-    );
+    expect(await rows('plan')).toEqual([]);
+
+    await deliver(t, commentNow(74, 7402, '/approve'));
+
+    expect(questions(issue)).toHaveLength(1);
+    expect(await actionRows(t)).toHaveLength(1);
     expect(await run()).toMatchObject({ stopStep: 'workspace' });
     expect(await rows('plan')).toEqual([]);
   });
 
-  it('a crash between the approval and the reply → posted once on the retry; `/retry` of the `workspace` stop → no second approval or reply, the same stop', async () => {
+  it('a crash between the question’s transaction and its post (UAW9) → ONE question on the retry, no compare; `/retry` of the `workspace` stop after another change → NO question, the same stop', async () => {
     const issue = await planWaiting(75, [], ['src/w-plan.ts']);
     t.repo.seedFile('main', 'src/w-plan.ts', 'export const p = 2;\n');
     const post = t.issues.postComment.bind(t.issues);
     vi.spyOn(t.issues, 'postComment').mockImplementationOnce((ref, body) =>
-      body.includes('sdd-agent:approve-warning:')
+      body.includes('sdd-agent:approve-asked:')
         ? Promise.reject(
             new ProviderError('GitHub POST comment → 502', 'transient'),
           )
@@ -410,16 +440,29 @@ describe('The last approval before code: the warning reply and the `workspace` s
 
     const first = await deliver(t, commentNow(75, 7502, '/approve'));
     expect(first).toMatchObject({ status: 'PENDING' });
-    expect(warnings(issue)).toEqual([]);
-    const approvedAt = (await rows('plan'))[0].approvedAt;
+    expect(questions(issue)).toEqual([]);
+    expect((await rows('plan'))[0].askedCommit).toBe(
+      await t.repo.resolveRef('main'),
+    );
+    const before = compares();
     await drainDueNow(t);
 
-    expect(warnings(issue)).toHaveLength(1);
+    expect(questions(issue)).toHaveLength(1);
+    expect(compares()).toBe(before);
+    expect(
+      await t.prisma.webhookEvent.findUniqueOrThrow({
+        where: { id: first.id },
+      }),
+    ).toMatchObject({ status: 'IGNORED', ignoreReason: 'approve-asked' });
+
+    await deliver(t, commentNow(75, 7503, '/approve'));
     expect(await run()).toMatchObject({ stopStep: 'workspace', stops: 1 });
+    const approvedAt = (await rows('plan'))[0].approvedAt;
+    t.repo.seedFile('main', 'src/w-plan.ts', 'export const p = 3;\n');
 
-    await deliver(t, commentNow(75, 7503, '/retry'));
+    await deliver(t, commentNow(75, 7504, '/retry'));
 
-    expect(warnings(issue)).toHaveLength(1);
+    expect(questions(issue)).toHaveLength(1);
     expect((await rows('plan'))[0].approvedAt).toEqual(approvedAt);
     expect(await actionRows(t)).toHaveLength(1);
     expect(await run()).toMatchObject({

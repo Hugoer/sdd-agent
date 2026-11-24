@@ -36,6 +36,12 @@ export const APPROVE_REFUSED: StepOutcome = {
   reason: 'approve-refused',
 };
 
+/** Spec 14 (plan UP14): an `/approve` the bot asked about first; the router stops the step list, no status. */
+export const APPROVE_ASKED: StepOutcome = {
+  type: 'IGNORED',
+  reason: 'approve-asked',
+};
+
 /** Plan P35: a `/refresh` that did nothing (deleted, empty, already approved) ends `IGNORED`. */
 export const REFRESH_REFUSED: StepOutcome = {
   type: 'IGNORED',
@@ -78,6 +84,21 @@ export class DocumentPosts {
     });
   }
 
+  /**
+   * Spec 14 (UAW2, UAW9, plan UP21): this `/approve` already asked (a retried event): its stored question is posted if
+   * it isn't yet; true. False when it didn't ask (or the event isn't an `/approve`).
+   */
+  async replayQuestion(context: PostContext): Promise<boolean> {
+    if (context.input.type !== 'APPROVE') return false;
+    const asked = await this.store.actionFor(
+      'approve-asked',
+      context.input.comment.id,
+    );
+    if (!asked) return false;
+    await this.postReply(context, asked);
+    return true;
+  }
+
   /** A reply stored by Tx1 and not posted yet: find its marker, else post it; then Tx2. Nothing for one posted. */
   async postReply(context: PostContext, row: DocumentAction): Promise<void> {
     if (row.replyPostState !== 'PENDING_POST' || row.replyBody === null) return;
@@ -115,7 +136,7 @@ export class DocumentPosts {
   /**
    * Row 20: one reply per refused `/approve` comment, naming the waiting document; the event then ends `IGNORED`
    * `approve-refused` (plan P6). A `deleted` refusal also records the deletion, without its text, when the bot hadn't
-   * seen it.
+   * seen it. A `before-question` refusal (spec 14, UA5) links the version's last question (plan UP2).
    */
   async refuseApprove(
     context: StepContext,
@@ -129,6 +150,10 @@ export class DocumentPosts {
       !(await this.store.actionFor('approve-refused', comment.id))
     )
       await this.store.recordMissedDeletion(context.lease, waiting.id);
+    const question =
+      refusal === 'before-question'
+        ? await this.store.lastQuestion(waiting.id)
+        : null;
     await this.answer(
       context,
       {
@@ -145,6 +170,7 @@ export class DocumentPosts {
             approvedBy: waiting.approvedBy,
           },
           context.run.lane,
+          question?.replyCommentUrl ?? null,
         ),
       },
       `/approve refused (${refusal})`,

@@ -279,7 +279,7 @@ facts about the code no longer hold, follow the code at {commit}; what to build 
 ### Checkpoint 1 — Foundations
 
 - [x] All four suites pass; `npm run build` passes
-- [ ] You run `npm run db:migrate` on the dev database (UP16)
+- [x] You run `npm run db:migrate` on the dev database (UP16)
 - [x] Matrix `#H`, the config row: my instance (port 3101, the test database) with `APPROVAL_LARGE_CHANGE_FILES=14`,
   then `=151` → it doesn't start, the log names the setting and "must be an integer from 15 to 150"; unset → it
   starts (that the default is 15 shows in `#H`'s 16-file row at Checkpoint 2)
@@ -308,15 +308,15 @@ GitHub lists is one it read"; hidden paths named; no compare link for `not-compa
 `before-question` text with the question's link. The "which it read" grouping (`readFiles`) is reused.
 
 **Acceptance criteria:**
-- [ ] Every text in the spec's "The question" and "Written before the question", verbatim as unit tests, plus UP3's
+- [x] Every text in the spec's "The question" and "Written before the question", verbatim as unit tests, plus UP3's
   two Plan texts and UP4's skill forms; no `@` outside backticks in any of them
-- [ ] `questionFor`: a read file changed → `stale` even with more than `threshold` files; none read and `threshold + 1`
+- [x] `questionFor`: a read file changed → `stale` even with more than `threshold` files; none read and `threshold + 1`
   files → `large-change`, `threshold` → none; a cut list with a read file → `stale` with "possibly more", without →
   `large-change`; not compared → `not-compared`
-- [ ] `startOf`: `asked_commit` over `checked_commit` over `commit`
+- [x] `startOf`: `asked_commit` over `checked_commit` over `commit`
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test` pass (`commit-check.spec.ts`, `document-comments.spec.ts`)
+- [x] `npm run typecheck && npm run lint && npm test` pass (`commit-check.spec.ts`, `document-comments.spec.ts`)
 
 **Dependencies:** T1
 **Files:** `src/documents/commit-check.ts` (+ spec), `src/documents/document-comments.ts` (+ spec),
@@ -343,32 +343,32 @@ The approve ops (`spec.handler.ts`, `plan.handler.ts`): a retried approval → n
 
 **Acceptance criteria** (`test/up-to-date-approvals.integration.spec.ts`, real handlers, the scripted model, the fake
 repo scripted per compare):
-- [ ] Spec v1, a file it read changed, `/approve` → ONE question (the spec's text, the compare link `<A>...<now>`);
+- [x] Spec v1, a file it read changed, `/approve` → ONE question (the spec's text, the compare link `<A>...<now>`);
   `IGNORED` `approve-asked`; `spec-review` stays; no Plan, no new `execution_logs` row; `asked_commit` = now; the
   `approve-asked` row (`stale`, `files`, both commits, `changed_files`, `files_complete`, `reply_posted_at`); the log
   line. `/approve` again → Plan v1 (no ⚠️ line), NO reply to it; `stale_files` holds the file, `approved_from_commit`
   = the Spec's commit
-- [ ] `main` moves after a question (another read file) → a second question naming only that file, "since [the bot
+- [x] `main` moves after a question (another read file) → a second question naming only that file, "since [the bot
   asked](…)", `from_commit` = the first's `to_commit`; then an unrelated change → counts, `stale_files` holds both
   (the full range)
-- [ ] Only an unrelated change since the Spec → counts at once, no question
-- [ ] The Plan waits; a file only the approved Spec read changed → ONE question "which the approved Spec read",
+- [x] Only an unrelated change since the Spec → counts at once, no question
+- [x] The Plan waits; a file only the approved Spec read changed → ONE question "which the approved Spec read",
   offering "`/refresh` to bring Spec v1 and Plan v1 up to date"; `/approve` again → the `workspace` stop, no other
   reply, no `approve-warning` row
-- [ ] `spec-code`: a question, then `/approve` again → the `workspace` stop and no other reply; `/retry` of that stop
+- [x] `spec-code`: a question, then `/approve` again → the `workspace` stop and no other reply; `/retry` of that stop
   after another read file changed → the same stop, NO question; `code-only`: any change, `/approve` on the go-signal
   → the stop, NO question
-- [ ] An unknown starting commit → ONE `not-compared` question (no compare link); `/approve` again → counts,
+- [x] An unknown starting commit → ONE `not-compared` question (no compare link); `/approve` again → counts,
   `changed_complete` null when the full range also can't be compared
-- [ ] 16 changed files, none read → ONE `large-change` question "16 files changed on `main`"; 15 → counts; a cut list
+- [x] 16 changed files, none read → ONE `large-change` question "16 files changed on `main`"; 15 → counts; a cut list
   (300, `complete` false) with none read → "more than 300 files changed"; with a read file → `stale` "… and possibly
   more"
-- [ ] A crash after the question's transaction (its post fails) → the retried event posts ONE reply and compares
+- [x] A crash after the question's transaction (its post fails) → the retried event posts ONE reply and compares
   nothing
-- [ ] Every row of "Behaviors and texts asserted by spec 7's suites" marked T5 above passes as changed there
+- [x] Every row of "Behaviors and texts asserted by spec 7's suites" marked T5 above passes as changed there
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T2, T3, T4
 **Files:** `src/documents/document-approval.ts`, `src/documents/spec.handler.ts`, `src/documents/plan.handler.ts`,
@@ -391,19 +391,19 @@ reply). The refusal: `document_actions` `approve-refused`, result `before-questi
 `DocumentsGate.replyWithoutRun` (no run) post this event's stored question first and end `IGNORED` `approve-asked`.
 
 **Acceptance criteria:**
-- [ ] Unit: the verdict table: written before the question → `before-question`; the same second → `valid`; a closed
+- [x] Unit: the verdict table: written before the question → `before-question`; the same second → `valid`; a closed
   question (`asked_commit` empty) → `valid`; this event's own question → `valid` whatever else holds; spec 7's
   verdicts before `before-question` (a deleted document → `deleted`)
-- [ ] Two `/approve` written while the lease is held → ONE question and ONE `before-question` reply linking it; no
+- [x] Two `/approve` written while the lease is held → ONE question and ONE `before-question` reply linking it; no
   Plan; then an `/approve` → Plan v1
-- [ ] A question stored but not posted (its post failed, the event waits), then another `/approve` → the question is
+- [x] A question stored but not posted (its post failed, the event waits), then another `/approve` → the question is
   posted first, then that `/approve` gets `before-question`; the first event's retry posts nothing more
-- [ ] A retried asking event after the document was deleted → only its question, no `deleted` reply
-- [ ] A retried asking event after the run stopped (`needs-human`) or ended → only its question, posted once; no
+- [x] A retried asking event after the document was deleted → only its question, no `deleted` reply
+- [x] A retried asking event after the run stopped (`needs-human`) or ended → only its question, posted once; no
   "Run 1 is stopped" or "nothing to approve" reply (UP21)
 
 **Verification:**
-- [ ] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
+- [x] `npm run typecheck && npm run lint && npm test && npm run test:integration` pass
 
 **Dependencies:** T5
 **Files:** `src/documents/approval-check.ts` (+ spec), `src/workflow/decide.ts` (+ spec),
@@ -412,8 +412,8 @@ reply). The refusal: `document_actions` `approve-refused`, result `before-questi
 
 ### Checkpoint 2 — The question on the sandbox
 
-- [ ] All four suites pass; `npm run build` passes
-- [ ] Matrix rows on the sandbox (plan "Verification matrix on the sandbox" below): `#A` (2 rows), `#B` (4), `#E`
+- [x] All four suites pass; `npm run build` passes
+- [x] Matrix rows on the sandbox (plan "Verification matrix on the sandbox" below): `#A` (2 rows), `#B` (4), `#E`
   (2), `#F` (2), `#G` (1), `#H` (`not-compared`, `large-change`)
 - [ ] You review and commit
 

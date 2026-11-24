@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  approveAskedMarker,
+  approveAskedReply,
   approveHintReply,
   approveRefusedReply,
-  approveWarningReply,
   documentDeletedComment,
   goSignalComment,
   lateCommentReply,
@@ -99,6 +100,266 @@ describe('specComment (spec "The document comment")', () => {
 const LINK = 'https://github.com/o/r/issues/12#issuecomment-';
 const answered = (id: string) => ({ id, url: `${LINK}${id}` });
 
+describe('approveAskedReply (spec 14 "The question")', () => {
+  const A = '4f2c1ab'.padEnd(40, 'a');
+  const P = '9e1d0c2'.padEnd(40, 'b');
+  const Q = 'b71e4d8'.padEnd(40, 'c');
+  const C = 'c3d9a10'.padEnd(40, 'd');
+  const CMP =
+    'https://github.com/Hugoer/sdd-agent-sandbox/compare/4f2c1ab...b71e4d8';
+  const QUESTION = `${LINK}700`;
+  const spec = {
+    approve: answered('501'),
+    document: { kind: 'spec' as const, version: 1 },
+    base: 'main',
+    start: { commit: A, kind: 'written' as const },
+    questionUrl: null,
+    compareUrl: CMP,
+  };
+  const plan = {
+    ...spec,
+    document: { kind: 'plan' as const, version: 1 },
+    specVersion: 1,
+    start: { commit: P, kind: 'written' as const },
+    compareUrl: '…',
+  };
+  const stale = (
+    flagged: { path: string; readers: ('own' | 'spec')[] }[],
+    data: { skills?: string[]; complete?: boolean } = {},
+  ) => ({
+    result: 'stale' as const,
+    flagged,
+    skills: [],
+    complete: true,
+    changedFiles: flagged.length,
+    ...data,
+  });
+  const yours = `[Your \`/approve\`](${LINK}501)`;
+  const text = (body: string) => body.split('\n').slice(1).join('\n');
+
+  it('Spec, files changed: the marker, the file "which it read", the compare link, the two ways on', () => {
+    const body = approveAskedReply({
+      ...spec,
+      question: stale([{ path: 'src/index.ts', readers: ['own'] }]),
+    });
+    expect(body.split('\n')[0]).toBe(approveAskedMarker('501'));
+    expect(approveAskedMarker('501')).toBe(
+      '<!-- sdd-agent:approve-asked:501 -->',
+    );
+    expect(text(body)).toBe(
+      `${yours} didn't count yet: since Spec v1 was written (\`4f2c1ab\`), \`main\` changed \`src/index.ts\`, which ` +
+        `it read ([compare](${CMP})). Comment \`/refresh\` to bring it up to date with \`main\`, or \`/approve\` ` +
+        'again to approve it as it is.',
+    );
+  });
+
+  it('Plan (plan P4’s grouping): its own reads and the approved Spec’s; both documents named', () => {
+    expect(
+      text(
+        approveAskedReply({
+          ...plan,
+          question: stale([
+            { path: 'src/index.ts', readers: ['own'] },
+            { path: 'README.md', readers: ['spec'] },
+          ]),
+        }),
+      ),
+    ).toBe(
+      `${yours} didn't count yet: since Plan v1 was written (\`9e1d0c2\`), \`main\` changed \`src/index.ts\`, which ` +
+        'it read, and `README.md`, which the approved Spec read ([compare](…)). Comment `/refresh` to bring Spec v1 ' +
+        'and Plan v1 up to date with `main`, or `/approve` again to approve Plan v1 as it is.',
+    );
+    expect(
+      approveAskedReply({
+        ...plan,
+        question: stale([{ path: 'AGENTS.md', readers: ['own', 'spec'] }]),
+      }),
+    ).toContain('changed `AGENTS.md`, which it and the approved Spec read (');
+  });
+
+  it('a step skill’s file (UAW6, plan UP4): its skill named; a Plan names each changed skill', () => {
+    expect(
+      text(
+        approveAskedReply({
+          ...spec,
+          question: stale(
+            [{ path: '.github-agent/skills/spec/SKILL.md', readers: ['own'] }],
+            { skills: ['spec'] },
+          ),
+        }),
+      ),
+    ).toBe(
+      `${yours} didn't count yet: since Spec v1 was written (\`4f2c1ab\`), \`main\` changed ` +
+        `\`.github-agent/skills/spec/SKILL.md\`, which it read ([compare](${CMP})). Comment \`/refresh\` to bring ` +
+        'it up to date with `main` and its `spec` skill, or `/approve` again to approve it as it is.',
+    );
+    const planWith = (skills: string[]) =>
+      approveAskedReply({
+        ...plan,
+        question: stale([{ path: 'x', readers: ['own'] }], { skills }),
+      });
+    expect(planWith(['plan'])).toContain(
+      'bring Spec v1 and Plan v1 up to date with `main` and the `plan` skill, or',
+    );
+    expect(planWith(['spec'])).toContain(
+      'up to date with `main` and the `spec` skill, or',
+    );
+    expect(planWith(['spec', 'plan'])).toContain(
+      'up to date with `main` and the `spec` and `plan` skills, or',
+    );
+  });
+
+  it('the starting point: "since the bot asked" (the document named), "since … was last checked"', () => {
+    expect(
+      approveAskedReply({
+        ...spec,
+        start: { commit: Q, kind: 'asked' },
+        questionUrl: QUESTION,
+        question: stale([{ path: 'src/index.test.ts', readers: ['own'] }]),
+      }),
+    ).toContain(
+      `didn't count yet: since [the bot asked](${QUESTION}) (\`b71e4d8\`), \`main\` changed \`src/index.test.ts\`, ` +
+        `which Spec v1 read ([compare](${CMP})).`,
+    );
+    expect(
+      approveAskedReply({
+        ...plan,
+        start: { commit: Q, kind: 'asked' },
+        questionUrl: QUESTION,
+        question: stale([{ path: 'a', readers: ['own', 'spec'] }]),
+      }),
+    ).toContain('`a`, which Plan v1 and the approved Spec read (');
+    expect(
+      approveAskedReply({
+        ...spec,
+        start: { commit: C, kind: 'checked' },
+        question: stale([{ path: 'src/index.ts', readers: ['own'] }]),
+      }),
+    ).toContain(
+      "didn't count yet: since Spec v1 was last checked (`c3d9a10`), `main` changed `src/index.ts`, which it read",
+    );
+  });
+
+  it('more than 5 files → the first 5 and "and N more"; a cut list → "… and possibly more"; hidden paths named', () => {
+    const flagged = Array.from({ length: 7 }, (_, i) => ({
+      path: `f${i}.ts`,
+      readers: ['own' as const],
+    }));
+    expect(approveAskedReply({ ...spec, question: stale(flagged) })).toContain(
+      'changed `f0.ts`, `f1.ts`, `f2.ts`, `f3.ts`, `f4.ts` and 2 more, which it read (',
+    );
+    expect(
+      approveAskedReply({
+        ...spec,
+        question: stale(
+          [{ path: '.github-agent/workflow.json', readers: ['own'] }],
+          { complete: false },
+        ),
+      }),
+    ).toContain(
+      'changed `.github-agent/workflow.json` … and possibly more, which it read (',
+    );
+  });
+
+  it('not-compared: no compare link; each starting point names itself', () => {
+    const notCompared = { result: 'not-compared' as const };
+    expect(text(approveAskedReply({ ...spec, question: notCompared }))).toBe(
+      `${yours} didn't count yet: the bot couldn't compare \`4f2c1ab\`, where Spec v1 was written, with \`main\` ` +
+        "(that commit is no longer on GitHub, e.g. after a force-push), so it can't tell whether files it read " +
+        "changed. Comment `/refresh` to check it against today's `main`, or `/approve` again to approve it as it is.",
+    );
+    expect(approveAskedReply({ ...spec, question: notCompared })).not.toContain(
+      'compare](',
+    );
+    expect(
+      approveAskedReply({
+        ...spec,
+        start: { commit: Q, kind: 'asked' },
+        questionUrl: QUESTION,
+        question: notCompared,
+      }),
+    ).toContain(
+      `couldn't compare \`b71e4d8\`, the commit of [the bot's question](${QUESTION}), with \`main\``,
+    );
+    expect(
+      approveAskedReply({
+        ...spec,
+        start: { commit: C, kind: 'checked' },
+        question: notCompared,
+      }),
+    ).toContain(
+      "couldn't compare `c3d9a10`, where Spec v1 was last checked, with `main`",
+    );
+  });
+
+  it('Plan not-compared (plan UP3): both readers, both documents', () => {
+    expect(
+      text(
+        approveAskedReply({ ...plan, question: { result: 'not-compared' } }),
+      ),
+    ).toBe(
+      `${yours} didn't count yet: the bot couldn't compare \`9e1d0c2\`, where Plan v1 was written, with \`main\` ` +
+        "(that commit is no longer on GitHub, e.g. after a force-push), so it can't tell whether files it or the " +
+        "approved Spec read changed. Comment `/refresh` to check Spec v1 and Plan v1 against today's `main`, or " +
+        '`/approve` again to approve Plan v1 as it is.',
+    );
+  });
+
+  it('large-change (UAW5): the count, none read; a cut list → "more than 300"; the Plan’s form (plan UP3)', () => {
+    const large = {
+      result: 'large-change' as const,
+      changedFiles: 42,
+      complete: true,
+    };
+    expect(
+      text(approveAskedReply({ ...spec, compareUrl: '…', question: large })),
+    ).toBe(
+      `${yours} didn't count yet: since Spec v1 was written (\`4f2c1ab\`), 42 files changed on \`main\` ` +
+        '([compare](…)), none of them one it read. A change this size may still affect it. Comment `/refresh` to ' +
+        "check it against today's `main`, or `/approve` again to approve it as it is.",
+    );
+    expect(
+      approveAskedReply({
+        ...spec,
+        compareUrl: '…',
+        question: { ...large, changedFiles: 300, complete: false },
+      }),
+    ).toContain(
+      'more than 300 files changed on `main` ([compare](…)); none of the 300 GitHub lists is one it read.',
+    );
+    expect(text(approveAskedReply({ ...plan, question: large }))).toBe(
+      `${yours} didn't count yet: since Plan v1 was written (\`9e1d0c2\`), 42 files changed on \`main\` ` +
+        '([compare](…)), none of them one it or the approved Spec read. A change this size may still affect them. ' +
+        "Comment `/refresh` to check Spec v1 and Plan v1 against today's `main`, or `/approve` again to approve " +
+        'Plan v1 as it is.',
+    );
+    expect(
+      approveAskedReply({
+        ...spec,
+        start: { commit: Q, kind: 'asked' },
+        questionUrl: QUESTION,
+        question: large,
+      }),
+    ).toContain(`since [the bot asked](${QUESTION}) (\`b71e4d8\`), 42 files`);
+  });
+
+  it('no `@` outside backticks in any form', () => {
+    const bodies = [
+      approveAskedReply({
+        ...spec,
+        question: stale([{ path: 'a', readers: ['own'] }]),
+      }),
+      approveAskedReply({ ...plan, question: { result: 'not-compared' } }),
+      approveAskedReply({
+        ...plan,
+        question: { result: 'large-change', changedFiles: 16, complete: true },
+      }),
+    ];
+    for (const body of bodies)
+      expect(body.replace(/`[^`]*`/g, '')).not.toContain('@');
+  });
+});
+
 describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
   const SPEC_V1 = {
     kind: 'spec' as const,
@@ -118,6 +379,22 @@ describe('approveRefusedReply (spec "`/approve`", the verdict table)', () => {
     ).toBe(
       '<!-- sdd-agent:approve-refused:501 -->\n' +
         `[Your \`/approve\`](${LINK}501) changes nothing: Spec v1 is already approved (by \`bob\`).`,
+    );
+  });
+
+  it('before-question (spec 14, UA5) links the bot’s question', () => {
+    expect(
+      approveRefusedReply(
+        answered('503'),
+        'before-question',
+        SPEC_V1,
+        'full-sdd',
+        `${LINK}700`,
+      ),
+    ).toBe(
+      '<!-- sdd-agent:approve-refused:503 -->\n' +
+        `[Your \`/approve\`](${LINK}503) was written before [the bot's question](${LINK}700), so it didn't count: ` +
+        'read it, then comment `/refresh`, or `/approve` again.',
     );
   });
 
@@ -296,86 +573,6 @@ describe('planComment (spec "The document comment")', () => {
       ].join('\n'),
     );
     expect(planComment(input).startsWith(planMarker('p-1'))).toBe(true);
-  });
-});
-
-describe('approveWarningReply (SPW13, plan P4)', () => {
-  const FROM = '9e1d0c2'.padEnd(40, '1');
-  const URL = 'https://github.com/o/r/compare/a...b';
-  const plan = {
-    versionId: 'p-1',
-    approve: { url: `${LINK}801` },
-    document: { kind: 'plan' as const, version: 1 },
-    lane: 'full-sdd' as const,
-    base: 'main',
-  };
-  const stale = (flagged: { path: string; readers: ('own' | 'spec')[] }[]) =>
-    approveWarningReply({
-      ...plan,
-      warning: {
-        kind: 'stale',
-        from: FROM,
-        flagged,
-        complete: true,
-        compareUrl: URL,
-      },
-    });
-
-  it('a file the Plan read: the spec’s text, with the compare link and the restart', () => {
-    expect(stale([{ path: 'src/index.ts', readers: ['own'] }])).toBe(
-      '<!-- sdd-agent:approve-warning:p-1 -->\n' +
-        `[Your \`/approve\`](${LINK}801) approved Plan v1. Since it was written (\`9e1d0c2\`), \`main\` changed ` +
-        '`src/index.ts`, which it read ' +
-        `([compare](${URL})). The code is written from today's \`main\`, and the Coder is told which files ` +
-        'changed. To write the Plan again instead, remove the `workflow: full-sdd` label and add it again.',
-    );
-  });
-
-  it('P4: who read each file is named', () => {
-    expect(stale([{ path: 'src/index.ts', readers: ['spec'] }])).toContain(
-      'changed `src/index.ts`, which the approved Spec read ([compare]',
-    );
-    expect(
-      stale([{ path: 'src/index.ts', readers: ['own', 'spec'] }]),
-    ).toContain('changed `src/index.ts`, which it and the approved Spec read');
-    expect(
-      stale([
-        { path: 'a.ts', readers: ['own'] },
-        { path: 'b.ts', readers: ['spec'] },
-        { path: 'c.ts', readers: ['own'] },
-      ]),
-    ).toContain(
-      'changed `a.ts` and `c.ts`, which it read, and `b.ts`, which the approved Spec read ([compare]',
-    );
-  });
-
-  it('spec-code: the Spec and its lane label', () => {
-    expect(
-      approveWarningReply({
-        ...plan,
-        document: { kind: 'spec', version: 2 },
-        lane: 'spec-code',
-        warning: {
-          kind: 'stale',
-          from: FROM,
-          flagged: [{ path: 'src/index.ts', readers: ['own'] }],
-          complete: true,
-          compareUrl: URL,
-        },
-      }),
-    ).toContain('approved Spec v2. Since it was written (`9e1d0c2`)');
-  });
-
-  it('the comparison failed → the not-compared reply', () => {
-    expect(
-      approveWarningReply({
-        ...plan,
-        warning: { kind: 'not-compared', from: FROM },
-      }).split('\n')[1],
-    ).toBe(
-      `[Your \`/approve\`](${LINK}801) approved Plan v1. The bot couldn't compare \`9e1d0c2\` with \`main\`, so it ` +
-        "can't tell whether files it read have changed.",
-    );
   });
 });
 
