@@ -12,6 +12,7 @@ import { IntakeService } from '../src/intake/intake.service.js';
 import { SessionLeaseService } from '../src/workflow/session-lease.service.js';
 import { newDeliveryId, startApp, type TestApp } from './app.js';
 import { resetDatabase } from './db.js';
+import { testScanner } from './fakes/in-memory-context-loads.js';
 import {
   BOT_LOGIN,
   HUMAN,
@@ -76,6 +77,7 @@ describe('AnswerReader.unread (spec 6, T10)', () => {
       t.app.get(EventsService),
       t.app.get(IntakeService),
       new GrillStore(t.prisma, t.app.get(SessionLeaseService)),
+      testScanner(),
     );
   });
   beforeEach(async () => {

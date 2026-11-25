@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { StepConfigError } from '../contracts/llm-error.js';
 import { ProviderError } from '../contracts/provider-error.js';
 import {
@@ -6,10 +6,12 @@ import {
   type RepoProvider,
 } from '../contracts/repo-provider.js';
 import type { StepName } from '../contracts/step.js';
+import { kindList, SecretScanner } from '../secret-scan/secret-scanner.js';
 import {
   AGENTS_FILE,
   ROOT_AGENTS_BYTES_LIMIT,
   buildCatalog,
+  descriptionOf,
   type CommitReads,
 } from './repo-catalog.js';
 import { SKILL_BYTES_LIMIT, listSkill } from './skill-loader.js';
@@ -32,12 +34,18 @@ const STEPS: readonly StepName[] = [
  * the root AGENTS.md, every step skill's and repo skill's SKILL.md), kept for the latest commit only. A commit's
  * content never changes, so the entry can't go stale; a new commit drops it, a restart empties it. It is not
  * workflow state (§7 rule 5). A GitHub error while reading passes through and nothing is kept.
+ * Spec 12 BDW5 (plan DP10): what the model gets from these reads is redacted here, once per commit, with one
+ * `catalog` log line per file with a finding; the header checks read the SKILL.md texts as read.
  */
 @Injectable()
 export class RepoCatalogService {
+  private readonly logger = new Logger(RepoCatalogService.name);
   private kept: { commit: string; reads: Promise<CommitReads> } | null = null;
 
-  constructor(@Inject(REPO_PROVIDER) private readonly repo: RepoProvider) {}
+  constructor(
+    @Inject(REPO_PROVIDER) private readonly repo: RepoProvider,
+    private readonly scanner: SecretScanner,
+  ) {}
 
   /** The reads at `commit`: from memory when it is the kept commit, else read now (and kept). */
   at(commit: string): Promise<CommitReads> {
@@ -64,6 +72,7 @@ export class RepoCatalogService {
         catalog: buildCatalog([], []),
         rootAgents: null,
         skillMd: new Map(),
+        redacted: { skillMd: new Map(), descriptions: new Map() },
       };
     }
 
@@ -79,7 +88,10 @@ export class RepoCatalogService {
           ? 'unreadable'
           : agents.trim() === ''
             ? null
-            : { text: agents, bytes: root.size };
+            : {
+                text: this.redact(commit, AGENTS_FILE, agents),
+                bytes: root.size,
+              };
     }
 
     // Every mapped step skill (a SKILL.md over the cap is never read: spec 4) and every repo skill.
@@ -101,14 +113,42 @@ export class RepoCatalogService {
       ),
     );
 
+    const skillMd = new Map(texts);
+    const redactedSkillMd = new Map(
+      texts.map(
+        ([path, text]) =>
+          [
+            path,
+            text === null ? null : this.redact(commit, path, text),
+          ] as const,
+      ),
+    );
+    // A description is part of its SKILL.md, already logged above: redacted again without a line.
+    const descriptions = new Map(
+      catalog.skills.map(({ skillFile: { path } }) => [
+        path,
+        this.scanner.redact(descriptionOf(skillMd.get(path))).text,
+      ]),
+    );
     return {
       commit,
       workflow: { config },
       listing,
       catalog,
       rootAgents,
-      skillMd: new Map(texts),
+      skillMd,
+      redacted: { skillMd: redactedSkillMd, descriptions },
     };
+  }
+
+  /** The text redacted, with `catalog @<commit>: <path>: redacted <n> (<kinds>)` when something was found. */
+  private redact(commit: string, path: string, read: string): string {
+    const { text, findings } = this.scanner.redact(read);
+    if (findings.length > 0)
+      this.logger.warn(
+        `catalog @${commit.slice(0, 7)}: ${path}: redacted ${findings.length} (${kindList(findings)})`,
+      );
+    return text;
   }
 }
 

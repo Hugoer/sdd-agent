@@ -153,3 +153,73 @@ describe('SecretScanner', () => {
     expect(scanner.redact(text)).toEqual({ text, findings: [] });
   });
 });
+
+describe('SecretScanner.redactJson (spec 12 BDW4)', () => {
+  const scanner = scannerWith();
+  const github = tokens['github-token'][0];
+  const google = tokens['google-api-key'][0];
+
+  it('redacts strings at any depth and keeps keys, numbers, booleans and null', () => {
+    const input = {
+      action: 'created',
+      [github]: 'a key that looks like a token stays a key',
+      issue: {
+        number: 7,
+        locked: false,
+        closed_at: null,
+        body: `key ${google}`,
+        labels: [{ name: 'workflow: full-sdd' }, { name: `x ${github}` }],
+      },
+      comment: { body: `token ${github} here` },
+      list: [[`deep ${google}`], 3, true],
+    };
+    const before = structuredClone(input);
+
+    expect(scanner.redactJson(input)).toEqual({
+      value: {
+        action: 'created',
+        [github]: 'a key that looks like a token stays a key',
+        issue: {
+          number: 7,
+          locked: false,
+          closed_at: null,
+          body: 'key [REDACTED: google-api-key]',
+          labels: [
+            { name: 'workflow: full-sdd' },
+            { name: 'x [REDACTED: github-token]' },
+          ],
+        },
+        comment: { body: 'token [REDACTED: github-token] here' },
+        list: [['deep [REDACTED: google-api-key]'], 3, true],
+      },
+      findings: [
+        { kind: 'google-api-key' },
+        { kind: 'github-token' },
+        { kind: 'github-token' },
+        { kind: 'google-api-key' },
+      ],
+    });
+    expect(input).toEqual(before);
+  });
+
+  it.each([
+    ['a string', 'plain'],
+    ['a number', 42],
+    ['a boolean', true],
+    ['null', null],
+    ['an empty object', {}],
+    ['an empty array', []],
+  ])(
+    '%s without a secret comes back equal, with no finding',
+    (_name, value) => {
+      expect(scanner.redactJson(value)).toEqual({ value, findings: [] });
+    },
+  );
+
+  it('own secrets are redacted in JSON too', () => {
+    expect(scanner.redactJson({ body: WEBHOOK_SECRET })).toEqual({
+      value: { body: '[REDACTED: own-secret]' },
+      findings: [{ kind: 'own-secret' }],
+    });
+  });
+});

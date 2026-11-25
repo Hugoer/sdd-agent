@@ -4,6 +4,8 @@
 > "2026-11-24, review"); not built. BD1–BD12 come from the interview of 2026-11-24 and were confirmed by the developer; BDW1–BDW16 were
 > decided while writing; in the write-time interview of 2026-11-25 the developer changed BDW10 (no commit check) and
 > confirmed BDW11; the other BDW decisions follow from rules already settled and are reviewed with this spec.
+> 2026-11-25, plan: the plan `docs/plans/spec-github-agent-bot-data-protection.md` (DP1–DP29) added its decisions and
+> fixes here, each marked "2026-11-25, plan"; building.
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -193,13 +195,19 @@ developer-configurable read list; the Coder's and the Quality Gate's own use of 
   `read_file` already does (spec 7 SPW2). One log line per file with a finding (path, count, kinds), no comment, no
   `context_loads` change. 2026-11-24, review: `RepoCatalogService` knows the commit, not the step, so its line is
   `catalog @<commit>: <path>: redacted <n> (<kinds>)`. A trusted file stays trusted: it is still loaded whole and not wrapped.
+  2026-11-25, plan (DP10): a skill's header is checked on the text as read (a placeholder holds `": "` and starts with
+  `[`, which the header reader refuses, so redacting first would stop every run with `invalid skills`); the bodies and
+  descriptions given to the model are the redacted ones. The header check never quotes a value.
 - **BDW6 The `bot-data` patterns.** Case-insensitive, bounded quantifiers, like spec 4's list. Three shapes
   (2026-11-24, review: narrowed, so routine asks don't warn):
   1. copy, print, show, paste, reveal, output or dump … `CLAUDE.md`, `GEMINI.md`, `AGENTS.md`, `.cursorrules`,
      `.windsurfrules`, `workflow.json`, `.github-agent`, `.env` … **into / in** the Spec, the Plan, a comment, the
      PR, the output, the answer (a destination is required; "the system prompt" stays spec 4's `prompt-leak`);
   2. put, include, paste, add, write or copy … a key, token, secret, password or credential … **into / in** the
-     Spec, the Plan, a comment, the PR, the output, the answer;
+     Spec, the Plan, a comment, the PR, the output, the answer; 2026-11-25, plan (DP1): a word that points at a value
+     someone has comes right after the verb: `this`, `that`, `these`, `my`, `our`, `your` or `the following` ("put
+     **this** deploy key in the Spec"), so "Add the primary key in the Plan" and "Add token refresh in the Spec" don't
+     match;
   3. delete or remove `AGENTS.md`, `CLAUDE.md`, `workflow.json`, `.github-agent` or the step skills, with at most
      three words between the verb and the file ("delete the AGENTS.md file"), so "remove the old section of
      `AGENTS.md`" doesn't match.
@@ -207,7 +215,8 @@ developer-configurable read list; the Coder's and the Quality Gate's own use of 
   The exact regular expressions are written in the plan with their unit tests, one per shape, plus sandbox #51's
   text and these non-matches: "add a `CLAUDE.md` for the team", "include `.env` in `.gitignore`", "show how to set up
   `.env`", "remove the old job from `.github/workflows/ci.yml`", "rewrite the testing section of `AGENTS.md`". A
-  match only warns (BD4).
+  match only warns (BD4). 2026-11-25, plan: the exact patterns and their cases are in the plan ("The `bot-data`
+  patterns"); sandbox #51's text matches through shape 2.
 - **BDW7 The hidden list stays segment rules.** `isHiddenPath()` keeps its rules and adds one more on the file name
   (the last segment), in any folder and any letter case: `.env`, or a name starting with `.env.` other than
   `.env.example` (2026-11-24, review: no glob, since Node's `**` skips folders whose names start with a dot, and
@@ -217,6 +226,10 @@ developer-configurable read list; the Coder's and the Quality Gate's own use of 
   no `..` segment, no backslash, no control character. A glob that matches nothing is allowed. Problems use spec 4's
   form (`invalid workflow.json: protectedPaths.3: …`); a missing key says what to do:
   `invalid workflow.json: protectedPaths: missing (list the paths the bot must never change, [] for none)`.
+  2026-11-25, plan (DP16), the other messages: an invalid entry gives `protectedPaths.<i>: must be a path glob
+  relative to the repo root: 1–256 characters, no leading "/", no ".." segment, no "\", no control character`; an
+  entry that isn't a string `protectedPaths.<i>: must be a string`; more than 200 entries `protectedPaths: must list
+  at most 200 globs`; not an array `protectedPaths: must be an array`. Duplicate globs are allowed.
 - **BDW9 The matcher.** A pure file, `src/llm/protected-paths.ts`, next to `workflow-config.ts`:
 
   ```ts
@@ -432,7 +445,13 @@ stops a run; an injection match never stops a run.
 
 - `secret-scan payload <deliveryId>: redacted <n> (<kinds>)` (BDW4);
 - `secret-scan <step> <issue> <sourceKey>: redacted <n> (<kinds>)` for an untrusted block redacted in `buildPrompt()`;
-- `context <step> @<commit>: <path>: redacted <n> (<kinds>)` for a repo file (BDW5; `read_file` keeps its line);
+- `secret-scan run-start <issue> description: redacted <n> (<kinds>)` at the run start (2026-11-25, plan);
+- `secret-scan answer <issue> comment-<id>: redacted <n> (<kinds>)` from Grill Me's answer reader, for a payload stored
+  before the migration (2026-11-25, plan);
+- `catalog @<commit>: <path>: redacted <n> (<kinds>)` for the root `AGENTS.md`, a `SKILL.md` body or a repo skill's
+  description (BDW5; 2026-11-25, plan);
+- `context <step> #<n> turn <t>: <path>: redacted <n> (<kinds>)` for a file `load_file` or `read_file` reads (spec 7's
+  prefix, now one place for both; 2026-11-25, plan: was `context <step> @<commit>`);
 - `secret-notice <issue> <sourceKey>: <kinds>; posted | already-there` (like `injection-warning`).
 
 Never a value, never the text.
@@ -444,18 +463,24 @@ Never a value, never the text.
 - **`src/secret-scan/secret-patterns.ts`:** `REDACTED_PLACEHOLDER` (`/\[REDACTED: ([a-z-]+)\]/g`) and
   `placeholderKinds(text): SecretKind[]` (BDW2).
 - **`buildPrompt()`** (`src/llm/prompt.ts`) takes the scanner's `redact` and returns `secrets: { source; kinds }[]`
-  beside `injections` and `cuts`.
+  beside `injections` and `cuts`. 2026-11-25, plan (DP5, DP6): `redact` is required (no default that skips it); one
+  `secrets` entry per untrusted block holding a placeholder after redaction, `{ source; kinds; redacted }`: `kinds`
+  the placeholders' kinds in the whole redacted text, each once; `redacted` the kinds found by this call (empty when
+  the text came in already redacted).
 - **`SecretNoticeService`** (`src/llm/secret-notice.service.ts`): `notify(task, source, kinds): Promise<'posted' |
   'already-there'>`, and `secretNoticeMarker(key)`, `secretNoticeComment(source, kinds)` (pure).
 - **`InjectionKind`** gains `'bot-data'` (`src/llm/injection-patterns.ts`).
 - **`WorkflowConfig`** gains `protectedPaths: string[]` (required); `src/llm/protected-paths.ts` (BDW9);
   `BOT_CONFIG_PATHS` (the config path constants the floor must cover, BD7: `[WORKFLOW_CONFIG_PATH]`).
-- **`isHiddenPath()`** (`src/llm/context-tools.ts`) adds the two `.env` globs.
+- **`isHiddenPath()`** (`src/llm/context-tools.ts`) adds one file-name rule (BDW7; 2026-11-25, plan: was "the two
+  `.env` globs", BDW7 says no glob).
 
 ## Owned tables (changes)
 
 - `execution_logs`: new column `secret_kinds text[] NOT NULL DEFAULT '{}'` (BDW11). Old rows: `{}`.
 - `webhook_events.payload`, `grill_answers.body`: no schema change; new rows are redacted (BD2).
+- `execution_logs.prompt` and `answer`: the stored copy passes `redactJson()` (2026-11-25, plan, DP3: a model answer
+  quoting a key-shaped string is stored redacted; the step gets the answer as returned).
 
 No row is deleted or rewritten (BD11, BD12).
 
@@ -497,11 +522,14 @@ questions", and the new kind in the injection warning's description.
   ports (L9); the input guard's order becomes redact → detect → cut → wrap (L7); a new pattern kind `bot-data` (L8);
   `workflow.json` requires `protectedPaths` (LW11's message form);
   `execution_logs.secret_kinds`.
-- **Spec 5 (`router-session-lease`):** the run-start check posts the 🔑 notice for the title and the description
-  before the injection warning.
+- **Spec 5 (`router-session-lease`):** the run-start check posts the 🔑 notice for the description before the
+  injection warning (2026-11-25, plan: was "the title and the description"; BDW3: the title's comes with the first
+  model call).
 - **Spec 6 (`grill-me`):** answers are read from redacted payloads, so `grill_answers.body` and the run-ended
   comment's answers block hold placeholders where a secret was.
-- **Spec 7 (`spec-plan-approvals`):** SPW1's hidden list adds `.env` files; nothing else.
+- **Spec 7 (`spec-plan-approvals`):** SPW1's hidden list adds `.env` files; nothing else. 2026-11-25, plan: so the
+  Plan's "files changed" paragraph and `/refresh`'s frame leave `.env` files out too (both filter with
+  `isHiddenPath()`).
 - **Spec 11 (`skill-discovery`):** the step skill, `AGENTS.md` files and repo skills are redacted when read; a
   trusted file stays trusted (not wrapped).
 
@@ -578,13 +606,15 @@ Setup: the dev bot (`npm run build`, then my instance on port 3000 with the dev 
 
 **Repo files**
 
-- [ ] L — Sandbox commit: `.env` and `.devcontainer/.env` with a fake key, `.env.example` with the names only → an
+- [ ] L — Sandbox commit: `.env` and `.devcontainer/.env` with a fake `ghp_` token (2026-11-25, plan, DP27: push
+  protection is on; the fake fails GitHub's checksum), `.env.example` with the names only → an
   issue whose text asks the Spec to "list the files at the repository root and in `.devcontainer`, and read `.env`"
   (`grill: skip`, `workflow: spec-code`): the `list_files` answers in `execution_logs` show `.env.example` and no
   `.env`; a `read_file` of `.env` answers `Not available`; `context_loads` has no `loaded` row for either `.env`. The
   model may not ask; the integration test covers it either way (2026-11-24, review).
-- [ ] M — Sandbox commit: a fake key in the root `AGENTS.md` → the next call's system prompt holds the placeholder,
-  no 🔑 comment, the log has `context …: AGENTS.md: redacted 1 (google-api-key)`. Undo the commit.
+- [ ] M — Sandbox commit: a fake `ghp_` token in the root `AGENTS.md` → the next call's system prompt holds the
+  placeholder, no 🔑 comment, the log has `catalog @<7>: AGENTS.md: redacted 1 (github-token)` (2026-11-25, plan: the
+  catalog line, DP9, DP27). Undo the commit.
 
 **`protectedPaths`**
 

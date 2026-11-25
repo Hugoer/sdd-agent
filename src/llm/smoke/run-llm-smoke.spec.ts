@@ -10,6 +10,7 @@ import {
 import {
   InMemoryContextLoads,
   contextLoaderOver,
+  testScanner,
 } from '../../../test/fakes/in-memory-context-loads.js';
 import { skillMd } from '../../../test/fixtures/skills.js';
 import type { Env } from '../../config/env.schema.js';
@@ -156,7 +157,7 @@ function world(options: World = {}) {
     },
   } as unknown as ExecutionLogService;
   const warnings = new InjectionWarningService(issues);
-  const catalog = new RepoCatalogService(repo);
+  const catalog = new RepoCatalogService(repo, testScanner());
   const stepConfig = new StepConfigService(
     repo,
     issues,

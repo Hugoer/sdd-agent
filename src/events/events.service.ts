@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma, WebhookEvent } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { kindList, SecretScanner } from '../secret-scan/secret-scanner.js';
 import { externalRefOf } from './external-ref.js';
 
 export interface EnqueueInput {
@@ -14,17 +15,27 @@ export interface EnqueueInput {
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scanner: SecretScanner,
+  ) {}
 
   /**
    * Stores a delivery once. A redelivery of a FAILED row queues that row again (spec 2, IA13);
-   * a redelivery of any other row changes nothing.
+   * a redelivery of any other row changes nothing. Every string of the payload is redacted first (spec 12 BDW4):
+   * no secret value is stored, and a redelivery redacts the same way.
    */
   async enqueue({
     deliveryId,
     eventName,
-    payload,
+    payload: received,
   }: EnqueueInput): Promise<{ duplicate: boolean; requeued: boolean }> {
+    const { value: payload, findings } = this.scanner.redactJson(received);
+    if (findings.length > 0) {
+      this.logger.warn(
+        `secret-scan payload ${deliveryId}: redacted ${findings.length} (${kindList(findings)})`,
+      );
+    }
     const action = actionOf(payload);
     // Spec 5, plan P7: "received" is PostgreSQL's clock. Prisma would fill `@default(now())` from Node's, and the
     // router compares it with times PostgreSQL wrote (`stopped_at`); Docker's clock and the Mac's can drift.

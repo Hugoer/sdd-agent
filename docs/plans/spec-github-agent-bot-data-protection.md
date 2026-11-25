@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> not built.
+> building: T0–T3 done 2026-11-25 (Checkpoint 1).
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -171,14 +171,14 @@ named; a task isn't done until its rows pass.
 
 ### Phase 0: The spec
 
-- [ ] **Task 0: This plan's decisions and fixes in the spec**
+- [x] **Task 0: This plan's decisions and fixes in the spec**
 
 **Description:** Write into the spec: the fixes listed under "Fixes to the spec with no choice", DP1's shape 2 into
 BDW6, DP3's line under "Owned tables", DP16's messages into BDW8, and a dated status note pointing at this plan.
 
 **Acceptance criteria:**
-- [ ] Every fix above is in the spec, each marked "2026-11-25, plan".
-- [ ] The spec's status line names this plan.
+- [x] Every fix above is in the spec, each marked "2026-11-25, plan".
+- [x] The spec's status line names this plan.
 
 **Verification:** `git diff docs/specs/spec-github-agent-bot-data-protection.md` shows only those lines.
 
@@ -186,15 +186,15 @@ BDW6, DP3's line under "Owned tables", DP16's messages into BDW8, and a dated st
 
 ### Phase 1: Stored and read redacted (no schema change)
 
-- [ ] **Task 1: `redactJson`, the placeholder and `placeholderKinds`**
+- [x] **Task 1: `redactJson`, the placeholder and `placeholderKinds`**
 
 **Description:** `SecretScanner.redactJson(value)` (DP14) and, in `secret-patterns.ts`, `REDACTED_PLACEHOLDER` and
 `placeholderKinds(text)` (DP15). Pure; no caller yet.
 
 **Acceptance criteria:**
-- [ ] `redactJson` redacts strings at any depth (nested arrays and objects), keeps keys, numbers, booleans and
+- [x] `redactJson` redacts strings at any depth (nested arrays and objects), keeps keys, numbers, booleans and
   `null`, returns every finding's kind, and leaves its input unchanged.
-- [ ] `placeholderKinds('[REDACTED: github-token] x [REDACTED: github-token] [REDACTED: foo]')` is
+- [x] `placeholderKinds('[REDACTED: github-token] x [REDACTED: github-token] [REDACTED: foo]')` is
   `['github-token']`.
 
 **Verification:** `npx vitest run src/secret-scan`; typecheck, lint.
@@ -202,19 +202,19 @@ BDW6, DP3's line under "Owned tables", DP16's messages into BDW8, and a dated st
 **Dependencies:** None. **Files:** `src/secret-scan/secret-scanner.ts`, `secret-patterns.ts`, `secret-scanner.spec.ts`,
 `secret-patterns.spec.ts` (new). **Scope:** S.
 
-- [ ] **Task 2: Payloads and Grill answers are stored redacted**
+- [x] **Task 2: Payloads and Grill answers are stored redacted**
 
 **Description:** `EventsService.enqueue()` redacts the parsed payload (DP13) with one log line per delivery with a
 finding (BDW4); `EventsModule` imports `SecretScanModule`. `AnswerReader.unread()` redacts each body (DP12). The
 first cases of the new suite `test/bot-data-protection.integration.spec.ts` (DP20).
 
 **Acceptance criteria:**
-- [ ] A signed delivery whose comment body and issue body hold a fake `google-api-key` and a fake `github-token` is
+- [x] A signed delivery whose comment body and issue body hold a fake `google-api-key` and a fake `github-token` is
   stored with `[REDACTED: …]` in both places and no value; `externalRef`, `action` and every non-string field are
   unchanged; the log line names the delivery, `2` and both kinds.
-- [ ] A Grill answer comment with a token reaches `grill_answers.body` redacted; so does one whose payload was
+- [x] A Grill answer comment with a token reaches `grill_answers.body` redacted; so does one whose payload was
   inserted unredacted with Prisma (a row from before the migration, BDW4 review).
-- [ ] A redelivery of the same delivery is still a duplicate.
+- [x] A redelivery of the same delivery is still a duplicate.
 
 **Verification:** the new suite; every suite in the list above under T2; full four commands.
 
@@ -222,7 +222,7 @@ first cases of the new suite `test/bot-data-protection.integration.spec.ts` (DP2
 `src/grill/answer-reader.service.ts`, `src/grill/grill.module.ts` (imports `SecretScanModule`, DP13), the new suite,
 the four suites listed. **Scope:** M.
 
-- [ ] **Task 3: Repo files are redacted when read**
+- [x] **Task 3: Repo files are redacted when read**
 
 **Description:** DP10: `RepoCatalogService` gets the scanner (and a `Logger`); `CommitReads` keeps `skillMd` as read
 for the header checks and gains the redacted bodies and descriptions, and the root `AGENTS.md` is kept redacted
@@ -231,14 +231,14 @@ for the header checks and gains the redacted bodies and descriptions, and the ro
 (spec 7's `repoFile` redact moves up), with the `context` line.
 
 **Acceptance criteria:**
-- [ ] A step skill `SKILL.md` and a root `AGENTS.md` holding a fake key reach the system prompt as `[REDACTED: …]`;
+- [x] A step skill `SKILL.md` and a root `AGENTS.md` holding a fake key reach the system prompt as `[REDACTED: …]`;
   no comment is posted; one `catalog` log line per file, once per commit (the second call at the same commit logs
   nothing).
-- [ ] A step skill and a repo skill whose **plain, unquoted** `description:` holds a key pass the header check (no
+- [x] A step skill and a repo skill whose **plain, unquoted** `description:` holds a key pass the header check (no
   `invalid skills` stop, review finding 1); the repo skill is listed with the placeholder in its description; its
   `load_skill` answer is redacted; `load_file` of a step skill's other file with a key answers redacted; `read_file`
   still answers redacted and wrapped (spec 7).
-- [ ] A trusted file is still loaded whole and not wrapped; `context_loads` gets no new column.
+- [x] A trusted file is still loaded whole and not wrapped; `context_loads` gets no new column.
 
 **Verification:** `npx vitest run src/llm` (`repo-catalog.service.spec.ts`, `context-loader.service.spec.ts`,
 `llm.service.spec.ts`); one integration case in the new suite (a Grill call over a `SKILL.md` and `AGENTS.md` with a
@@ -250,9 +250,10 @@ under T3, the new suite. **Scope:** M (5 source files).
 
 ### Checkpoint 1: after T1–T3
 
-- [ ] All four commands green.
-- [ ] Nothing new on GitHub; a webhook with a fake key, sent with the guide's `send` helper to your `npm run dev`,
-  is stored redacted (`npm run db:events` shows the row; `psql` shows the placeholder).
+- [x] All four commands green (2026-11-25: 1,574 unit tests, 409 integration tests).
+- [x] Nothing new on GitHub; a webhook with a fake key, sent with the guide's `send` helper to your `npm run dev`,
+  is stored redacted (`npm run db:events` shows the row; `psql` shows the placeholder). 2026-11-25: delivery
+  `cp1-1795645015` stored `IGNORED` with `key [REDACTED: google-api-key]`.
 - [ ] You review and commit.
 
 ### Phase 2: Prompts, `secret_kinds`, the 🔑 notice
@@ -519,3 +520,11 @@ A subagent with no knowledge of this session read the spec, the plan and the cod
 ## Open Questions
 
 None: DP1–DP3 confirmed 2026-11-25.
+
+## Build notes
+
+- **2026-11-25, T3 (DP9):** a repo skill's description gets no `catalog` line of its own: it is part of its
+  `SKILL.md`, whose line already counts the finding. The description is still redacted on its own (it is what the
+  skills list shows).
+- **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
+  answer, catalog and `context` lines use it.

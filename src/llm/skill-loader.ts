@@ -67,7 +67,8 @@ export function listSkill(
 }
 
 /**
- * Steps 3–8: the skill as the prompt gets it: SKILL.md as read at the commit, the other files listed, never read.
+ * Steps 3–8: the skill as the prompt gets it: SKILL.md as read at the commit (its header checked on that text) and
+ * given redacted (spec 12 BDW5), the other files listed, never read.
  * One log line, never content; and (spec 6 GM13) one warning line when SKILL.md matches an injection pattern:
  * the skill still loads, since a skill on the base branch is trusted (overview §4 "Trust"), and nothing is
  * posted. The other files are checked when the model loads one (spec 11, SDW8).
@@ -85,7 +86,8 @@ export function loadSkill(
   const read = readStepSkill(reads, listing);
   if (read.blank) throw missingSkills([step]);
   if (read.problem) throw invalidSkills([read.problem]);
-  const instructions = read.text;
+  // Spec 12 plan DP10: checked as read, given redacted (both maps hold the same paths; never the text as read).
+  const instructions = reads.redacted.skillMd.get(listing.skillFile.path) ?? '';
 
   const prefix = `${listing.dir.replace(/\/+$/, '')}/`;
   const others = listing.files.length;

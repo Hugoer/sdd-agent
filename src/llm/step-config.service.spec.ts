@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryIssueProvider } from '../../test/fakes/in-memory-issue-provider.js';
+import { testScanner } from '../../test/fakes/in-memory-context-loads.js';
 import { InMemoryRepoProvider } from '../../test/fakes/in-memory-repo-provider.js';
 import { ScriptedChatModelFactory } from '../../test/fakes/scripted-chat-model.factory.js';
 import { skillMd } from '../../test/fixtures/skills.js';
@@ -74,7 +75,7 @@ function setup(base = 'main') {
     issues,
     new ScriptedChatModelFactory(),
     new ConfigService<Env, true>({ TARGET_BASE_BRANCH: base }),
-    new RepoCatalogService(repo),
+    new RepoCatalogService(repo, testScanner()),
   );
   return { repo, service };
 }
@@ -578,5 +579,31 @@ describe('StepConfigService: the repo content stops (spec 11, plan P1)', () => {
       ],
       agents: [],
     });
+  });
+});
+
+describe('spec 12 (plan DP10): a key in a skill header', () => {
+  const KEY = ['AI', 'za', 'Sy', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4-_o5p'].join('');
+
+  it('a plain, unquoted description holding a key passes the header check; the prompt gets the redacted text', async () => {
+    const { repo, service } = setup();
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    seed(repo);
+    repo.seedFile(
+      'main',
+      `${SKILL_DIRS.grill}/SKILL.md`,
+      skillMd('grill', `Ask. ${KEY}`, `Grill ${KEY}.`),
+    );
+
+    await service.checkRun('full-sdd', false);
+    const prepared = await service.prepare('grill', task());
+
+    expect(prepared.skill.instructions).toBe(
+      skillMd(
+        'grill',
+        'Ask. [REDACTED: google-api-key]',
+        'Grill [REDACTED: google-api-key].',
+      ),
+    );
   });
 });

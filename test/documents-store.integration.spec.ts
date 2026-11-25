@@ -19,6 +19,7 @@ import { TaskService } from '../src/workflow/task.service.js';
 import { LeaseLostError } from '../src/workflow/workflow-errors.js';
 import { newDeliveryId } from './app.js';
 import { resetDatabase } from './db.js';
+import { testScanner } from './fakes/in-memory-context-loads.js';
 import { testEnv } from './test-env.js';
 
 // Spec 7 "Owned tables" through their only writer, under the lease (plan T2).
@@ -92,7 +93,11 @@ describe('DocumentsStore (PostgreSQL)', () => {
     await prisma.$connect();
     leases = new SessionLeaseService(prisma, config);
     tasks = new TaskService(prisma, leases);
-    runs = new RunService(prisma, leases, new EventsService(prisma));
+    runs = new RunService(
+      prisma,
+      leases,
+      new EventsService(prisma, testScanner()),
+    );
     store = new DocumentsStore(prisma, leases);
   });
   beforeEach(async () => {

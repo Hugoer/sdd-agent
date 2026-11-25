@@ -32,3 +32,23 @@ export const SECRET_PATTERNS: readonly {
 
 /** `own-secret` covers only values this long or longer: a shorter one would match ordinary words. */
 export const MIN_OWN_SECRET_LENGTH = 8;
+
+/** The placeholder a redaction writes (spec 12 "Contracts"); group 1 is the kind as written. */
+export const REDACTED_PLACEHOLDER = /\[REDACTED: ([a-z-]+)\]/g;
+
+const SECRET_KINDS: ReadonlySet<string> = new Set<SecretKind>([
+  ...SECRET_PATTERNS.map(({ kind }) => kind),
+  'own-secret',
+]);
+
+/**
+ * The kinds of the `[REDACTED: <kind>]` placeholders in the text, each once, in order of first appearance (spec 12
+ * BDW2). A placeholder naming no known kind is ignored (plan DP15).
+ */
+export function placeholderKinds(text: string): SecretKind[] {
+  const kinds = new Set<SecretKind>();
+  for (const match of text.matchAll(REDACTED_PLACEHOLDER)) {
+    if (SECRET_KINDS.has(match[1])) kinds.add(match[1] as SecretKind);
+  }
+  return [...kinds];
+}

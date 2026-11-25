@@ -9,7 +9,7 @@ import {
   type RepoProvider,
 } from '../contracts/repo-provider.js';
 import type { StepName, StepSetup } from '../contracts/step.js';
-import { SecretScanner } from '../secret-scan/secret-scanner.js';
+import { kindList, SecretScanner } from '../secret-scan/secret-scanner.js';
 import {
   ContextLoadService,
   type LoadOutcome,
@@ -67,7 +67,9 @@ export interface LoadContext {
  * commit's memory, anything else from GitHub every time), writes one `context_loads` row and one log line, and
  * gives the tool answer. For specs 9 and 10 too: the same two tools inside a LangGraph loop, with its own budget.
  * Spec 7 "The read tools" (SPW2, SPW4, plan P18, P29): with `repoFiles`, also `list_files` (from the commit's
- * listing, in memory) and `read_file` (redacted, then guarded and wrapped as untrusted data; no warning comment).
+ * listing, in memory) and `read_file` (guarded and wrapped as untrusted data; no warning comment).
+ * Spec 12 BDW5 (plan DP10): every text given is redacted: a repo skill's SKILL.md comes redacted from the commit's
+ * memory, a file read from GitHub is redacted here, once, for `load_file` and `read_file`, with one log line.
  */
 @Injectable()
 export class ContextLoaderService {
@@ -145,8 +147,12 @@ export class ContextLoaderService {
     let text: string | null;
     try {
       text = file.repoSkill
-        ? (reads.skillMd.get(file.path) ?? null)
-        : await readText(this.repo, setup.commit, file.path);
+        ? (reads.redacted.skillMd.get(file.path) ?? null)
+        : this.redact(
+            call,
+            file.path,
+            await readText(this.repo, setup.commit, file.path),
+          );
     } catch (error) {
       const status =
         error instanceof ProviderError ? error.detail.status : undefined;
@@ -185,25 +191,36 @@ export class ContextLoaderService {
   }
 
   /**
-   * Spec 7: a repo file the model asked for with `read_file`. SPW2: `redact()` first (one log line per file with a
-   * finding, never the value). Plan P18: then spec 4's guard: detected, cut at 65,536 characters with its marker
-   * line, wrapped in the call's data tag. SPW4: its injection kinds are logged and stored on its row; nobody on the
-   * issue wrote it, so no warning comment.
+   * A text read from GitHub, redacted (spec 7 SPW2, spec 12 BDW5): one log line per file with a finding, never the
+   * value. Null (not text) stays null.
+   */
+  private redact(
+    call: LoadContext,
+    path: string,
+    read: string | null,
+  ): string | null {
+    if (read === null) return null;
+    const { text, findings } = this.scanner.redact(read);
+    if (findings.length > 0)
+      this.logger.warn(
+        `${this.prefix(call)}: ${path}: redacted ${findings.length} (${kindList(findings)})`,
+      );
+    return text;
+  }
+
+  /**
+   * Spec 7: a repo file the model asked for with `read_file`, already redacted (SPW2, `load()`). Plan P18: spec 4's
+   * guard: detected, cut at 65,536 characters with its marker line, wrapped in the call's data tag. SPW4: its
+   * injection kinds are logged and stored on its row; nobody on the issue wrote it, so no warning comment.
    */
   private async repoFile(
     call: LoadContext,
     request: LoadRequest,
     budget: LoadBudget,
     file: RequestedFile,
-    read: string,
+    text: string,
     { tag }: { tag: string },
   ): Promise<LoadResult> {
-    const { text, findings } = this.scanner.redact(read);
-    if (findings.length > 0)
-      this.logger.warn(
-        `${this.prefix(call)}: ${file.path}: redacted ${findings.length} ` +
-          `(${[...new Set(findings.map(({ kind }) => kind))].join(', ')})`,
-      );
     const label = `the file \`${cleanText(file.path, 1024).replace(/"/g, '')}\``;
     const guarded = guardText(text, tag, label);
     if (guarded.kinds.length > 0)

@@ -73,7 +73,7 @@ export function contextLoaderOver(
   repo = new InMemoryRepoProvider(),
   loads = new InMemoryContextLoads(),
   limits: LoadLimits = { maxLoads: 10, maxBytes: 204_800 },
-  catalog = new RepoCatalogService(repo),
+  catalog = new RepoCatalogService(repo, testScanner()),
 ): ContextLoaderService {
   return new ContextLoaderService(
     repo,

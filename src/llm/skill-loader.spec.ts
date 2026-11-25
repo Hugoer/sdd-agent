@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { testScanner } from '../../test/fakes/in-memory-context-loads.js';
 import { InMemoryRepoProvider } from '../../test/fakes/in-memory-repo-provider.js';
 import { skillMd } from '../../test/fixtures/skills.js';
 import { StepConfigError } from '../contracts/llm-error.js';
@@ -50,7 +51,7 @@ async function load(
   logger = quietLogger(),
   skills: WorkflowConfig['skills'] = SKILLS,
 ) {
-  const reads = await new RepoCatalogService(repo).at(
+  const reads = await new RepoCatalogService(repo, testScanner()).at(
     await repo.resolveRef('main'),
   );
   return loadSkill(reads, skills, step, logger);

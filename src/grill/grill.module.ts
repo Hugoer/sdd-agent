@@ -3,6 +3,7 @@ import { EventsModule } from '../events/events.module.js';
 import { GitHubModule } from '../github/github.module.js';
 import { IntakeModule } from '../intake/intake.module.js';
 import { LlmModule } from '../llm/llm.module.js';
+import { SecretScanModule } from '../secret-scan/secret-scan.module.js';
 import { StepHandlerRegistry } from '../workflow/step-handler.registry.js';
 import { WorkflowModule } from '../workflow/workflow.module.js';
 import { AnswerReader } from './answer-reader.service.js';
@@ -14,6 +15,7 @@ import { GrillStore } from './grill.store.js';
 /**
  * Spec 6: Grill Me. Registers the `grill` handler with spec 5's registry; WorkflowModule never imports it
  * (overview §1 module rules). GitHubModule and EventsModule for the issue port and the stored comments (plan P7).
+ * SecretScanModule: the answer reader redacts each body (spec 12 BDW4).
  * Exports GrillService: the transcript the Spec step reads (spec 7).
  */
 @Module({
@@ -23,6 +25,7 @@ import { GrillStore } from './grill.store.js';
     IntakeModule,
     GitHubModule,
     EventsModule,
+    SecretScanModule,
   ],
   providers: [
     GrillStore,

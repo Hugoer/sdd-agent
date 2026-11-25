@@ -22,6 +22,7 @@ import { TaskService } from '../src/workflow/task.service.js';
 import { LeaseLostError } from '../src/workflow/workflow-errors.js';
 import { newDeliveryId } from './app.js';
 import { resetDatabase } from './db.js';
+import { testScanner } from './fakes/in-memory-context-loads.js';
 import { testEnv } from './test-env.js';
 
 // Spec 5 "Owned tables" through their only writers, under the lease (plan T10).
@@ -78,7 +79,11 @@ describe('TaskService and RunService (PostgreSQL)', () => {
     await prisma.$connect();
     leases = new SessionLeaseService(prisma, config);
     tasks = new TaskService(prisma, leases);
-    runs = new RunService(prisma, leases, new EventsService(prisma));
+    runs = new RunService(
+      prisma,
+      leases,
+      new EventsService(prisma, testScanner()),
+    );
   });
   beforeEach(async () => {
     await resetDatabase(prisma);
@@ -248,7 +253,11 @@ describe('TaskService and RunService (PostgreSQL)', () => {
   });
 
   it('a failure inside the /retry transaction rolls back the status, the stop and the re-queue', async () => {
-    const failing = new RunService(prisma, leases, new FailingRequeue(prisma));
+    const failing = new RunService(
+      prisma,
+      leases,
+      new FailingRequeue(prisma, testScanner()),
+    );
     const run1 = await runs.create(lease, await start());
     await tasks.setStatus(lease, 'spec-review');
     const failed = await event({ status: 'FAILED', attempts: 1 });

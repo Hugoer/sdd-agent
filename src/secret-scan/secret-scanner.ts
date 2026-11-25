@@ -76,6 +76,37 @@ export class SecretScanner {
       findings: findings.map(({ kind }) => ({ kind })),
     };
   }
+
+  /**
+   * A copy of a JSON value with every string redacted, at any depth (spec 12 BDW4, plan DP14): object keys,
+   * numbers, booleans and `null` are kept as they are, and the input is never changed.
+   */
+  redactJson(value: unknown): {
+    value: unknown;
+    findings: { kind: SecretKind }[];
+  } {
+    const findings: { kind: SecretKind }[] = [];
+    const walk = (node: unknown): unknown => {
+      if (typeof node === 'string') {
+        const result = this.redact(node);
+        findings.push(...result.findings);
+        return result.text;
+      }
+      if (Array.isArray(node)) return node.map(walk);
+      if (node !== null && typeof node === 'object') {
+        return Object.fromEntries(
+          Object.entries(node).map(([key, child]) => [key, walk(child)]),
+        );
+      }
+      return node;
+    };
+    return { value: walk(value), findings };
+  }
+}
+
+/** The kinds found, each once in order, for a log line (never a value). */
+export function kindList(findings: { kind: string }[]): string {
+  return [...new Set(findings.map(({ kind }) => kind))].join(', ');
 }
 
 /**

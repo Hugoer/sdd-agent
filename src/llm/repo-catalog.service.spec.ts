@@ -1,8 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { testScanner } from '../../test/fakes/in-memory-context-loads.js';
 import { InMemoryRepoProvider } from '../../test/fakes/in-memory-repo-provider.js';
 import { skillMd } from '../../test/fixtures/skills.js';
 import { ProviderError } from '../contracts/provider-error.js';
 import { repoContext } from './repo-catalog.js';
+import { checkSkillHeader } from './skill-header.js';
 import { RepoCatalogService } from './repo-catalog.service.js';
 import { WORKFLOW_CONFIG_PATH } from './workflow-config.js';
 
@@ -39,7 +42,7 @@ async function sandbox(extra: Record<string, string> = {}) {
     repo.seedFile('main', path, text);
   const commit = await repo.resolveRef('main');
   repo.calls.length = 0;
-  return { repo, commit, service: new RepoCatalogService(repo) };
+  return { repo, commit, service: new RepoCatalogService(repo, testScanner()) };
 }
 
 const readPaths = (repo: InMemoryRepoProvider) =>
@@ -225,7 +228,7 @@ describe('repoContext (setup.repo)', () => {
       '.github-agent/skills/grill/SKILL.md',
       skillMd('grill', 'x'),
     );
-    const bare = new RepoCatalogService(repo);
+    const bare = new RepoCatalogService(repo, testScanner());
 
     expect(
       repoContext(await bare.at(await repo.resolveRef('main')), undefined),
@@ -233,5 +236,97 @@ describe('repoContext (setup.repo)', () => {
     expect(
       repoContext(await service.at(commit), undefined).rootAgents,
     ).toBeNull();
+  });
+});
+
+describe('spec 12 (BDW5, plan DP10): repo files are redacted when read', () => {
+  // Built at run time: no key-shaped literal in the repo (plan DP22).
+  const KEY = ['AI', 'za', 'Sy', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4-_o5p'].join('');
+  const TOKEN = ['gh', 'p_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zA1bC2'].join('');
+  const GRILL = '.github-agent/skills/grill/SKILL.md';
+
+  async function withKeys() {
+    const warnings: string[] = [];
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(
+      (message: unknown) => {
+        warnings.push(String(message));
+      },
+    );
+    const ctx = await sandbox({
+      'AGENTS.md': `# Conventions\nDeploy with ${TOKEN}.`,
+      // A plain, unquoted description holding a key (review finding 1).
+      [GRILL]: skillMd('grill', `Ask. Use ${KEY}.`, `Grill with ${KEY}.`),
+      [`${MONEY}/SKILL.md`]: skillMd(
+        'money-rules',
+        'Integer cents.',
+        `Money, key ${KEY}.`,
+      ),
+    });
+    return { ...ctx, warnings };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('keeps each SKILL.md as read for the header checks and gives the redacted texts; the root AGENTS.md redacted', async () => {
+    const { commit, service } = await withKeys();
+
+    const reads = await service.at(commit);
+
+    expect(reads.skillMd.get(GRILL)).toContain(KEY);
+    // Why the header is checked on the text as read: the placeholder (`": "`, a leading `[`) isn't a plain value.
+    expect(
+      checkSkillHeader(GRILL, 'grill', reads.skillMd.get(GRILL)!),
+    ).toBeNull();
+    expect(
+      checkSkillHeader(GRILL, 'grill', reads.redacted.skillMd.get(GRILL)!),
+    ).not.toBeNull();
+    expect(reads.redacted.skillMd.get(GRILL)).toBe(
+      skillMd(
+        'grill',
+        'Ask. Use [REDACTED: google-api-key].',
+        'Grill with [REDACTED: google-api-key].',
+      ),
+    );
+    expect(
+      reads.redacted.skillMd.get('.github-agent/skills/spec/SKILL.md'),
+    ).toBe(skillMd('spec', 'Write.'));
+    expect(reads.rootAgents).toEqual({
+      text: '# Conventions\nDeploy with [REDACTED: github-token].',
+      bytes: Buffer.byteLength(`# Conventions\nDeploy with ${TOKEN}.`),
+    });
+    expect(repoContext(reads, WORKFLOW.skills.spec).skills).toMatchObject([
+      {
+        name: 'money-rules',
+        description: 'Money, key [REDACTED: google-api-key].',
+      },
+    ]);
+    expect(JSON.stringify(repoContext(reads, undefined))).not.toContain(KEY);
+  });
+
+  it('one catalog line per file with a finding, never a value; the same commit again logs nothing', async () => {
+    const { commit, service, warnings } = await withKeys();
+
+    await service.at(commit);
+    await service.at(commit);
+
+    const short = commit.slice(0, 7);
+    expect(warnings).toEqual([
+      `catalog @${short}: AGENTS.md: redacted 1 (github-token)`,
+      `catalog @${short}: ${GRILL}: redacted 2 (google-api-key)`,
+      `catalog @${short}: ${MONEY}/SKILL.md: redacted 1 (google-api-key)`,
+    ]);
+  });
+
+  it('a SKILL.md that is not text stays null in both maps', async () => {
+    const { repo, commit, service } = await sandbox();
+    const read = repo.readFile.bind(repo);
+    vi.spyOn(repo, 'readFile').mockImplementation((ref, path) =>
+      path === GRILL ? Promise.resolve(null) : read(ref, path),
+    );
+
+    const reads = await service.at(commit);
+
+    expect(reads.skillMd.get(GRILL)).toBeNull();
+    expect(reads.redacted.skillMd.get(GRILL)).toBeNull();
   });
 });

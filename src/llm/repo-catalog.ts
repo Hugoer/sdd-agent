@@ -63,10 +63,23 @@ export interface CommitReads {
   /** Every regular file of the tree. */
   listing: RepoFile[];
   catalog: RepoCatalog;
-  /** Its text (null: absent, empty or only whitespace; not read when over the cap) or `unreadable` (LW3). */
+  /**
+   * Its text, redacted (spec 12 BDW5; null: absent, empty or only whitespace; not read when over the cap) or
+   * `unreadable` (LW3). `bytes`: the listing's size.
+   */
   rootAgents: { text: string; bytes: number } | null | 'unreadable';
-  /** Every mapped step skill's and every repo skill's SKILL.md, by repo path: its text, or null when not text. */
+  /**
+   * Every mapped step skill's and every repo skill's SKILL.md, by repo path: its text as read, or null when not
+   * text. Only the header checks read it (spec 12 plan DP10): the model gets `redacted`.
+   */
   skillMd: ReadonlyMap<string, string | null>;
+  /** Spec 12 BDW5, plan DP10: what the model gets, redacted once per commit. */
+  redacted: {
+    /** Each SKILL.md of `skillMd`, redacted (null when not text). */
+    skillMd: ReadonlyMap<string, string | null>;
+    /** Each repo skill's header description, by SKILL.md path, redacted ('' when it has none). */
+    descriptions: ReadonlyMap<string, string>;
+  };
 }
 
 /** The catalog of one listing (every regular file of the tree) for the map's `repoSkills` folders. */
@@ -150,7 +163,7 @@ export function repoContext(
     rootAgents: root === 'unreadable' ? null : root,
     skills: skillsForStep(reads.catalog, stepDir).map((skill) => ({
       name: skill.name,
-      description: descriptionOf(reads.skillMd.get(skill.skillFile.path)),
+      description: reads.redacted.descriptions.get(skill.skillFile.path) ?? '',
       path: skill.path,
       files: skill.files,
     })),
@@ -241,7 +254,8 @@ export function unreadableAgents(): StepConfigError {
   return new StepConfigError('unreadable AGENTS.md');
 }
 
-function descriptionOf(text: string | null | undefined): string {
+/** A SKILL.md's header description, trimmed; '' when it has none (spec 11). */
+export function descriptionOf(text: string | null | undefined): string {
   const field = text ? readSkillHeader(text)?.description : undefined;
   return field?.kind === 'value' ? field.value.trim() : '';
 }

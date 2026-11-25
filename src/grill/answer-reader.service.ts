@@ -1,23 +1,28 @@
 // Spec 6 "Which comments are answers" (GMW1, GM4, GM12): the run's comments that its session hasn't read yet, read
 // back from the stored events whatever their processing state, through intake's rules.
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { TaskRef } from '../contracts/issue-provider.js';
 import { EventsService } from '../events/events.service.js';
 import { IntakeService } from '../intake/intake.service.js';
+import { kindList, SecretScanner } from '../secret-scan/secret-scanner.js';
 import { GrillStore, type AnswerRecord } from './grill.store.js';
 
 @Injectable()
 export class AnswerReader {
+  private readonly logger = new Logger(AnswerReader.name);
+
   constructor(
     private readonly events: EventsService,
     private readonly intake: IntakeService,
     private readonly store: GrillStore,
+    private readonly scanner: SecretScanner,
   ) {}
 
   /**
    * The comment events received from the run's start on (and before `before`, when given: the cancel hook) that
    * are plain comments on the issue by someone with access now (one lookup per author; a failed one throws, IA9),
-   * less the comments the session has read; in creation order, then by comment id.
+   * less the comments the session has read; in creation order, then by comment id. Each body is redacted (spec 12
+   * BDW4): a payload stored before spec 12's migration is clean in `grill_answers` too.
    */
   async unread(
     task: TaskRef,
@@ -41,10 +46,16 @@ export class AnswerReader {
       events,
     )) {
       if (read.has(comment.id) || unread.has(comment.id)) continue;
+      const { text: body, findings } = this.scanner.redact(comment.body);
+      if (findings.length > 0) {
+        this.logger.warn(
+          `secret-scan answer ${task.externalRef} comment-${comment.id}: redacted ${findings.length} (${kindList(findings)})`,
+        );
+      }
       unread.set(comment.id, {
         commentId: comment.id,
         author: sender,
-        body: comment.body,
+        body,
         url: comment.url,
         createdAt: comment.createdAt,
       });

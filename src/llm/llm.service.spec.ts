@@ -15,6 +15,7 @@ import {
 import {
   InMemoryContextLoads,
   contextLoaderOver,
+  testScanner,
 } from '../../test/fakes/in-memory-context-loads.js';
 import { InMemoryRepoProvider } from '../../test/fakes/in-memory-repo-provider.js';
 import { skillMd } from '../../test/fixtures/skills.js';
@@ -703,7 +704,7 @@ describe('LlmService.call: load turns (spec 11)', () => {
     for (const [path, text] of Object.entries(files))
       repo.seedFile('main', path, text);
     const commit = await repo.resolveRef('main');
-    const catalog = new RepoCatalogService(repo);
+    const catalog = new RepoCatalogService(repo, testScanner());
     const stepSetup: StepSetup = {
       ...SETUP,
       commit,
@@ -1154,7 +1155,7 @@ describe('LlmService.call: the read tools (spec 7, SP2)', () => {
     for (const [path, text] of Object.entries(files))
       repo.seedFile('main', path, text);
     const commit = await repo.resolveRef('main');
-    const catalog = new RepoCatalogService(repo);
+    const catalog = new RepoCatalogService(repo, testScanner());
     const stepSetup: StepSetup = {
       ...SETUP,
       commit,
@@ -1263,7 +1264,7 @@ describe('LlmService.call: the read tools (spec 7, SP2)', () => {
     );
     const moved = await ctx.repo.resolveRef('main');
     const call = ctx.call(true);
-    const catalog = new RepoCatalogService(ctx.repo);
+    const catalog = new RepoCatalogService(ctx.repo, testScanner());
     const at = {
       ...call,
       setup: {

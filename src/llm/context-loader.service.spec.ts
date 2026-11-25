@@ -65,7 +65,7 @@ async function sandbox(extra: Record<string, string> = {}) {
   for (const [path, text] of Object.entries(files))
     repo.seedFile('main', path, text);
   const commit = await repo.resolveRef('main');
-  const catalog = new RepoCatalogService(repo);
+  const catalog = new RepoCatalogService(repo, testScanner());
   const loads = new InMemoryContextLoads();
   const config = new ConfigService<Env, true>({
     SKILL_DISCOVERY_MAX_LOADS: 10,
@@ -425,6 +425,64 @@ describe('ContextLoaderService.load', () => {
     expect(loads.rows.map(({ outcome, path }) => [outcome, path])).toEqual([
       ['limit-reached', QUESTIONS],
       ['limit-reached', undefined],
+    ]);
+  });
+});
+
+describe('ContextLoaderService: spec 12 (BDW5, plan DP10): every text given is redacted', () => {
+  // Built at run time: no key-shaped literal in the repo (plan DP22).
+  const KEY = ['AI', 'za', 'Sy', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4-_o5p'].join('');
+  const MONEY_KEY_MD = skillMd('money-rules', `Cents. ${KEY}`, `Money ${KEY}.`);
+  const MONEY_REDACTED = skillMd(
+    'money-rules',
+    'Cents. [REDACTED: google-api-key]',
+    'Money [REDACTED: google-api-key].',
+  );
+
+  it('load_skill: a repo skill whose plain description holds a key → listed and loaded redacted; trusted, not wrapped', async () => {
+    const { loader, setup, call, loads } = await sandbox({
+      [`${MONEY}/SKILL.md`]: MONEY_KEY_MD,
+    });
+
+    expect(setup.repo.skills[0].description).toBe(
+      'Money [REDACTED: google-api-key].',
+    );
+    const result = await loader.load(
+      call,
+      { tool: 'load_skill', name: 'money-rules', reason: 'cents' },
+      loader.budget(setup),
+    );
+
+    expect(result.answer).toContain(
+      `<file path="${MONEY}/SKILL.md">\n${MONEY_REDACTED}\n</file>`,
+    );
+    expect(result.answer).not.toContain(KEY);
+    expect(result.answer).not.toContain('untrusted-data');
+    expect(result.loaded?.text).toBe(MONEY_REDACTED);
+    expect(loads.rows[0]).toMatchObject({
+      outcome: 'loaded',
+      chars: MONEY_REDACTED.length,
+    });
+  });
+
+  it("load_file: a step skill's other file with a key → redacted, whole and not wrapped; one context line without the value", async () => {
+    const text = `# Questions\nAsk for ${KEY}.\n`;
+    const { loader, setup, call } = await sandbox({ [QUESTIONS]: text });
+
+    const result = await loader.load(
+      call,
+      file(QUESTIONS),
+      loader.budget(setup),
+    );
+
+    expect(result.outcome).toBe('loaded');
+    expect(result.loaded?.text).toBe(
+      '# Questions\nAsk for [REDACTED: google-api-key].\n',
+    );
+    expect(result.answer).not.toContain(KEY);
+    expect(result.answer).not.toContain('untrusted-data');
+    expect(warn.mock.calls).toEqual([
+      [`context grill #14 turn 1: ${QUESTIONS}: redacted 1 (google-api-key)`],
     ]);
   });
 });
