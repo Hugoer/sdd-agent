@@ -65,8 +65,9 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (`approve-asked`, `IGNORED`; `/refresh`, or `/approve` again); an `/approve` written before it gets
   `before-question`. No ⚠️ line, no warning reply; the Plan's prompt reads its range from `approved_from_commit`;
   `/refresh` gets a method sentence when the step's skill changed. `node scripts/up-to-date-approvals-invariants.mjs
-  <issues>` checks four invariants. Next: the interviews of spec 12 (`bot-data-protection`) and spec 13
-  (`bot-feedback`, with `status: plan-review`), then 8 (overview build order). Repo:
+  <issues>` checks four invariants. Spec 12 (`bot-data-protection`) approved 2026-11-25, not
+  built: `docs/specs/spec-github-agent-bot-data-protection.md`. Next: plan and build spec 12; then the interview of
+  spec 13 (`bot-feedback`, with `status: plan-review`), then 8 (overview build order). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
