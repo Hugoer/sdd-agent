@@ -24,7 +24,8 @@
 > user during spec 7's Checkpoint 4, after sandbox issue #60: a new spec 14 `up-to-date-approvals`, to interview;
 > §1 row 14 and the build order) · amended 2026-11-23 with spec 14's draft (interview UA1–UA7, write-time UAW5: D34
 > annotated; §1 row 14; §3 R2 and rows 17–19; §5 `APPROVAL_LARGE_CHANGE_FILES`; §6), approved with that spec on
-> 2026-11-23
+> 2026-11-23 · amended 2026-11-25 with spec 12's approval (interview BD1–BD12, write-time BDW10,
+> BDW11, review fixes: D32 annotated; §1 rows 9, 10, 12; §4 `protectedPaths` and the hidden list; §7 rules 9, 10)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -236,6 +237,14 @@ comments, without acting under the developer's identity or touching their checko
   or "put this key in the Spec"; the paths the Coder may never change (`.github-agent/`, the other tools'
   instruction files, …) and the Quality Gate's check of them (specs 9, 10); human edits to the bot's own comments;
   how long stored prompts are kept. Built after spec 7 and before spec 8, so specs 8–10 are written against it.
+  2026-11-25 (spec 12, approved): resolved by `docs/specs/spec-github-agent-bot-data-protection.md`. Untrusted text is
+  redacted before the model, before a prompt is stored and before a webhook payload is stored; the run goes on, and
+  a text people wrote gets one 🔑 notice to rotate the secret (BD1–BD3, BDW16); repo files are redacted with a log
+  line. Injection is never blocked and no text is cut; a new kind `bot-data` (BD4). The target repo's required
+  `protectedPaths` globs (`[]` valid) plus the bot's floor (`.github-agent/**`, the step skill folders) are the paths
+  the Coder's tools may never change; no commit check, the Quality Gate only reports (BD5–BD8, BDW10). The read
+  tools also hide `.env` files (BD9). Nothing new for comment edits (BD10); stored records are kept forever and old
+  rows aren't cleaned (BD11, BD12).
 - **D33 The bot shows at once that it got a human action and is working on it (2026-11-23, the user, during spec
   7's build; a new spec 13, to interview).** A model step takes minutes (a Spec or a Plan 1–5, the Coder more) and
   the bot shows nothing until its answer is posted, so people think nothing happened and comment again (sandbox
@@ -303,10 +312,10 @@ Numbers are IDs, not build order.
 | 6 | `grill-me` | `GrillModule` · `src/grill` | Grill rounds (1..K questions), `GrillSession`/`GrillRound`, bursts, limit, skip, cancel comment; 2026-11-17: `GrillEvaluation`/`GrillAnswer`, 👀 on comments with nothing to add, the answers block | 4, 5; 2026-11-17 (spec 6): also 2 (answer comments read with intake's rules) and 3 (the issue port) | max |
 | 7 | `spec-plan-approvals` | `DocumentsModule` · `src/documents` | Spec/Plan generation, `/approve` rules, approved snapshots; 2026-11-18 (D27): through spec 11's discovery; 2026-11-21 (spec 7): the go-signal, the read-only repo tools (D28), the commit check and `/refresh` (D29), deletions and `/restore` (D30) | 6, 11 (2026-11-18); 2026-11-21 (spec 7): also 2, 3, 4, 5 (changes to their code) | xhigh |
 | 8 | `workspace-git` | `WorkspaceModule` · `src/workspace` | git runner (`execFile`), bot worktree, workspace lease + queue, setup command, bot identity, per-command token | 3, 5 | max |
-| 9 | `coder` | `CoderModule` · `src/coder` | Coder agent loop (LangGraph), file tools, command allowlist, lint/test gate, commit/push/PR, red and interrupted runs; 2026-11-18 (D27): spec 11's discovery in the loop, a folder's `AGENTS.md` for the files it works on | 4, 7, 8, 11 (2026-11-18) | xhigh |
-| 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files | 4, 9, 11 (2026-11-18) | xhigh |
+| 9 | `coder` | `CoderModule` · `src/coder` | Coder agent loop (LangGraph), file tools, command allowlist, lint/test gate, commit/push/PR, red and interrupted runs; 2026-11-18 (D27): spec 11's discovery in the loop, a folder's `AGENTS.md` for the files it works on; 2026-11-25 (spec 12 BDW10): its write, delete and rename tools refuse spec 12's protected paths, no commit check | 4, 7, 8, 11 (2026-11-18), 12 | xhigh |
+| 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files; 2026-11-25 (spec 12 BDW10): a protected path in the diff is one report line, never a failure | 4, 9, 11 (2026-11-18), 12 | xhigh |
 | 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
-| 12 | `bot-data-protection` (2026-11-22, D32; id to confirm at its interview) | to decide at its interview | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code) | to decide |
+| 12 | `bot-data-protection` (2026-11-22, D32; id confirmed 2026-11-24) | `SecretScanModule`, `EventsModule`, `LlmModule` · `src/secret-scan`, `src/events`, `src/llm` (changes to their code; 2026-11-25, spec 12 BDW13) | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code); 2026-11-25 (spec 12): also 1, 5, 6, 11 | high |
 | 13 | `bot-feedback` (2026-11-23, D33; id to confirm at its interview) | to decide at its interview | A quick visible signal that the bot got a human action and is working on it (D33): a reaction on the triggering comment and a label while it works, removed in code when the work ends, also after a crash; `status: plan-review` while the Plan waits, `ready-for-dev` only after the last approval | 3, 5, 6, 7 (changes to their code) | to decide |
 | 14 | `up-to-date-approvals` (2026-11-23, D34; id confirmed at its interview) | `DocumentsModule` · `src/documents` (extends spec 7's module) | An `/approve` on a Spec or a Plan asks first when files it read changed on `main` (D34): one reply with the files and a compare link, `/refresh` or `/approve` again; replaces spec 7's warning after the approval. 2026-11-23 (spec 14): the step skill's files count, `/refresh` follows a changed method; a failed comparison or more changed files than `APPROVAL_LARGE_CHANGE_FILES` ask too; the `before-question` reply; `asked_commit`, `approved_from_commit`, the question rows | 7 (changes to its code); 1 (a config variable) | high |
 
@@ -736,6 +745,11 @@ export type WorkflowInput = {
 - **Documents (2026-11-21, spec 7, D31; built by spec 9):** the optional `"documents": { "spec": "docs/specs",
   "plan": "docs/plans" }` names the folders the approved texts are committed to (those values by default). A path
   that is absolute, contains `..` or points into `.github-agent` makes the map invalid.
+- **Protected paths (2026-11-25, spec 12):** the required `"protectedPaths": ["**/AGENTS.md", …]` lists the globs
+  (`picomatch`, any letter case, dot folders included) of the files the Coder's tools may never change; `[]` is
+  valid, a missing key makes the map invalid. The bot's floor is always protected on top: `.github-agent/**` and
+  every step skill folder of `skills`. A target repo can't remove the floor. The read tools never show the other
+  tools' instruction files, `.github-agent/` or `.env` files (`.env.example` is shown); that list is code.
 - **Required (D18, 2026-11-10):** every step a run uses needs a skill in the map (per lane: §3 R6). There is no
   built-in fallback. A needed step missing from the map, or a mapped directory without a `SKILL.md` →
   `FAILED(missing skills: <steps>)` → `needs-human` + one comment naming them (2026-11-12, spec 4: a missing
@@ -854,9 +868,10 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 9. **Untrusted input** (2026-11-20, spec 11: except the base branch's `AGENTS.md` files and the repo skills listed
    by `repoSkills`, which are trusted instructions like step skills, §4 "Trust"): issue text, comments, approved
    Spec/Plan text, diffs and repo files are data, not
-   instructions. Input guardrails (injection, size) run before every LLM call.
+   instructions. Input guardrails (injection, size) run before every LLM call. 2026-11-25 (spec 12): secrets are redacted first,
+   so no secret value reaches the model or a stored prompt; webhook payloads are stored redacted.
 10. **Secret scanning** runs on everything the bot sends out: comments, PR bodies, check-run summaries and the
-    diff before every push.
+    diff before every push. 2026-11-25 (spec 12): and on everything it stores or gives the model.
 11. **No LLM judges its own output:** each step builds its prompt from PostgreSQL and the repo, never from another
     step's messages. The Quality Gate gets artifacts only (diff, issue, approved Spec/Plan).
 12. **No git for the LLM:** all git runs in `WorkspaceModule` via `execFile` (argument array, no shell), only
