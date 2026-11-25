@@ -3,6 +3,7 @@ import { EventsModule } from '../events/events.module.js';
 import { GitHubModule } from '../github/github.module.js';
 import { IntakeModule } from '../intake/intake.module.js';
 import { LlmModule } from '../llm/llm.module.js';
+import { SecretScanModule } from '../secret-scan/secret-scan.module.js';
 import { NeedsHumanService } from './needs-human.service.js';
 import { RouterService } from './router.service.js';
 import { RunStartService } from './run-start.service.js';
@@ -17,7 +18,14 @@ import { WorkflowEventProcessor } from './workflow-event.processor.js';
  * modules import it and register their handlers; it never imports them (overview §1 module rules).
  */
 @Module({
-  imports: [EventsModule, IntakeModule, GitHubModule, LlmModule],
+  // SecretScanModule: the run start redacts the description (spec 12, plan DP11, DP13).
+  imports: [
+    EventsModule,
+    IntakeModule,
+    GitHubModule,
+    LlmModule,
+    SecretScanModule,
+  ],
   providers: [
     SessionLeaseService,
     TaskService,

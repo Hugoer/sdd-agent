@@ -9,6 +9,7 @@ import { GoogleChatModelFactory } from './google/google-chat-model.factory.js';
 import { InjectionWarningService } from './injection-warning.service.js';
 import { LlmService } from './llm.service.js';
 import { RepoCatalogService } from './repo-catalog.service.js';
+import { SecretNoticeService } from './secret-notice.service.js';
 import { StepConfigService } from './step-config.service.js';
 
 /**
@@ -23,6 +24,7 @@ import { StepConfigService } from './step-config.service.js';
     RepoCatalogService,
     StepConfigService,
     InjectionWarningService,
+    SecretNoticeService,
     ExecutionLogService,
     ContextLoadService,
     ContextLoaderService,
@@ -33,6 +35,8 @@ import { StepConfigService } from './step-config.service.js';
     CHAT_MODEL_FACTORY,
     StepConfigService,
     InjectionWarningService,
+    // Spec 12 (BDW3): the run start posts the 🔑 notice for the description.
+    SecretNoticeService,
     ExecutionLogService,
     // Spec 11 (SDW10): the two tools for specs 9 and 10's agent loops.
     ContextLoaderService,

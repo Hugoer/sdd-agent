@@ -17,9 +17,11 @@ import { GitHubModule } from '../../github/github.module.js';
 import { GitHubStartupError } from '../../github/github-startup.js';
 import { PrismaModule } from '../../prisma/prisma.module.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { SecretScanner } from '../../secret-scan/secret-scanner.js';
 import { InjectionWarningService } from '../injection-warning.service.js';
 import { LlmModule } from '../llm.module.js';
 import { LlmService } from '../llm.service.js';
+import { SecretNoticeService } from '../secret-notice.service.js';
 import { StepConfigService } from '../step-config.service.js';
 import {
   LLM_SMOKE_USAGE,
@@ -64,6 +66,8 @@ const ok = await runLlmSmoke(
   {
     stepConfig: context.get(StepConfigService),
     warnings: context.get(InjectionWarningService),
+    notices: context.get(SecretNoticeService),
+    scanner: context.get(SecretScanner),
     llm: context.get(LlmService),
     issues: context.get<IssueProvider>(ISSUE_PROVIDER),
     repo: context.get<RepoProvider>(REPO_PROVIDER),

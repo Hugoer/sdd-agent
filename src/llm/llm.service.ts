@@ -26,6 +26,7 @@ import { ExecutionLogService } from './execution-log.service.js';
 import { findInjectionKinds } from './injection-patterns.js';
 import { InjectionWarningService } from './injection-warning.service.js';
 import type { LlmCall, LlmResult } from './llm-call.js';
+import { SecretNoticeService, noticeKinds } from './secret-notice.service.js';
 import {
   answerChars,
   buildPrompt,
@@ -76,6 +77,7 @@ export class LlmService {
   constructor(
     @Inject(CHAT_MODEL_FACTORY) private readonly factory: ChatModelFactory,
     private readonly warnings: InjectionWarningService,
+    private readonly notices: SecretNoticeService,
     private readonly logs: ExecutionLogService,
     private readonly loads: ContextLoadService,
     private readonly loader: ContextLoaderService,
@@ -90,7 +92,8 @@ export class LlmService {
     // four when the call reads repo files.
     const repoFiles = input.repoFiles === true;
     const tools = this.loader.tools(setup, repoFiles);
-    // 1–2. Guard every untrusted block and build the messages; warnings are posted before the model is called.
+    // 1–2. Guard every untrusted block and build the messages; the 🔑 notices (spec 12 BDW3), then the warnings,
+    // are posted before the model is called.
     const prompt = buildPrompt(
       input.frame,
       {
@@ -108,6 +111,11 @@ export class LlmService {
           `secret-scan ${context.step} ${context.task.externalRef} ${source.key}: redacted ${redacted.length} ` +
             `(${kindList(redacted.map((kind) => ({ kind })))})`,
         );
+    }
+    for (const { source, kinds } of prompt.secrets) {
+      const named = noticeKinds(source, kinds);
+      if (named.length > 0)
+        await this.notices.notify(context.task, source, named);
     }
     for (const { source, kinds } of prompt.injections) {
       await this.warnings.warn(context.task, source, kinds);

@@ -22,6 +22,7 @@ import type {
   ExecutionLogService,
 } from '../execution-log.service.js';
 import { InjectionWarningService } from '../injection-warning.service.js';
+import { SecretNoticeService } from '../secret-notice.service.js';
 import { LlmService } from '../llm.service.js';
 import { RepoCatalogService } from '../repo-catalog.service.js';
 import { StepConfigService } from '../step-config.service.js';
@@ -157,6 +158,7 @@ function world(options: World = {}) {
     },
   } as unknown as ExecutionLogService;
   const warnings = new InjectionWarningService(issues);
+  const notices = new SecretNoticeService(issues);
   const catalog = new RepoCatalogService(repo, testScanner());
   const stepConfig = new StepConfigService(
     repo,
@@ -176,9 +178,12 @@ function world(options: World = {}) {
     deps: {
       stepConfig,
       warnings,
+      notices,
+      scanner: new SecretScanner(config),
       llm: new LlmService(
         factory,
         warnings,
+        notices,
         logs,
         loads.asService(),
         contextLoaderOver(repo, loads, undefined, catalog),
@@ -268,7 +273,7 @@ describe('runLlmSmoke: the whole chain', () => {
         `0 other files; ${stepSkill(SKILLS.spec).length} chars; skipped none; ` +
         'no root AGENTS.md, 0 repo skills, 0 AGENTS.md listed',
       'PASS 4 model: spec on #14: gemini-4-hydrogen (standard, provider scripted)',
-      'PASS 5 guard: title: whole, kinds none, warning none; description: whole, kinds none, warning none',
+      'PASS 5 guard: title: whole, secrets none, notice none, kinds none, warning none; description: whole, secrets none, notice none, kinds none, warning none',
     ]);
     expect(lines[5]).toMatch(
       /^PASS 6 call: model gemini-4-hydrogen \(standard\), 250 ms, tokens in 120 \/ out 30 \/ cached 0 \/ reasoning 12, chars frame \d+ \/ skill \d+ \/ untrusted \d+ \/ other \d+, summary 34 chars, wordCount 5, row log-1$/,
@@ -313,6 +318,28 @@ describe('runLlmSmoke: the whole chain', () => {
     );
   });
 
+  it('spec 12 (plan DP21): a key in the description → its kind and one 🔑 notice; a second run finds it; never the value', async () => {
+    const google = ['AI', 'za', 'Sy', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4-_o5p'].join(
+      '',
+    );
+    const w = world({ description: `Deploy with ${google}.` });
+
+    const first = await run(w);
+    const second = await run(w);
+
+    expect(first.lines[4]).toBe(
+      'PASS 5 guard: title: whole, secrets none, notice none, kinds none, warning none; ' +
+        'description: whole, secrets google-api-key, notice posted, kinds none, warning none',
+    );
+    expect(second.lines[4]).toContain('notice already-there');
+    expect(
+      w.fakeIssues
+        .commentsOf(w.task)
+        .filter((c) => c.body.includes('sdd-agent:secret-removed:description')),
+    ).toHaveLength(1);
+    expect(first.output + second.output).not.toContain(google);
+  });
+
   it('an injection in the description → its kinds and one warning; a second run posts NO second warning', async () => {
     const w = world({ description: INJECTED });
 
@@ -320,8 +347,8 @@ describe('runLlmSmoke: the whole chain', () => {
     const second = await run(w);
 
     expect(first.lines[4]).toBe(
-      'PASS 5 guard: title: whole, kinds none, warning none; ' +
-        'description: whole, kinds override-instructions, bot-control, warning posted',
+      'PASS 5 guard: title: whole, secrets none, notice none, kinds none, warning none; ' +
+        'description: whole, secrets none, notice none, kinds override-instructions, bot-control, warning posted',
     );
     expect(second.lines[4]).toContain('warning already-there');
     expect(

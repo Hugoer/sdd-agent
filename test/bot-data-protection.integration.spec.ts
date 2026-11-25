@@ -9,6 +9,8 @@ import {
   it,
   vi,
 } from 'vitest';
+import type { TaskRef } from '../src/contracts/issue-provider.js';
+import { LlmError } from '../src/contracts/llm-error.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
 import { newDeliveryId, postWebhook, startApp, type TestApp } from './app.js';
 import { resetDatabase } from './db.js';
@@ -16,6 +18,7 @@ import {
   HUMAN,
   TARGET_REPO,
   issueCommentCreated,
+  issuesUnlabeled,
 } from './fixtures/github/payloads.js';
 import {
   askedRound1,
@@ -26,7 +29,13 @@ import {
   laneAdded,
 } from './grill-helpers.js';
 import { skillMd } from './fixtures/skills.js';
-import { deliver, seedIssue, seedWorkflow, store } from './router-helpers.js';
+import {
+  deliver,
+  fixtureIssueId,
+  seedIssue,
+  seedWorkflow,
+  store,
+} from './router-helpers.js';
 
 // Spec 12 (bot-data-protection), plan DP20: the flows of T2 and T4–T7 on the booted app with the fakes.
 
@@ -269,6 +278,111 @@ describe('Bot data protection (spec 12)', () => {
       expect(JSON.stringify(rounds[0].questions)).toContain(aws);
       // …and the port redacts what is posted (spec 4).
       expect(JSON.stringify(t.issues.calls)).not.toContain(aws);
+    });
+  });
+
+  describe('the 🔑 notice from model calls (BDW3)', () => {
+    const notices = (issue: TaskRef) =>
+      botComments(t, issue).filter(({ body }) =>
+        body.startsWith('<!-- sdd-agent:secret-removed:'),
+      );
+
+    it('a Grill answer with a token: one notice before the call; none after a failed call, a /retry or the next round', async () => {
+      const issue = await askedRound1(t, 67);
+      t.models.reply({
+        error: new LlmError('scripted failure', 'permanent', 'bad-request'),
+      });
+
+      const failed = await deliver(
+        t,
+        commented(67, 6701, `Q1: use ${GITHUB_TOKEN}. Q2: no.`),
+      );
+
+      expect(failed).toMatchObject({ status: 'FAILED' });
+      expect(notices(issue).map(({ body }) => body.split('\n')[0])).toEqual([
+        '<!-- sdd-agent:secret-removed:comment-6701 -->',
+      ]);
+      expect(notices(issue)[0].body).toContain(
+        `[the comment by ${HUMAN}](https://github.com/${TARGET_REPO}/issues/67#issuecomment-6701)`,
+      );
+
+      t.models.replyJson(grillAnswer({ confidence: 70, questions: 1 }));
+      await deliver(t, commented(67, 6702, '/retry'));
+      t.models.replyJson(grillAnswer({ confidence: 75, questions: 1 }));
+      await deliver(t, commented(67, 6703, 'Q3: monthly.'));
+
+      expect(t.models.calls).toHaveLength(4);
+      // The last call still read the first answer (its placeholder): the marker is found, nothing new.
+      expect(
+        t.models.calls[3].messages.map((m) => m.text).join('\n'),
+      ).toContain('[REDACTED: github-token]');
+      expect(notices(issue)).toHaveLength(1);
+      expect(logs).toContain(
+        `secret-notice ${TARGET_REPO}#67 comment-6701: github-token; already-there`,
+      );
+    });
+  });
+
+  describe('the 🔑 notice at run start (BDW3, plan DP11)', () => {
+    const notices = (issue: TaskRef) =>
+      botComments(t, issue)
+        .filter(({ body }) => body.startsWith('<!-- sdd-agent:secret-removed:'))
+        .map(({ body }) => body.split('\n')[0]);
+
+    it("a key in the description: the notice before Grill Me's questions; a restarted run posts no second one", async () => {
+      const issue = seedIssue(t, 68, {
+        labels: ['workflow: full-sdd'],
+        description: `Discount feature. Key: ${GOOGLE_KEY}`,
+      });
+      t.models.replyJson(grillAnswer({ confidence: 50, questions: 2 }));
+      await deliver(t, laneAdded(68));
+
+      expect(
+        botComments(t, issue).map(({ body }) => body.split('\n')[0]),
+      ).toEqual([
+        '<!-- sdd-agent:secret-removed:description -->',
+        expect.not.stringContaining('secret-removed') as string,
+      ]);
+
+      // Restart: the lane removed (run 1 cancelled), then added again (run 2).
+      t.issues.setHumanLabels(issue, []);
+      await deliver(
+        t,
+        issuesUnlabeled({ number: 68, label: 'workflow: full-sdd' }),
+      );
+      t.issues.setHumanLabels(issue, ['workflow: full-sdd']);
+      t.models.replyJson(grillAnswer({ confidence: 50, questions: 2 }));
+      await deliver(t, laneAdded(68));
+
+      expect(await t.prisma.run.count()).toBe(2);
+      expect(notices(issue)).toEqual([
+        '<!-- sdd-agent:secret-removed:description -->',
+      ]);
+      expect(logs).toContain(
+        `secret-notice ${TARGET_REPO}#68 description: google-api-key; already-there`,
+      );
+    });
+
+    it("a key only in the title: no notice at run start; Grill Me's first call posts it", async () => {
+      const issue = t.issues.seedIssue({
+        number: 69,
+        id: fixtureIssueId(69),
+        title: `Use ${GITHUB_TOKEN}`,
+        labels: ['workflow: full-sdd'],
+      });
+      t.models.replyJson(grillAnswer({ confidence: 50, questions: 2 }));
+
+      await deliver(t, laneAdded(69));
+
+      expect(notices(issue)).toEqual([
+        '<!-- sdd-agent:secret-removed:title -->',
+      ]);
+      expect(
+        logs.some((line) => line.startsWith('secret-scan run-start')),
+      ).toBe(false);
+      expect(logs).toContain(
+        `secret-scan grill ${TARGET_REPO}#69 title: redacted 1 (github-token)`,
+      );
     });
   });
 });

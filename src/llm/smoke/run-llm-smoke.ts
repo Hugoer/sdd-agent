@@ -13,10 +13,16 @@ import { LlmError, StepConfigError } from '../../contracts/llm-error.js';
 import type { RepoProvider } from '../../contracts/repo-provider.js';
 import type { RepoContext, StepName, StepSetup } from '../../contracts/step.js';
 import { cutText } from '../input-guard.js';
+import { placeholderKinds } from '../../secret-scan/secret-patterns.js';
+import type { SecretScanner } from '../../secret-scan/secret-scanner.js';
 import type { InjectionWarningService } from '../injection-warning.service.js';
 import type { Block, LlmResult } from '../llm-call.js';
 import type { LlmService } from '../llm.service.js';
 import { withNotes } from '../prompt.js';
+import {
+  noticeKinds,
+  type SecretNoticeService,
+} from '../secret-notice.service.js';
 import { isBinary } from '../skill-loader.js';
 import type {
   StepConfigService,
@@ -104,6 +110,9 @@ export interface SmokeLoadRow {
 export interface LlmSmokeDeps {
   stepConfig: StepConfigService;
   warnings: InjectionWarningService;
+  /** Spec 12 (plan DP21): check 5 posts the 🔑 notice as the run start does. */
+  notices: SecretNoticeService;
+  scanner: SecretScanner;
   llm: LlmService;
   /** The port as every caller gets it: wrapped by the secret scanner. */
   issues: IssueProvider;
@@ -192,7 +201,7 @@ export async function runLlmSmoke(
         );
       },
     ],
-    ['5 guard', () => guardCheck(deps.warnings, task!)],
+    ['5 guard', () => guardCheck(deps, task!)],
     [
       '6 call',
       async () => {
@@ -331,17 +340,27 @@ function issueBlocks(
   ];
 }
 
-/** Check 5: per text, cut or not, the pattern kinds and the warning. Never the text. */
+/**
+ * Check 5: per text, as the run start does (spec 12, plan DP21): redacted, the 🔑 notice when due, then the
+ * warning on the redacted text; cut or not, the secret kinds, the notice, the pattern kinds and the warning.
+ * Never the text.
+ */
 async function guardCheck(
-  warnings: InjectionWarningService,
+  { scanner, notices, warnings }: LlmSmokeDeps,
   task: UnifiedTask,
 ): Promise<string> {
   const parts: string[] = [];
-  for (const { source, text } of issueBlocks(task)) {
+  for (const { source, text: read } of issueBlocks(task)) {
+    const { text } = scanner.redact(read);
+    const secrets = placeholderKinds(text);
+    const named = noticeKinds(source, secrets);
+    const notice =
+      named.length > 0 ? await notices.notify(task, source, named) : 'none';
     const { kinds, warning } = await warnings.check(task, source, text);
     const cut = cutText(text).cutFrom;
     parts.push(
       `${source.key}: ${cut === undefined ? 'whole' : `cut (${cut} chars)`}, ` +
+        `secrets ${secrets.length > 0 ? secrets.join(', ') : 'none'}, notice ${notice}, ` +
         `kinds ${kinds.length > 0 ? kinds.join(', ') : 'none'}, warning ${warning}`,
     );
   }

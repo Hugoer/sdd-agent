@@ -32,6 +32,7 @@ import type {
 } from './execution-log.service.js';
 import { MAX_UNTRUSTED_CHARS } from './input-guard.js';
 import { InjectionWarningService } from './injection-warning.service.js';
+import { SecretNoticeService } from './secret-notice.service.js';
 import type { LlmCall, Turn } from './llm-call.js';
 import { LlmService } from './llm.service.js';
 
@@ -79,6 +80,7 @@ function setup(
   const service = new LlmService(
     factory,
     new InjectionWarningService(issues),
+    new SecretNoticeService(issues),
     logs,
     loads.asService(),
     contextLoaderOver(options.repo, loads, options.limits, options.catalog),
@@ -1346,5 +1348,100 @@ describe('LlmService.call: spec 12 redaction (BDW1, BDW11, plan DP8, DP9)', () =
       [],
     ]);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('LlmService.call: the 🔑 notice (spec 12 BDW3, BDW16, plan DP7, DP24)', () => {
+  const TOKEN = ['gh', 'p_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zA1bC2'].join('');
+  const ANSWER = {
+    key: 'comment-7',
+    label: 'the comment by alice',
+    url: `https://github.com/${REPO}/issues/14#issuecomment-7`,
+  };
+  const SPEC = { key: 'spec-1', label: 'the approved Spec' };
+
+  /** A call whose turn holds the description and the given blocks. */
+  function callWith(
+    ctx: ReturnType<typeof setup>,
+    description: string,
+    ...blocks: {
+      source: { key: string; label: string; url?: string };
+      text: string;
+    }[]
+  ): LlmCall<z.infer<typeof schema>> {
+    const call = callOf(ctx, schema, description);
+    call.turns[0].blocks.push(
+      ...blocks.map((block) => ({ kind: 'untrusted' as const, ...block })),
+    );
+    return call;
+  }
+  const bodies = (ctx: ReturnType<typeof setup>) =>
+    ctx.issues.commentsOf(ctx.task).map((c) => c.body.split('\n')[0]);
+
+  it('a token in an answer and the description: two notices, before the model; a second call posts none', async () => {
+    const ctx = setup();
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    ctx.factory.reply({
+      error: new LlmError('down', 'transient', 'provider-unavailable'),
+    });
+    ctx.factory.replyJson(VALID);
+    const call = () =>
+      callWith(ctx, `Key ${TOKEN}`, {
+        source: ANSWER,
+        text: 'Q1: [REDACTED: github-token]',
+      });
+
+    // The model fails: the notices were posted before it was called.
+    await expect(ctx.service.call(call())).rejects.toBeInstanceOf(LlmError);
+    expect(bodies(ctx)).toEqual([
+      '<!-- sdd-agent:secret-removed:description -->',
+      '<!-- sdd-agent:secret-removed:comment-7 -->',
+    ]);
+    await ctx.service.call(call());
+
+    expect(ctx.issues.commentsOf(ctx.task)).toHaveLength(2);
+    expect(ctx.issues.commentsOf(ctx.task)[1].body).toContain(
+      `[the comment by alice](${ANSWER.url})`,
+    );
+  });
+
+  it('a document read back (spec-*) and an own-secret-only text post nothing', async () => {
+    const ctx = setup();
+    ctx.factory.replyJson(VALID);
+
+    await ctx.service.call(
+      callWith(ctx, 'Q: [REDACTED: own-secret]', {
+        source: SPEC,
+        text: 'Spec with [REDACTED: github-token]',
+      }),
+    );
+
+    expect(ctx.issues.commentsOf(ctx.task)).toEqual([]);
+    expect(ctx.rows[0].secretKinds).toEqual(['own-secret', 'github-token']);
+  });
+
+  it('own-secret is never named: a text with own-secret and another kind names only the other', async () => {
+    const ctx = setup();
+    ctx.factory.replyJson(VALID);
+
+    await ctx.service.call(
+      callOf(ctx, schema, '[REDACTED: own-secret] [REDACTED: google-api-key]'),
+    );
+
+    const [notice] = ctx.issues.commentsOf(ctx.task);
+    expect(notice.body).toContain('(`google-api-key`).');
+    expect(notice.body).not.toContain('own-secret');
+  });
+
+  it('the notice comes before the injection warning for the same text', async () => {
+    const ctx = setup();
+    ctx.factory.replyJson(VALID);
+
+    await ctx.service.call(callOf(ctx, schema, `${INJECTED} Use ${TOKEN}.`));
+
+    expect(bodies(ctx)).toEqual([
+      '<!-- sdd-agent:secret-removed:description -->',
+      '<!-- sdd-agent:injection-warning:description -->',
+    ]);
   });
 });

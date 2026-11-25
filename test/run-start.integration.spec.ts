@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import { ProviderError } from '../src/contracts/provider-error.js';
 import { injectionWarningMarker } from '../src/llm/injection-warning.service.js';
+import { secretNoticeMarker } from '../src/llm/secret-notice.service.js';
 import { WORKFLOW_CONFIG_PATH } from '../src/llm/workflow-config.js';
 import { resetDatabase } from './db.js';
 import { startApp, type TestApp } from './app.js';
@@ -18,6 +19,7 @@ import { HUMAN, issuesLabeled } from './fixtures/github/payloads.js';
 import {
   deliver,
   drainDueNow,
+  fixtureIssueId,
   seedIssue,
   seedWorkflow,
 } from './router-helpers.js';
@@ -145,6 +147,43 @@ describe('run start without step handlers (spec 5, T14)', () => {
     expect(comments).toHaveLength(2);
     expect(comments[0].body).toContain(injectionWarningMarker('description'));
     expect(comments[1].body).toContain('(`step-not-built`)');
+  });
+
+  it('spec 12 (DP11): a key in the description → the 🔑 notice, then the injection warning, then the first step; never the value', async () => {
+    const key = ['AI', 'za', 'Sy', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4-_o5p'].join(
+      '',
+    );
+    const issue = seedIssue(t, 44, {
+      labels: ['workflow: code-only'],
+      description: `${INJECTION} Key: ${key}`,
+    });
+
+    await deliver(t, lane(44, 'code-only'));
+
+    const comments = t.issues.commentsOf(issue);
+    expect(comments).toHaveLength(3);
+    expect(comments[0].body).toContain(secretNoticeMarker('description'));
+    expect(comments[1].body).toContain(injectionWarningMarker('description'));
+    expect(comments[2].body).toContain('(`step-not-built`)');
+    expect(comments[0].body).toContain('(`google-api-key`)');
+    expect(JSON.stringify(comments)).not.toContain(key);
+  });
+
+  it('spec 12 (BDW3): a key only in the title → no notice at run start', async () => {
+    const issue = t.issues.seedIssue({
+      number: 45,
+      id: fixtureIssueId(45),
+      title: `Use ${['gh', 'p_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zA1bC2'].join('')}`,
+      labels: ['workflow: code-only'],
+    });
+
+    await deliver(t, lane(45, 'code-only'));
+
+    expect(
+      t.issues
+        .commentsOf(issue)
+        .filter((c) => c.body.includes('sdd-agent:secret-removed')),
+    ).toEqual([]);
   });
 
   it('a crash after the Run row: the start event processed again continues the same run (RL14, RLW9)', async () => {

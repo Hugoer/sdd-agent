@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4 done 2026-11-25.
+> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2).
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -283,7 +283,7 @@ commands.
 **Dependencies:** T1. **Files:** `prisma/schema.prisma`, the migration, `src/llm/prompt.ts`, `llm.service.ts`,
 `execution-log.service.ts`, their specs, the constructions listed under T4. **Scope:** M (5 source files).
 
-- [ ] **Task 5: The 🔑 notice from model calls**
+- [x] **Task 5: The 🔑 notice from model calls**
 
 **Description:** `SecretNoticeService` (`src/llm/secret-notice.service.ts`, DP24) with `secretNoticeMarker(key)`,
 `secretNoticeComment(source, kinds)` (BDW3's text; a link for a source with a URL) and `noticeKinds` (DP7);
@@ -291,13 +291,13 @@ provided and exported by `LlmModule`. `LlmService.call()` posts the notices for 
 then calls the model.
 
 **Acceptance criteria:**
-- [ ] The comment text equals BDW3's example for the description; a comment source reads "from [the comment by
+- [x] The comment text equals BDW3's example for the description; a comment source reads "from [the comment by
   alice](…)"; several kinds are listed in backticks, `own-secret` never.
-- [ ] A Grill answer with a token gets one notice before the next round; a second call reading the same answer and a
+- [x] A Grill answer with a token gets one notice before the next round; a second call reading the same answer and a
   `/retry` post none (marker); a notice for the description and one for the answer are two comments.
-- [ ] A `spec-*` block with a placeholder (the approved Spec in the Plan's call) posts nothing; an `own-secret`-only
+- [x] A `spec-*` block with a placeholder (the approved Spec in the Plan's call) posts nothing; an `own-secret`-only
   text posts nothing.
-- [ ] Notices come before warnings for the same call.
+- [x] Notices come before warnings for the same call.
 
 **Verification:** `secret-notice.service.spec.ts` (new), `llm.service.spec.ts`, `grill-output.spec.ts`; the new suite
 (Grill answer with a token: one notice across two calls and a `/retry`); full four commands.
@@ -305,16 +305,16 @@ then calls the model.
 **Dependencies:** T4. **Files:** `src/llm/secret-notice.service.ts` (+ spec), `llm.module.ts`, `llm.service.ts`,
 the constructions listed under T4, the new suite. **Scope:** M.
 
-- [ ] **Task 6: The run start's notice, and smoke check 5**
+- [x] **Task 6: The run start's notice, and smoke check 5**
 
 **Description:** DP11 in `RunStartService` (scanner, `SecretNoticeService`, DP9's run-start line). DP21 in the
 smoke script.
 
 **Acceptance criteria:**
-- [ ] A new run on an issue whose description holds a key: one 🔑 notice, then (when the text matches) the ⚠️ warning,
+- [x] A new run on an issue whose description holds a key: one 🔑 notice, then (when the text matches) the ⚠️ warning,
   then Grill Me's questions; a restarted run posts no second notice.
-- [ ] A key only in the title: no notice at run start; the notice comes with Grill Me's first call.
-- [ ] The smoke check 5 line names the secret kinds and the notice state; its unit test passes against the fakes.
+- [x] A key only in the title: no notice at run start; the notice comes with Grill Me's first call.
+- [x] The smoke check 5 line names the secret kinds and the notice state; its unit test passes against the fakes.
 
 **Verification:** `test/run-start.integration.spec.ts` (two new cases), the new suite (restart),
 `run-llm-smoke.spec.ts`; full four commands.
@@ -325,10 +325,11 @@ smoke script.
 
 ### Checkpoint 2: after T4–T6
 
-- [ ] All four commands green.
-- [ ] The dev database was migrated at T4's end: spec 12's invariant 1 counts from there (DP4, DP23).
-- [ ] On the sandbox (optional, your `npm run dev`): an issue with a fake key in its description gets one 🔑 notice
-  before Grill Me's questions.
+- [x] All four commands green (2026-11-25: 1,598 unit tests, 417 integration tests).
+- [x] The dev database was migrated at T4's end: spec 12's invariant 1 counts from there (DP4, DP23).
+- [x] On the sandbox (optional, your `npm run dev`): an issue with a fake key in its description gets one 🔑 notice
+  before Grill Me's questions. 2026-11-26: sandbox #79, the notice then round 1; its 8 payloads and both `grill`
+  rows hold no value (`secret_kinds = {google-api-key}`); the app log has none.
 - [ ] You review and commit.
 
 ### Phase 3: What the model never reads, and `bot-data`
@@ -531,5 +532,7 @@ None: DP1–DP3 confirmed 2026-11-25.
   spec's `NOT NULL DEFAULT '{}'`: a hand-edited `NOT NULL` would differ from what `prisma migrate dev` expects.
   `BuiltPrompt.secrets[].redacted` holds one kind per secret found (not each kind once), so the log line can say
   how many.
+- **2026-11-25, T6:** smoke check 5's `secrets` lists every placeholder kind of the text (`own-secret` too: the
+  line is local output, never posted); `notice` follows `noticeKinds`.
 - **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
   answer, catalog and `context` lines use it.

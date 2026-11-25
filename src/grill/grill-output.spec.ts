@@ -14,6 +14,7 @@ import type {
   ExecutionLogService,
 } from '../llm/execution-log.service.js';
 import { InjectionWarningService } from '../llm/injection-warning.service.js';
+import { SecretNoticeService } from '../llm/secret-notice.service.js';
 import { LlmService } from '../llm/llm.service.js';
 import { grillOutputSchema, type GrillOutputLimits } from './grill-output.js';
 
@@ -180,6 +181,7 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
     const service = new LlmService(
       factory,
       new InjectionWarningService(issues),
+      new SecretNoticeService(issues),
       logs,
       loads.asService(),
       contextLoaderOver(undefined, loads),
