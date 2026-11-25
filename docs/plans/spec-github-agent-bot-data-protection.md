@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1).
+> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4 done 2026-11-25.
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -258,7 +258,7 @@ under T3, the new suite. **Scope:** M (5 source files).
 
 ### Phase 2: Prompts, `secret_kinds`, the 🔑 notice
 
-- [ ] **Task 4: The migration, prompts redacted, stored rows redacted**
+- [x] **Task 4: The migration, prompts redacted, stored rows redacted**
 
 **Description:** You stop `npm run dev` before this task starts (DP4). Migration `…_bot_data_protection`:
 `execution_logs.secret_kinds text[] NOT NULL DEFAULT '{}'` (created against the test database; at the task's end I
@@ -268,13 +268,13 @@ untrusted block, returning `secrets` (DP6). `LlmService` gets the scanner, logs 
 `redactJson()` (DP3, as decided).
 
 **Acceptance criteria:**
-- [ ] A description holding a fake key and an injection sentence: the model gets the placeholder, `injections` still
+- [x] A description holding a fake key and an injection sentence: the model gets the placeholder, `injections` still
   names the kind (redact before detect: a key inside the injection sentence doesn't hide it), `secrets` names the
   description with `kinds` and `redacted`.
-- [ ] A block that came in already redacted (a stored answer) is in `secrets` with `redacted: []` and no log line.
-- [ ] Every stored row of the call has `secret_kinds` and its `prompt` holds no value; a scripted answer holding a
+- [x] A block that came in already redacted (a stored answer) is in `secrets` with `redacted: []` and no log line.
+- [x] Every stored row of the call has `secret_kinds` and its `prompt` holds no value; a scripted answer holding a
   key-shaped string is stored redacted while the step gets the answer as returned (DP3).
-- [ ] `sizes` add up to the characters sent, as before.
+- [x] `sizes` add up to the characters sent, as before.
 
 **Verification:** `npx vitest run src/llm` (`prompt.spec.ts`, `llm.service.spec.ts`); the new suite (a Grill call:
 `execution_logs.prompt` with the placeholder, `secret_kinds`); `test/execution-log.integration.spec.ts`; full four
@@ -526,5 +526,10 @@ None: DP1–DP3 confirmed 2026-11-25.
 - **2026-11-25, T3 (DP9):** a repo skill's description gets no `catalog` line of its own: it is part of its
   `SKILL.md`, whose line already counts the finding. The description is still redacted on its own (it is what the
   skills list shows).
+- **2026-11-25, T4:** the migration is Prisma's form for a list, `"secret_kinds" TEXT[] DEFAULT ARRAY[]::TEXT[]`
+  (as `injection_kinds`; Prisma always reads a list as an array, and the default fills old rows with `{}`), not the
+  spec's `NOT NULL DEFAULT '{}'`: a hand-edited `NOT NULL` would differ from what `prisma migrate dev` expects.
+  `BuiltPrompt.secrets[].redacted` holds one kind per secret found (not each kind once), so the log line can say
+  how many.
 - **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
   answer, catalog and `context` lines use it.

@@ -1,6 +1,10 @@
 // Spec 4 "Prompt assembly" and "Notes": the system message in a fixed order, the turns with every untrusted text
 // guarded, the four sizes, and the lines a step adds to what it posts. Pure functions.
 import type { AIMessage } from '@langchain/core/messages';
+import {
+  placeholderKinds,
+  type SecretKind,
+} from '../secret-scan/secret-patterns.js';
 import type {
   LoadedSkill,
   RepoContext,
@@ -50,7 +54,23 @@ export interface BuiltPrompt {
   injections: { source: UntrustedSource; kinds: InjectionKind[] }[];
   /** The untrusted blocks that were cut, with their original length. */
   cuts: { source: UntrustedSource; from: number }[];
+  /**
+   * Spec 12 (BDW2, plan DP6): the untrusted blocks holding a `[REDACTED: <kind>]` placeholder after redaction.
+   * `kinds`: the placeholders' kinds in the whole redacted text (before the cut), each once; `redacted`: one kind
+   * per secret this call found (empty when the text came in already redacted).
+   */
+  secrets: {
+    source: UntrustedSource;
+    kinds: SecretKind[];
+    redacted: SecretKind[];
+  }[];
 }
+
+/** Spec 12 (plan DP5): the secret scanner's `redact`, bound. Required: no call skips redaction. */
+export type Redact = (text: string) => {
+  text: string;
+  findings: { kind: SecretKind }[];
+};
 
 const BLOCK_SEPARATOR = '\n\n';
 
@@ -62,16 +82,18 @@ export interface PromptContext {
   loading?: LoadLimits;
   /** Spec 7: the call also offers `list_files` and `read_file`; "Loading:" names all four tools. */
   repoFiles?: boolean;
+  /** Spec 12 (BDW1): runs first on every untrusted block. */
+  redact: Redact;
 }
 
 /**
- * Guards every untrusted block (detect → cut → wrap) and builds the messages in the spec's order: the frame, the
+ * Guards every untrusted block (spec 12 BDW1: redact → detect → cut → wrap) and builds the messages in the spec's order: the frame, the
  * step skill, (spec 11) the root AGENTS.md, the skills list, the AGENTS.md list, the "Loading:" paragraph, the
  * fixed paragraphs; a section with nothing in it is left out. The system message never changes within a call.
  */
 export function buildPrompt(
   frame: string,
-  { skill, repo, loading, repoFiles = false }: PromptContext,
+  { skill, repo, loading, repoFiles = false, redact }: PromptContext,
   turns: Turn[],
   tag: string = newDataTag(),
 ): BuiltPrompt {
@@ -103,12 +125,21 @@ export function buildPrompt(
   };
   const injections: BuiltPrompt['injections'] = [];
   const cuts: BuiltPrompt['cuts'] = [];
+  const secrets: BuiltPrompt['secrets'] = [];
 
   const messages: PromptMessage[] = [{ role: 'system', content: system }];
   for (const turn of turns) {
     const parts = turn.blocks.map((block) => {
       if (block.kind === 'text') return block.text;
-      const guarded = guardText(block.text, tag, block.source.label);
+      const { text, findings } = redact(block.text);
+      const kinds = placeholderKinds(text);
+      if (kinds.length > 0)
+        secrets.push({
+          source: block.source,
+          kinds,
+          redacted: findings.map(({ kind }) => kind),
+        });
+      const guarded = guardText(text, tag, block.source.label);
       if (guarded.kinds.length > 0)
         injections.push({ source: block.source, kinds: guarded.kinds });
       if (guarded.cutFrom !== undefined)
@@ -122,7 +153,7 @@ export function buildPrompt(
   }
   // `other` was counted with the data blocks in it; take them back out.
   sizes.other -= sizes.untrusted;
-  return { tag, messages, sizes, injections, cuts };
+  return { tag, messages, sizes, injections, cuts, secrets };
 }
 
 /** Every character of a request: its seven sizes added up (spec 11 SD5: `sentChars` of the estimate). */

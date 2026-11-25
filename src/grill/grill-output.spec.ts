@@ -5,6 +5,7 @@ import { InMemoryIssueProvider } from '../../test/fakes/in-memory-issue-provider
 import {
   InMemoryContextLoads,
   contextLoaderOver,
+  testScanner,
 } from '../../test/fakes/in-memory-context-loads.js';
 import { ScriptedChatModelFactory } from '../../test/fakes/scripted-chat-model.factory.js';
 import type { StepSetup } from '../contracts/step.js';
@@ -182,6 +183,7 @@ describe('grillOutputSchema through LlmService.call (spec 4)', () => {
       logs,
       loads.asService(),
       contextLoaderOver(undefined, loads),
+      testScanner(),
     );
 
     const result = await service.call({

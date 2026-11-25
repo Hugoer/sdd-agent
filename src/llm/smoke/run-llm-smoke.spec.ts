@@ -182,6 +182,7 @@ function world(options: World = {}) {
         logs,
         loads.asService(),
         contextLoaderOver(repo, loads, undefined, catalog),
+        testScanner(),
       ),
       issues,
       repo,

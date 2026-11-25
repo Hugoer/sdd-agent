@@ -82,6 +82,7 @@ function setup(
     logs,
     loads.asService(),
     contextLoaderOver(options.repo, loads, options.limits, options.catalog),
+    testScanner(),
   );
   return { factory, issues, task, rows, loads, service };
 }
@@ -1293,5 +1294,57 @@ describe('LlmService.call: the read tools (spec 7, SP2)', () => {
 
     expect(ctx.factory.calls[0].tools).toEqual([]);
     expect(ctx.factory.calls[0].messages[0].text).not.toContain('Loading:');
+  });
+});
+
+describe('LlmService.call: spec 12 redaction (BDW1, BDW11, plan DP8, DP9)', () => {
+  // Built at run time: no key-shaped literal in the repo (plan DP22).
+  const TOKEN = ['gh', 'p_', 'aB3dE5gH7jK9mN1pQ2rS4tU6vW8xY0zA1bC2'].join('');
+
+  it('a token in the description: the model gets the placeholder; secretKinds on every row of the call; one log line', async () => {
+    const ctx = setup();
+    const warn = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    ctx.factory.replyJson({ summary: '' }).replyJson(VALID);
+
+    await ctx.service.call(callOf(ctx, schema, `Deploy with ${TOKEN}.`));
+
+    const sent = ctx.factory.calls
+      .flatMap((call) => call.messages)
+      .map((message) => message.text)
+      .join('\n');
+    expect(sent).not.toContain(TOKEN);
+    expect(sent).toContain('Deploy with [REDACTED: github-token].');
+    expect(ctx.rows.map((row) => row.secretKinds)).toEqual([
+      ['github-token'],
+      ['github-token'],
+    ]);
+    expect(warn.mock.calls).toEqual([
+      [`secret-scan spec ${REPO}#14 description: redacted 1 (github-token)`],
+    ]);
+  });
+
+  it('a text that came in already redacted: secretKinds named, no log line; a plain text → []', async () => {
+    const ctx = setup();
+    const warn = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    ctx.factory.replyJson(VALID).replyJson(VALID);
+
+    await ctx.service.call(
+      callOf(
+        ctx,
+        schema,
+        'Q1: [REDACTED: own-secret] [REDACTED: github-token]',
+      ),
+    );
+    await ctx.service.call(callOf(ctx, schema));
+
+    expect(ctx.rows.map((row) => row.secretKinds)).toEqual([
+      ['own-secret', 'github-token'],
+      [],
+    ]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

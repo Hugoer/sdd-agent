@@ -91,6 +91,9 @@ model ExecutionLog {
   answerChars       Int?     @map("answer_chars")
   /// Kinds matched in this call's untrusted texts; empty = none.
   injectionKinds    String[] @map("injection_kinds")
+  /// Spec 12 (BDW11): the kinds of the `[REDACTED: <kind>]` placeholders in this request's untrusted texts, each
+  /// once, `own-secret` included; empty = none.
+  secretKinds       String[] @default([]) @map("secret_kinds")
   /// Source keys of the untrusted texts that were cut.
   cutSources        String[] @map("cut_sources")
   /// The messages as sent (LangChain StoredMessage[], after wrapping and cutting). Spec 11 (L18): turn 1 holds the

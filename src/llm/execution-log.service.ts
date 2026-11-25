@@ -5,6 +5,7 @@ import type { LlmErrorCode } from '../contracts/llm-error.js';
 import type { ResolvedModel, StepName } from '../contracts/step.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SecretScanner } from '../secret-scan/secret-scanner.js';
 import type { PromptSizes } from './prompt.js';
 
 const MAX_ERROR_LENGTH = 2_000;
@@ -28,6 +29,8 @@ export interface ExecutionLogEntry {
   sizes: PromptSizes;
   answerChars?: number;
   injectionKinds: string[];
+  /** Spec 12 (BDW11): the placeholder kinds of the request's untrusted blocks; empty = none. */
+  secretKinds: string[];
   cutSources: string[];
   /** The messages as sent (LangChain StoredMessage[]). */
   prompt: unknown;
@@ -39,10 +42,17 @@ export interface ExecutionLogEntry {
   providerMeta?: unknown;
 }
 
-/** Writes ExecutionLog rows: insert only, one per model request, success or failure (L11; spec 11). */
+/**
+ * Writes ExecutionLog rows: insert only, one per model request, success or failure (L11; spec 11). Spec 12 (plan
+ * DP3): the stored prompt and answer pass `redactJson()`, so a key-shaped string the model wrote is not stored; the
+ * step and the model get the messages as they were.
+ */
 @Injectable()
 export class ExecutionLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scanner: SecretScanner,
+  ) {}
 
   /** Inserts the row and returns its id. Empty token columns mean "not reported", never zero. */
   async record(entry: ExecutionLogEntry): Promise<string> {
@@ -79,15 +89,23 @@ export class ExecutionLogService {
         loadedChars: entry.sizes.loaded,
         answerChars: entry.answerChars ?? null,
         injectionKinds: entry.injectionKinds,
+        secretKinds: entry.secretKinds,
         cutSources: entry.cutSources,
-        prompt: json(entry.prompt) ?? [],
-        answer: json(entry.answer),
+        prompt: json(this.redacted(entry.prompt)) ?? [],
+        answer: json(this.redacted(entry.answer)),
         providerUsage: json(usage),
         providerMeta: json(entry.providerMeta),
       },
       select: { id: true },
     });
     return id;
+  }
+
+  /** A copy with every string redacted; undefined stays undefined (the column stays empty). */
+  private redacted(value: unknown): unknown {
+    return value === undefined
+      ? undefined
+      : this.scanner.redactJson(value).value;
   }
 }
 

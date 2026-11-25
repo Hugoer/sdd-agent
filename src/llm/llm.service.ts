@@ -14,6 +14,7 @@ import type { z } from 'zod';
 import { LlmError } from '../contracts/llm-error.js';
 import type { StepName } from '../contracts/step.js';
 import { modelLabel } from '../github/labels.js';
+import { kindList, SecretScanner } from '../secret-scan/secret-scanner.js';
 import {
   CHAT_MODEL_FACTORY,
   type ChatModelFactory,
@@ -63,7 +64,8 @@ type Attempt<T> =
     };
 
 /**
- * Spec 4 "LlmService.call()" (L10, LW6, LW9) with spec 11's load turns (SDW12, SDW13): guard → warnings → prompt
+ * Spec 4 "LlmService.call()" (L10, LW6, LW9) with spec 11's load turns (SDW12, SDW13) and spec 12's redaction
+ * (BDW1: every untrusted block is redacted first, the stored prompt is the redacted one): guard → warnings → prompt
  * → model → one ExecutionLog row per request → files loaded on demand → re-ask on a mismatch. Every failure is an
  * LlmError, or a ProviderError from posting a warning or (spec 11, plan P21) from reading a file on demand.
  */
@@ -77,6 +79,7 @@ export class LlmService {
     private readonly logs: ExecutionLogService,
     private readonly loads: ContextLoadService,
     private readonly loader: ContextLoaderService,
+    private readonly scanner: SecretScanner,
   ) {}
 
   async call<T>(input: LlmCall<T>): Promise<LlmResult<T>> {
@@ -95,9 +98,17 @@ export class LlmService {
         repo: setup.repo,
         loading: tools.length > 0 ? this.loader.limits : undefined,
         repoFiles,
+        redact: (text) => this.scanner.redact(text),
       },
       input.turns,
     );
+    for (const { source, redacted } of prompt.secrets) {
+      if (redacted.length > 0)
+        this.logger.warn(
+          `secret-scan ${context.step} ${context.task.externalRef} ${source.key}: redacted ${redacted.length} ` +
+            `(${kindList(redacted.map((kind) => ({ kind })))})`,
+        );
+    }
     for (const { source, kinds } of prompt.injections) {
       await this.warnings.warn(context.task, source, kinds);
     }
@@ -105,6 +116,10 @@ export class LlmService {
       ...new Set(prompt.injections.flatMap(({ kinds }) => kinds)),
     ];
     const cutSources = prompt.cuts.map(({ source }) => source.key);
+    // Spec 12 (BDW11, plan DP8): every placeholder kind of the request's untrusted blocks, each once.
+    const secretKinds = [
+      ...new Set(prompt.secrets.flatMap(({ kinds }) => kinds)),
+    ];
     /** SDW17: every file the call loaded (its row, path and text), counted at the end. */
     const toCount = await this.recordStartFiles(input, callId);
 
@@ -159,6 +174,7 @@ export class LlmService {
         sizes: { ...sizes },
         answerChars: raw ? answerChars(raw) : undefined,
         injectionKinds,
+        secretKinds,
         cutSources,
         prompt: mapChatMessagesToStoredMessages(sent.slice(stored)),
         answer: raw ? mapChatMessagesToStoredMessages([raw])[0] : undefined,

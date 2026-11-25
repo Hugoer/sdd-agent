@@ -48,6 +48,7 @@ function entry(overrides: Partial<ExecutionLogEntry> = {}): ExecutionLogEntry {
     },
     answerChars: 17,
     injectionKinds: ['override-instructions'],
+    secretKinds: [],
     cutSources: ['description'],
     prompt: PROMPT,
     answer: { type: 'ai', data: { content: '{"summary":"ok"}' } },
@@ -116,6 +117,7 @@ describe('ExecutionLogService (real PostgreSQL)', () => {
       loadedChars: 7,
       answerChars: 17,
       injectionKinds: ['override-instructions'],
+      secretKinds: [],
       cutSources: ['description'],
       prompt: PROMPT,
       answer: { type: 'ai', data: { content: '{"summary":"ok"}' } },
@@ -195,5 +197,44 @@ describe('ExecutionLogService (real PostgreSQL)', () => {
     expect(
       await t.prisma.executionLog.findUniqueOrThrow({ where: { id } }),
     ).toMatchObject({ callId: null, turn: 3, attempt: 3 });
+  });
+
+  it('spec 12 (plan DP3): secret_kinds as given; the stored prompt and answer hold no key-shaped string', async () => {
+    // Built at run time: no key-shaped literal in the repo (plan DP22).
+    const aws = ['AK', 'IA', 'IOSFODNN7EXAMPLE'].join('');
+    const answer = {
+      type: 'ai',
+      data: { content: `{"summary":"use ${aws}"}`, tool_calls: [] },
+    };
+    const prompt = [
+      ...PROMPT,
+      { type: 'ai', data: { content: `earlier answer ${aws}` } },
+    ];
+
+    const id = await logs.record(
+      entry({ secretKinds: ['google-api-key'], prompt, answer }),
+    );
+
+    const row = await t.prisma.executionLog.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(row.secretKinds).toEqual(['google-api-key']);
+    expect(JSON.stringify([row.prompt, row.answer])).not.toContain(aws);
+    expect(row.answer).toEqual({
+      type: 'ai',
+      data: {
+        content: '{"summary":"use [REDACTED: aws-access-key]"}',
+        tool_calls: [],
+      },
+    });
+    expect(row.prompt).toEqual([
+      ...PROMPT,
+      {
+        type: 'ai',
+        data: { content: 'earlier answer [REDACTED: aws-access-key]' },
+      },
+    ]);
+    // The entry itself is unchanged: the step and the model get the messages as they were.
+    expect(answer.data.content).toContain(aws);
   });
 });

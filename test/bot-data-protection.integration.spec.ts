@@ -23,9 +23,10 @@ import {
   commented,
   grillAnswer,
   grillRows,
+  laneAdded,
 } from './grill-helpers.js';
 import { skillMd } from './fixtures/skills.js';
-import { deliver, seedWorkflow, store } from './router-helpers.js';
+import { deliver, seedIssue, seedWorkflow, store } from './router-helpers.js';
 
 // Spec 12 (bot-data-protection), plan DP20: the flows of T2 and T4–T7 on the booted app with the fakes.
 
@@ -213,6 +214,61 @@ describe('Bot data protection (spec 12)', () => {
         'catalog @<sha>: AGENTS.md: redacted 1 (github-token)',
         `catalog @<sha>: ${SKILL}: redacted 2 (google-api-key)`,
       ]);
+    });
+  });
+
+  describe('prompts are redacted and stored redacted (BDW1, BDW11, plan DP3)', () => {
+    it('a key in the description: the model gets the placeholder; the stored prompt holds no value; secret_kinds', async () => {
+      seedIssue(t, 65, {
+        labels: ['workflow: full-sdd'],
+        description: `Discount feature. Key: ${GOOGLE_KEY}`,
+      });
+      t.models.replyJson(grillAnswer({ confidence: 50, questions: 2 }));
+
+      await deliver(t, laneAdded(65));
+
+      const sent = t.models.calls[0].messages
+        .map((message) => message.text)
+        .join('\n');
+      expect(sent).not.toContain(GOOGLE_KEY);
+      expect(sent).toContain('Key: [REDACTED: google-api-key]');
+      const row = await t.prisma.executionLog.findFirstOrThrow({
+        where: { step: 'grill' },
+      });
+      expect(row.secretKinds).toEqual(['google-api-key']);
+      expect(JSON.stringify(row.prompt)).not.toContain(GOOGLE_KEY);
+      expect(JSON.stringify(row.prompt)).toContain(
+        '[REDACTED: google-api-key]',
+      );
+      expect(logs).toContain(
+        `secret-scan grill ${TARGET_REPO}#65 description: redacted 1 (google-api-key)`,
+      );
+    });
+
+    it('a model answer quoting a key-shaped string: stored redacted in execution_logs, the step gets it as returned', async () => {
+      const aws = ['AK', 'IA', 'IOSFODNN7EXAMPLE'].join('');
+      seedIssue(t, 66, { labels: ['workflow: full-sdd'] });
+      t.models.replyJson(
+        grillAnswer({
+          confidence: 50,
+          questions: [
+            { question: `Is ${aws} the example key?`, guess: 'Yes.' },
+          ],
+        }),
+      );
+
+      await deliver(t, laneAdded(66));
+
+      const row = await t.prisma.executionLog.findFirstOrThrow();
+      expect(JSON.stringify(row.answer)).not.toContain(aws);
+      expect(JSON.stringify(row.answer)).toContain(
+        '[REDACTED: aws-access-key]',
+      );
+      const { rounds } = await grillRows(t);
+      // Grill Me keeps the model's questions as written (plan DP3)…
+      expect(JSON.stringify(rounds[0].questions)).toContain(aws);
+      // …and the port redacts what is posted (spec 4).
+      expect(JSON.stringify(t.issues.calls)).not.toContain(aws);
     });
   });
 });
