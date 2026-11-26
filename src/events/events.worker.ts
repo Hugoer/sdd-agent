@@ -27,6 +27,8 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
   private stopping = false;
   private currentTick: Promise<void> = Promise.resolve();
   private processor: EventProcessor | undefined;
+  /** Spec 13 (plan FP13): the processor's recovery hook has run (the first tick runs it). */
+  private recovered = false;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -84,6 +86,21 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
     return count;
   }
 
+  /**
+   * Spec 13 (BFW10, plan FP13): the processor's recovery hook, once, before the first claim; a processor without
+   * one starts as before. An error it throws is logged: a recovery never blocks events.
+   */
+  protected async recover(): Promise<void> {
+    this.recovered = true;
+    try {
+      await this.requireProcessor().recover?.();
+    } catch (error) {
+      this.logger.error(
+        `recovery hook failed, the worker starts anyway: ${messageOf(error)}`,
+      );
+    }
+  }
+
   /** Claims and processes due events back to back until none is left; returns how many. */
   async drainOnce(): Promise<number> {
     let processed = 0;
@@ -105,6 +122,7 @@ export class EventsWorker implements OnApplicationBootstrap, OnModuleDestroy {
 
   private async tick(): Promise<void> {
     try {
+      if (!this.recovered) await this.recover();
       await this.drainOnce();
     } catch (error) {
       this.logger.error(`tick failed, retrying next tick: ${messageOf(error)}`);

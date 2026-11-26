@@ -20,4 +20,10 @@ export interface EventProcessor {
    * throws is logged and the row stays FAILED.
    */
   failed(event: WebhookEvent, error: unknown): Promise<void>;
+  /**
+   * Spec 13 (BFW10, plan FP13, FP23): optional, called once after the crash reset, at the start of the worker's
+   * first tick, before its first claim (the webhook port is already open). An error it throws is one log line and
+   * the worker starts anyway.
+   */
+  recover?(): Promise<void>;
 }

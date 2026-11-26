@@ -576,14 +576,19 @@ from `webhook_events.received_at` to the `created_at` of the issue's `labeled bo
   `plan-review` was set) `spec-review`, then the label, the Plan under `plan-review`, the label gone.
 - [ ] (`#H`) Kill the app (`kill -9`) while the Plan is written → the label stays on GitHub; restart → the sweep log
   leaves it (event `PENDING`); the Plan posted; then the label gone.
-- [ ] Leftover: set a task's mark to a `DONE` event with SQL and add `bot: working` with `gh` → restart → the sweep
-  removes it; `working_event_id` null; the log's summary line.
-- [ ] Status repair: set a task's `shown_status` to `spec-review` and the issue's label to `status: spec-review` with
-  `gh` while its `status` is `plan-review` → restart → `status: plan-review` shown.
+- [x] Leftover: set a task's mark to a `DONE` event with SQL and add `bot: working` with `gh` → restart → the sweep
+  removes it; `working_event_id` null; the log's summary line. (2026-11-27, Checkpoint 3, #90: "startup sweep: 1
+  working label removed, 0 left for its event, 0 status labels repaired, 0 skipped (lease held), 0 failed".)
+- [x] Status repair: set a task's `shown_status` to `spec-review` and the issue's label to `status: spec-review` with
+  `gh` while its `status` is `plan-review` → restart → `status: plan-review` shown. (2026-11-27, Checkpoint 3, #90: "1
+  status label repaired".)
 
 **Migration and bootstrap**
-- [ ] Before migrating: an issue with a `full-sdd` Plan waiting under `ready-for-dev` (`#I`) → after `db:migrate` and
-  a start: `status: plan-review`; `/approve` → `ready-for-dev` and the stop, as above.
+- [x] Before migrating: an issue with a `full-sdd` Plan waiting under `ready-for-dev` (`#I`) → after `db:migrate` and
+  a start: `status: plan-review`; `/approve` → `ready-for-dev` and the stop, as above. (2026-11-27, Checkpoint 3, #90:
+  the first start repaired 8 labels, #90 and seven older issues; `/approve` → `status: ready-for-dev` at 23:39:04Z,
+  `status: needs-human` at 23:39:05Z, the stop comment, `status_before_stop` `ready-for-dev`; the webhook URL line was
+  logged before the sweep's lines, FP23.)
 - [x] Startup log: "2 created, 1 updated, 15 already present"; the repo's labels list `bot: working` and `status:
   plan-review`; `status: ready-for-dev`'s description is BF6's, its colour unchanged. Edit that description by hand
   and restart → back to BF6's, "1 updated"; recolour it → the colour stays. (2026-11-26, Checkpoint 1: as written;

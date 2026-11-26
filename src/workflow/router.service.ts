@@ -38,7 +38,7 @@ import {
 } from './session-lease.service.js';
 import { StepHandlerRegistry, type StepRun } from './step-handler.registry.js';
 import { stopCauseOf, waitingStep } from './stop-cause.js';
-import { issueTag, refOf, TaskService } from './task.service.js';
+import { issueTag, labelPending, refOf, TaskService } from './task.service.js';
 import {
   issueClosedComment,
   issueClosedMarker,
@@ -607,16 +607,6 @@ export class RouterService {
     await this.issues.setStatusLabel(job.ref, status);
     await this.tasks.setShownStatus(job.lease, status);
   }
-}
-
-/** Plan P6: a label differs from the status, except `draft` with no label shown (no label wanted, RLW5). */
-function labelPending(
-  status: TaskStatus,
-  shownStatus: TaskStatus | null,
-): boolean {
-  return (
-    status !== shownStatus && !(status === 'draft' && shownStatus === null)
-  );
 }
 
 function requireRun(routing: Routing): Run {

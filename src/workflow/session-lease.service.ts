@@ -1,5 +1,6 @@
 // Spec 5 "Session lease" (overview D2, §7 rule 6; RL7, RLW4). One job per issue: the owner is the event being
 // processed. Every time compared is PostgreSQL's (plan P7): Docker's clock and the Mac's can drift apart.
+import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.schema.js';
@@ -39,6 +40,21 @@ export class SessionLeaseService {
     return updated === 1;
   }
 
+  /**
+   * Spec 13 (BFW10, plan FP9): the startup sweep's claim, as a new owner: the lease is empty, expired, or owned by an
+   * event that isn't `PROCESSING` (after a `kill -9`, the worker just reset the dead job's event to `PENDING`).
+   */
+  async claimIdle(lease: HeldLease): Promise<boolean> {
+    const updated = await this.prisma.$executeRaw`
+      UPDATE tasks
+      SET lease_owner = ${lease.eventId}::uuid,
+          lease_expires_at = now() + ${this.seconds}::int * interval '1 second'
+      WHERE id = ${lease.taskId}::uuid
+        AND (lease_owner IS NULL OR lease_expires_at <= now()
+          OR NOT EXISTS (SELECT 1 FROM webhook_events e WHERE e.id = tasks.lease_owner AND e.status = 'PROCESSING'))`;
+    return updated === 1;
+  }
+
   /** The heartbeat's renewal, with the owner in the condition. Another owner → an error line (spec). */
   async renew(lease: HeldLease): Promise<boolean> {
     const updated = await this.prisma.$executeRaw`
@@ -69,6 +85,27 @@ export class SessionLeaseService {
     job: () => Promise<T>,
   ): Promise<LeaseResult<T>> {
     if (!(await this.claim(lease))) return { claimed: false };
+    return this.holding(lease, job);
+  }
+
+  /**
+   * Spec 13 (BFW10, plan FP9): `job` under a fresh owner id, claimed with `claimIdle`; `{ claimed: false }` when a
+   * live job (a `PROCESSING` event) holds the lease.
+   */
+  async withIdleLease<T>(
+    taskId: string,
+    job: (lease: HeldLease) => Promise<T>,
+  ): Promise<LeaseResult<T>> {
+    const lease: HeldLease = { taskId, eventId: randomUUID() };
+    if (!(await this.claimIdle(lease))) return { claimed: false };
+    return this.holding(lease, () => job(lease));
+  }
+
+  /** The claimed lease's heartbeat while `job` runs, then its release. */
+  private async holding<T>(
+    lease: HeldLease,
+    job: () => Promise<T>,
+  ): Promise<LeaseResult<T>> {
     const heartbeat = setInterval(
       () => {
         this.renew(lease).catch((error: unknown) =>

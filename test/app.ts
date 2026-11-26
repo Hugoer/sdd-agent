@@ -73,11 +73,15 @@ export function offlineProviders(
     .useValue(models);
 }
 
-/** Same worker without the polling loop: tests call `drainOnce()` themselves. */
+/**
+ * Same worker without the polling loop: tests call `drainOnce()` themselves. Spec 13 (plan FP13): the recovery hook
+ * is awaited here, so a suite's first `drainOnce()` comes after it.
+ */
 class ManualEventsWorker extends EventsWorker {
   override async onApplicationBootstrap(): Promise<void> {
     this.logProcessor();
     await this.resetInterrupted();
+    await this.recover();
   }
 }
 

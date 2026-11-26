@@ -8,6 +8,7 @@ import { EventsWorker } from '../events/events.worker.js';
 import type { WebhookEvent } from '../generated/prisma/client.js';
 import { IntakeService } from '../intake/intake.service.js';
 import { RouterService } from './router.service.js';
+import { StartupSweepService } from './startup-sweep.service.js';
 
 @Injectable()
 export class WorkflowEventProcessor implements EventProcessor, OnModuleInit {
@@ -15,6 +16,7 @@ export class WorkflowEventProcessor implements EventProcessor, OnModuleInit {
     private readonly intake: IntakeService,
     private readonly router: RouterService,
     private readonly worker: EventsWorker,
+    private readonly sweep: StartupSweepService,
   ) {}
 
   onModuleInit(): void {
@@ -27,6 +29,11 @@ export class WorkflowEventProcessor implements EventProcessor, OnModuleInit {
     return result.outcome === 'accepted'
       ? this.router.route(event, result.input)
       : { status: 'IGNORED', reason: result.reason };
+  }
+
+  /** Spec 13 (BFW10, plan FP13): the startup sweep, before the worker's first claim. */
+  recover(): Promise<void> {
+    return this.sweep.sweep();
   }
 
   /** Row 28: the router stops a running run when the error came after its claim (plan P2, P16). */

@@ -18,6 +18,19 @@ export function refOf(task: Task): TaskRef {
   };
 }
 
+/**
+ * Plan P6: a label differs from the status, except `draft` with no label shown (no label wanted, RLW5). Spec 13:
+ * shared by the router and the startup sweep.
+ */
+export function labelPending(
+  status: TaskStatus,
+  shownStatus: TaskStatus | null,
+): boolean {
+  return (
+    status !== shownStatus && !(status === 'draft' && shownStatus === null)
+  );
+}
+
 /** Spec "Logging": `#12` for `owner/repo#12` (a log line never holds issue text). */
 export function issueTag(externalRef: string): string {
   const at = externalRef.lastIndexOf('#');
@@ -81,6 +94,17 @@ export class TaskService {
         where: { id: lease.taskId },
         data: { shownStatus },
       });
+    });
+  }
+
+  /** Spec 13 (BFW2): the mark cleared, only if it still names `eventId`; true when it did. */
+  clearWorkingMark(lease: HeldLease, eventId: string): Promise<boolean> {
+    return this.write(lease, async (tx) => {
+      const { count } = await tx.task.updateMany({
+        where: { id: lease.taskId, workingEventId: eventId },
+        data: { workingEventId: null },
+      });
+      return count === 1;
     });
   }
 

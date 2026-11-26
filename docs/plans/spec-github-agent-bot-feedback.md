@@ -348,7 +348,7 @@ commands.
 
 ### Phase 3: After a restart
 
-- [ ] **Task 7: The worker's recovery hook**
+- [x] **Task 7: The worker's recovery hook**
 
 **Description:** FP13, FP23: `EventProcessor.recover?()`; `EventsWorker.onApplicationBootstrap()` →
 `resetInterrupted()`, then the first tick as today; the first tick awaits the hook once before it claims anything; a
@@ -365,7 +365,7 @@ first `drainOnce()` comes after the sweep. `src/events` still imports no feature
 **Dependencies:** T6. **Files:** `src/events/event-processor.ts`, `src/events/events.worker.ts` (+ spec),
 `test/app.ts`. **Scope:** S.
 
-- [ ] **Task 8: The startup sweep**
+- [x] **Task 8: The startup sweep**
 
 **Description:** `StartupSweepService` (`src/workflow`, BFW10, FP9, FP10): every task with a mark whose event is
 finished (`DONE`, `IGNORED`, `FAILED`) or gone → `setWorkingLabel(false)`, mark cleared; a mark whose event is
@@ -392,8 +392,9 @@ a `PROCESSING` event → skipped; a GitHub failure → one line, the next task. 
 
 ### Checkpoint 3: after T7–T8
 
-- [ ] The four commands green.
-- [ ] **Sandbox (your OK for `gh` and the SQL below; `npm run dev` stopped since T8):** in this order, my instance on
+- [x] The four commands green.
+- [x] (2026-11-27: all four steps as written; step 1 repaired 8 status labels, #49, #50, #55, #64, #73, #74, #78, #90)
+  **Sandbox (your OK for `gh` and the SQL below; `npm run dev` stopped since T8):** in this order, my instance on
   3000:
   1. Start → the summary counts `#I` among the status labels repaired (other old sandbox issues whose Plan waited
      under `ready-for-dev` too; you said you don't mind); `#I` shows `status: plan-review`. Matrix "Migration" row,

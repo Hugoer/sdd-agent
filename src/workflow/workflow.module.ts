@@ -9,6 +9,7 @@ import { RouterService } from './router.service.js';
 import { RunStartService } from './run-start.service.js';
 import { RunService } from './run.service.js';
 import { SessionLeaseService } from './session-lease.service.js';
+import { StartupSweepService } from './startup-sweep.service.js';
 import { StepHandlerRegistry } from './step-handler.registry.js';
 import { TaskService } from './task.service.js';
 import { WorkflowEventProcessor } from './workflow-event.processor.js';
@@ -34,6 +35,7 @@ import { WorkflowEventProcessor } from './workflow-event.processor.js';
     StepHandlerRegistry,
     NeedsHumanService,
     RouterService,
+    StartupSweepService,
     WorkflowEventProcessor,
   ],
   // Spec 6: SessionLeaseService for `assertHeld` in the step modules' own writes.

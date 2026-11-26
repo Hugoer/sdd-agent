@@ -7,6 +7,7 @@ import { ProviderError } from '../contracts/provider-error.js';
 import type { EventsWorker } from '../events/events.worker.js';
 import type { IntakeResult, IntakeService } from '../intake/intake.service.js';
 import type { RouterService } from './router.service.js';
+import type { StartupSweepService } from './startup-sweep.service.js';
 import { WorkflowEventProcessor } from './workflow-event.processor.js';
 
 function setup(result: () => Promise<IntakeResult>) {
@@ -15,12 +16,14 @@ function setup(result: () => Promise<IntakeResult>) {
     route: vi.fn(() => Promise.resolve({ status: 'DONE' as const })),
   };
   const worker = { registerProcessor: vi.fn() };
+  const sweep = { sweep: vi.fn(() => Promise.resolve()) };
   const processor = new WorkflowEventProcessor(
     intake as unknown as IntakeService,
     router as unknown as RouterService,
     worker as unknown as EventsWorker,
+    sweep as unknown as StartupSweepService,
   );
-  return { intake, router, worker, processor };
+  return { intake, router, worker, sweep, processor };
 }
 
 describe('WorkflowEventProcessor (spec 5: intake, then the router)', () => {
@@ -32,6 +35,16 @@ describe('WorkflowEventProcessor (spec 5: intake, then the router)', () => {
     processor.onModuleInit();
 
     expect(worker.registerProcessor).toHaveBeenCalledExactlyOnceWith(processor);
+  });
+
+  it('recover() runs the startup sweep (spec 13 BFW10)', async () => {
+    const { sweep, processor } = setup(() =>
+      Promise.resolve({ outcome: 'ignored', reason: 'ping' }),
+    );
+
+    await processor.recover();
+
+    expect(sweep.sweep).toHaveBeenCalledTimes(1);
   });
 
   it('ignored by intake → IGNORED with its reason; the router is not called', async () => {
