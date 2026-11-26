@@ -263,7 +263,7 @@ The bot works only on this repo, never on the bot repo itself.
    git add -A && git commit -m "chore: sandbox scaffold" && git push origin main
    ```
 
-4. Optional: the six test branches of spec 11's verification matrix. Each is one commit on top of `main` that
+4. Optional: the test branches of specs 7, 11 and 12's verification matrices. Each is `main` plus one change that
    breaks or changes one thing, and the bot reads it only when you point `TARGET_BASE_BRANCH` or the smoke
    script's `--base` at it:
 
@@ -275,6 +275,7 @@ The bot works only on this repo, never on the bot repo itself.
    | `smoke/spec-11-plain` | no `repoSkills` key | no repo skill is listed; `src/AGENTS.md` still is; smoke check 9 is skipped |
    | `smoke/spec-11-bad-skills` | a skill with no `description`, the `spec` skill named `Spec`, `money-rules` also under `.agents/skills` | every run stops: `invalid skills: …`, naming all three |
    | `smoke/spec-11-two-loads` | the `grill` skill asks for `money-rules` and then its `references/rounding.md` | two loads per evaluation, for the `SKILL_DISCOVERY_MAX_LOADS=1` row |
+   | `smoke/spec-12-no-protected-paths` | no `protectedPaths` key | every run stops: `invalid workflow.json: protectedPaths: missing (list the paths the bot must never change, [] for none)`; add `[]`, `/retry` |
    | `smoke/spec-7-bad-model` | `"spec": "gemini-no-such-model"` under `models.standard` | Grill Me works (its own model); the Spec stops: "Run N stopped at step `spec`: … `unknown-model`"; point `TARGET_BASE_BRANCH` back at `main`, restart, `/retry` → one Spec v1 |
 
    Since spec 12 each branch's `workflow.json` also has the `protectedPaths` array above (one commit per branch,
@@ -282,8 +283,8 @@ The bot works only on this repo, never on the bot repo itself.
    clone and push them (they carry the reference sandbox's `main`):
 
    ```sh
-   git fetch https://github.com/Hugoer/sdd-agent-sandbox.git 'refs/heads/smoke/spec-11-*:refs/heads/smoke/spec-11-*'
-   git push origin 'refs/heads/smoke/spec-11-*:refs/heads/smoke/spec-11-*'
+   git fetch https://github.com/Hugoer/sdd-agent-sandbox.git 'refs/heads/smoke/spec-*:refs/heads/smoke/spec-*'
+   git push origin 'refs/heads/smoke/spec-*:refs/heads/smoke/spec-*'
    ```
 
 ## 4. GitHub App

@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3); T9–T10 done 2026-11-26 (Checkpoint 4); T11–T12 done 2026-11-26.
+> built and verified 2026-11-26 (T0–T13; every matrix row and invariant passed, results in the spec).
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -455,7 +455,7 @@ posts$" docs/guides/setup-github-agent-local.md` finds nothing.
 
 **Dependencies:** T10. **Files:** the guide, `AGENTS.md`, `README.md`. **Scope:** S (docs).
 
-- [ ] **Task 13: The verification matrix**
+- [x] **Task 13: The verification matrix**
 
 **Description:** I run every row I can (build, my instance on port 3000 with the dev database and your tunnel, `psql`,
 log grep, tests); the sandbox GitHub steps with `gh` as you, on `Hugoer/sdd-agent-sandbox` only, once you say so;
@@ -491,7 +491,9 @@ verified 2026-…".
 
 ### Checkpoint 5: complete
 
-- [ ] Every matrix row and invariant passes; the sandbox has no test file left; you commit.
+- [x] Every matrix row and invariant passes; the sandbox has no test file left (`main` has the same files as
+  `a7de57d`, 2026-11-26).
+- [ ] You commit.
 
 ## Review (fresh context, 2026-11-25)
 
@@ -549,5 +551,11 @@ None: DP1–DP3 confirmed 2026-11-25.
   through `load_file` by design. Invariant 3 now reads `read_file` and `list_files` rows only (a fixture keeps both
   cases); spec note added. Then all three passed on #79. A scratch change to one copied pattern and to the copied
   `.env` rule made 5 of the 29 tests fail; reverted.
+- **2026-11-26, T13:** `gemini-4-carbon` gave no answer in the morning (a plain request too), so the sandbox ran
+  the matrix on `gemini-4-hydrogen` (one commit, your OK) and went back to carbon after (carbon answered again,
+  first in 80 s). I created `smoke/spec-12-no-protected-paths` with `gh` (your OK for this session) instead of a
+  paste-ready block; it is `main` plus its one change. Row J's model never asked for `CLAUDE.md` or `workflow.json`
+  (the integration tests cover the refusal); row L's model did ask for `.env`. The deferred smoke run (T10's check
+  6) passed on carbon after the matrix.
 - **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
   answer, catalog and `context` lines use it.
