@@ -638,7 +638,9 @@ scripts/bot-data-protection-invariants.mjs <issue>…`):
   redacts too, so an answer stored before the migration and read after it is clean) (spec 4's five patterns, copied in the script with a test
   that they equal `secret-patterns.ts`).
 - [ ] 2 — On the given issues, at most one 🔑 comment per source key, each by the App.
-- [ ] 3 — No `context_loads` row since the migration with outcome `loaded` for a hidden path.
+- [ ] 3 — No `context_loads` row since the migration with outcome `loaded` for a hidden path. 2026-11-26, build
+  (T11): rows of the read tools (`read_file`, `list_files`) only; the hidden list is theirs (SPW1), and the step
+  skill under `.github-agent/` is given at start and through `load_file` by design (the first run flagged it).
 - [ ] 4 — The script fails when an issue with two notices for one key is given (a hand-made test fixture in
   `.spec.mjs`).
 

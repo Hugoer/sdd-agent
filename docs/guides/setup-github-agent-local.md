@@ -175,6 +175,14 @@ The bot works only on this repo, never on the bot repo itself.
        "qualityGate": ".github-agent/skills/quality-gate"
      },
      "repoSkills": [".claude/skills"],
+     "protectedPaths": [
+       "**/AGENTS.md",
+       "**/CLAUDE.md", "**/GEMINI.md", "**/.cursorrules", "**/.windsurfrules", "**/.cursor/**",
+       ".github/copilot-instructions.md",
+       ".github/workflows/**",
+       "**/.env", "**/.env.!(example)",
+       ".claude/skills/**"
+     ],
      "models": {
        "standard": { "default": "gemini-4-carbon" },
        "max": { "default": "gemini-4-carbon" }
@@ -192,6 +200,9 @@ The bot works only on this repo, never on the bot repo itself.
      model loads the ones the issue needs ("How the bot uses your repo's skills and `AGENTS.md` files"). Without
      the key, no repo skill is listed. A folder that doesn't exist stops every run (`repoSkills folder not
      found`, step 9).
+   - `protectedPaths` (required, spec 12): the files the bot must never change, as globs; `[]` means "nothing
+     beyond the bot's own files". Without the key every run stops (`protectedPaths: missing`, step 9). The array
+     above is the recommended start ("What the bot never reads or changes").
 
    The five step skills. A skill is text only and nothing in it is run. Its `SKILL.md` goes into every prompt of
    its step (at most 204,800 bytes); any other file in its folder is listed, and the model loads it when
@@ -266,8 +277,9 @@ The bot works only on this repo, never on the bot repo itself.
    | `smoke/spec-11-two-loads` | the `grill` skill asks for `money-rules` and then its `references/rounding.md` | two loads per evaluation, for the `SKILL_DISCOVERY_MAX_LOADS=1` row |
    | `smoke/spec-7-bad-model` | `"spec": "gemini-no-such-model"` under `models.standard` | Grill Me works (its own model); the Spec stops: "Run N stopped at step `spec`: … `unknown-model`"; point `TARGET_BASE_BRANCH` back at `main`, restart, `/retry` → one Spec v1 |
 
-   They are on the reference sandbox. Copy them into your clone and push them (they carry the reference
-   sandbox's `main`):
+   Since spec 12 each branch's `workflow.json` also has the `protectedPaths` array above (one commit per branch,
+   2026-11-26), so each still shows only its one change. They are on the reference sandbox. Copy them into your
+   clone and push them (they carry the reference sandbox's `main`):
 
    ```sh
    git fetch https://github.com/Hugoer/sdd-agent-sandbox.git 'refs/heads/smoke/spec-11-*:refs/heads/smoke/spec-11-*'
@@ -507,8 +519,9 @@ Spec and a Plan"). `npm run db:runs` shows the run. Add `bug` → `IGNORED` / `o
 | `npm run dev` exits at startup listing variables | the error lists names and reasons, never values | Fix those variables in `.env` |
 | `npm run dev` exits: `LANGSMITH_TRACING` (or another switch) `must be unset or false` | the error names the switch | A LangChain tracing switch is `true` in `.env` or your shell. Remove it (`unset LANGSMITH_TRACING`) and start again |
 | `npm run llm:smoke` prints `FAIL` | the `FAIL` line (check, code, message) | See "LLM and setup errors" below and the preconditions in step 12 |
-| A bot comment shows `[REDACTED: github-token]` (or another kind) | app log: `secret-scan <method> <issue>: redacted <n> (<kinds>)` | The secret scanner replaced something shaped like a secret before posting ("Reference: what the bot never posts"). A documentation example that looks like a token is replaced too |
-| A bot comment says "Read the issue description carefully…" | the comment's marker and kinds | Part of that text looks like instructions aimed at the bot. The bot treats it as data and keeps working; one warning per text and issue. Delete the comment to get a new one the next time that text is used |
+| A bot comment shows `[REDACTED: github-token]` (or another kind) | app log: `secret-scan <method> <issue>: redacted <n> (<kinds>)` | The secret scanner replaced something shaped like a secret before posting ("Reference: what the bot never posts or stores"). A documentation example that looks like a token is replaced too |
+| A bot comment says "🔑 A secret was removed from …" | the comment's kinds; app log: `secret-notice <issue> <source>: <kinds>; posted` | Someone pasted a key in the issue's title, description or a comment the bot read. The bot never sent it to the model or stored it, but it is still on GitHub: rotate it, then edit it out. One notice per text, ever ("Reference: what the bot never posts or stores") |
+| A bot comment says "Read the issue description carefully…" | the comment's marker and kinds | Part of that text looks like instructions aimed at the bot (spec 4's kinds, and since spec 12 `bot-data`: an ask to copy the bot's or another tool's files, put a key in a document, or delete `AGENTS.md`). The bot treats it as data and keeps working; one warning per text and issue. Delete the comment to get a new one the next time that text is used |
 | `npm run tunnel` says `NGROK_DOMAIN is not set` | `.env` | Set it to your static domain (bare hostname) |
 | `npm run dev` fails with a database connection error, or a delivery shows `500` | `docker compose ps` | Postgres isn't running (e.g. after a Docker Desktop restart). Run `npm run db:up`, then restart the app / **Redeliver** |
 | `npm run db:up` fails: port 5432 already allocated | `docker ps` | Another Postgres is using 5432. Stop it |
@@ -591,6 +604,8 @@ Setup errors (`StepConfigError`) are never retried; the message is safe to post 
 |---|---|
 | `invalid workflow.json: <what and where>` | Fix `.github-agent/workflow.json` on `TARGET_BASE_BRANCH`: missing file, not JSON, an unknown key, a missing `default`, a path with `..` or a leading `/`, a model name with other characters than letters, digits, `.`, `_`, `-` |
 | `invalid workflow.json: repoSkills folder not found: <folders>` | A `repoSkills` entry names a folder with no file under it on `TARGET_BASE_BRANCH` (often a typo). Fix the entry, or remove it |
+| `invalid workflow.json: protectedPaths: missing (list the paths the bot must never change, [] for none)` | Spec 12: add `protectedPaths` to `workflow.json` on `TARGET_BASE_BRANCH` (the recommended array in step 3, or `[]`), then `/retry` |
+| `invalid workflow.json: protectedPaths.<i>: must be a path glob relative to the repo root: …` | Entry `<i>` (from 0) is empty, longer than 256 characters, starts with `/`, has a `..` segment, a `\` or a control character. Also `protectedPaths: must list at most 200 globs`, `protectedPaths.<i>: must be a string`, `protectedPaths: must be an array` |
 | `missing skills: <steps>` | Map each named step in `skills` to a folder with a non-empty `SKILL.md` at its root, on `TARGET_BASE_BRANCH` |
 | `skill too large: <step> (<N> bytes, limit 204,800)` | Make the step skill's `SKILL.md` smaller: move detail into other files of its folder (`references/…`), which the model loads when `SKILL.md` points to them |
 | `AGENTS.md too large (<N> bytes, limit 204,800)` | The root `AGENTS.md` goes into every prompt. Move the detail for one folder into that folder's own `AGENTS.md`, which is only listed |
@@ -662,6 +677,16 @@ every approval of a document whose read files changed (or that couldn't be compa
 header; every "written before the bot's question" reply is right. The second and third read only the issues you
 name; the others read every row, so a missing issue fails them.
 
+**Spec 12's invariant check**, the same way, over the rows stored since spec 12's migration ran:
+
+```sh
+node --env-file-if-exists=.env scripts/bot-data-protection-invariants.mjs 79 80   # every issue number
+```
+
+Three invariants: no webhook payload, prompt, answer, Grill answer or document stored since then matches a secret
+pattern (it names the row and the kind, never the value); at most one 🔑 notice per text on the issues you name,
+each by the App; no `read_file` or `list_files` row gave a hidden path (`.env`, `CLAUDE.md`, `.github-agent/`, …).
+
 ## 11. Check the GitHub App with the smoke script
 
 `npm run github:smoke` calls every GitHub method of the bot once against `TARGET_REPO` and prints one `PASS` /
@@ -729,7 +754,7 @@ npm run llm:smoke -- --issue <n> --step spec --reask                      # forc
 | 2 | Each lane's steps have skills (informative: never fails the smoke) | per lane: `ok`, or the first problem (a missing step, `invalid skills: …`, …) |
 | 3 | The step's skill loads, and what the bot finds at the commit | the step's `SKILL.md` size and its other files, characters, skipped binary files; the root `AGENTS.md` and its size, each repo skill (its description's length, its other files), each listed `AGENTS.md`. Paths and sizes only, never a file's text. A setup error fails here, before any model call |
 | 4 | The step's model from the issue's labels | name and level (`standard`, or `max` with the step's model label) |
-| 5 | The title and description against the injection patterns | cut or whole, the kinds, the warning: `posted`, `already-there` or `none` |
+| 5 | The title and description as the run start reads them: redacted, the 🔑 notice when due, then the injection patterns | cut or whole, the secret kinds, the notice and the warning (`posted`, `already-there` or `none`), the pattern kinds |
 | 6 | One real call: a one-sentence summary as JSON. It gets the root `AGENTS.md` but no tools, so it is one request | model, duration, the four token values, the four sizes, the row id |
 | 7 | One comment on the issue: the summary, a token-shaped test string, the model line | the comment's URL (the test string arrives as `[REDACTED: github-token]`) |
 | 8 | The rows of this run read back from the database | count, status, attempt, model, level |
@@ -739,13 +764,14 @@ npm run llm:smoke -- --issue <n> --step spec --reask                      # forc
 `[REDACTED: github-token]` and the line `Model: gemini-4-carbon (standard)`; one new row per model request in
 `execution_logs` with `run_id` `smoke-<id>`, and check 9's files in `context_loads` ("Usage data"). Check 9 posts
 nothing. If the issue's text matches a pattern, check 5 also
-posts one warning comment per text, once.
+posts one warning comment per text, once; if it holds a secret, one 🔑 notice per text, once.
 
 ## Usage data
 
 Every model request is one row in `execution_logs`: the step, the model and its level, the status, the
 tokens Google reported (empty = not reported, never zero), the size of each part of the prompt in characters, the
-prompt as sent and the answer as received. One call (one Grill evaluation, one smoke check) shares a `call_id`;
+prompt as sent and the answer as received (since spec 12 both are stored redacted: a key-shaped string reads
+`[REDACTED: <kind>]`). One call (one Grill evaluation, one smoke check) shares a `call_id`;
 its requests are `turn` 1, 2, …: a request whose answer loads files is followed by another, and a re-ask is one
 more (`attempt` 2 or 3). Turn 1 stores the whole prompt; a later turn only the messages added since. A worker
 retry is a new call. Totals per step, model and level:
@@ -894,6 +920,9 @@ q "SELECT action, result, count(*) FROM document_actions GROUP BY action, result
 q "SELECT d.kind, d.origin, count(DISTINCT d.id) AS versions, count(e.id) AS requests, sum(e.input_tokens) AS input, \
   sum(e.output_tokens) AS output FROM task_documents d JOIN execution_logs l ON l.id = d.log_id \
   JOIN execution_logs e ON e.call_id = l.call_id GROUP BY d.kind, d.origin ORDER BY 1, 2"
+# Spec 12: how often people paste secrets, and where (model requests whose untrusted texts held a placeholder)
+q "SELECT step, kind, count(*) AS requests, count(DISTINCT external_ref) AS issues FROM execution_logs, \
+  unnest(secret_kinds) AS kind GROUP BY step, kind ORDER BY 1, 3 DESC"
 # Spec 14: the questions by kind and result, and what people did next (a later /refresh on the issue, the approval)
 q "SELECT d.kind, a.result, count(*) AS questions, count(*) FILTER (WHERE EXISTS (SELECT 1 FROM document_actions n \
   WHERE n.task_id = a.task_id AND n.action = 'refresh' AND n.created_at > a.created_at)) AS then_refreshed, \
@@ -914,6 +943,10 @@ bot's guess. The questions are in the issue's language; the bot's own lines are 
 - **Answer** in a comment on the issue, by number: `Q1: only the bill's creator`; `Q2: yes` accepts the guess. One
   comment or several, in any order. Anyone with Triage access or more can answer ("Reference: who can do what");
   comments from anyone else, and comments written before the run started, are never read.
+- **A key pasted by mistake** (in the issue or an answer) is removed before the model or the database sees it:
+  the model reads `[REDACTED: github-token]`, and the issue gets one comment "🔑 **A secret was removed from the
+  comment by `<you>` before the bot read it** …" asking you to rotate it, since GitHub still shows it (and keeps
+  edits in the history). The questions go on as usual.
 - **Each comment is read once, as written.** An edit isn't read: to change an answer, write a new comment.
   Comments written while the model is thinking (a call can take a minute) are read in the same go, so one reply
   covers them all.
@@ -1019,14 +1052,17 @@ merge the change into that branch.
   refused on its own and the model carries on). At a limit the model answers with what it has, and the comment
   says "The bot reached its limit of 10 files for this answer." (or "… of 204,800 bytes …"). A limit never fails
   the step. Nothing carries over: the next answer loads again.
-- **Never read:** `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, or any file that isn't
-  in a list. A file an `AGENTS.md` mentions (`docs/x.md`) can't be loaded either, nor a symbolic link. A script in
+- **Never read:** `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.cursorrules`, a `.env` file (spec
+  12; `.env.example` is fine), or any file that isn't in a list. A file an `AGENTS.md` mentions (`docs/x.md`) can't be loaded either, nor a symbolic link. A script in
   a skill is text the model can read; the bot never runs it.
 - **Trusted, never above the bot's rules:** the files come from the base branch, so they are instructions, not
   untrusted user text. A file that looks like instructions aimed at the bot is still loaded, with one log line.
   They never change the bot's output format, tools or guardrails.
 - **Every skill is checked,** at run start and at every step: the step skills the run uses and every repo skill,
   loaded or not. A broken header stops the run (`invalid skills`, step 9).
+- **Redacted:** a key-shaped string in any of these files reaches the model as `[REDACTED: <kind>]`, with one log
+  line (`catalog @<commit>: <path>: redacted …`) and no comment: the repo is yours ("Reference: what the bot never
+  posts or stores").
 - **What it costs** is in `context_loads` and `execution_logs` ("Usage data").
 
 The app log, per call (paths and sizes, never a file's text):
@@ -1038,6 +1074,31 @@ context grill #44 turn 2: load_file .claude/skills/money-rules/references/roundi
 context grill #44 turn 3: load_file src/index.ts → not-found
 context tokens src/AGENTS.md @4c93fa5 gemini-4-carbon: 115 (counted)
 ```
+
+## What the bot never reads or changes
+
+The bot's own data (its settings, other tools' instruction files, its secrets, its records) is protected by code,
+never by the model's judgment (spec 12). A sentence in the prompt is only an extra layer.
+
+- **Never read** by the read tools (`list_files`, `read_file`): `.github-agent/` (the bot's settings), other tools'
+  instruction files (`CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.windsurfrules`, `.cursor/`,
+  `.github/copilot-instructions.md`) and `.env` files in any folder (`.env`, `.env.local`, …; `.env.example` stays
+  visible, since it holds only the variable names). The list is fixed in code: a target repo can't add to it or
+  remove from it.
+- **Never changed** by the bot, once the Coder writes files (spec 9): the paths in `protectedPaths` (in
+  `workflow.json`, required) and the bot's own **floor**, which is always protected whatever the array says:
+  `.github-agent/**` and every step skill folder `workflow.json`'s `skills` names (even one outside `.github-agent/`).
+  **A target repo can't remove the floor.** The Coder's write tools refuse a protected path, and the pull request
+  says which; change those files yourself, by hand. A file a command the repo configured changes (`npm run format`)
+  is committed as it is, and the Quality Gate's report names it (spec 10). Until spec 9 no step changes files, so
+  today the array is only checked.
+- **The array** is a list of [picomatch](https://github.com/micromatch/picomatch) globs, matched with letter case
+  ignored and `**` entering dot folders, so `**/AGENTS.md` also covers `docs/agents.md` and `.github/AGENTS.md`. The
+  recommended start (step 3) protects every `AGENTS.md`, the other tools' instruction files, the CI workflows, the
+  `.env` files and the repo skills (`.claude/skills/**`: drop it if the Coder may improve a repo skill through an
+  issue). A glob that matches nothing is allowed. `[]` protects only the floor.
+- **Where it is read:** `workflow.json` at the step's commit of `TARGET_BASE_BRANCH`, never the bot's branch: a
+  change to `protectedPaths` counts only after a human merges it, and the floor protects the file itself.
 
 ## When an issue is in `needs-human`
 
@@ -1167,9 +1228,32 @@ questions, and the bot writes the Spec from the issue and the answers so far ("W
 | `model: max-code` | `fef2c0` | Approvers only: the Coder uses the most capable model. |
 | `model: max-quality-gate` | `fef2c0` | Approvers only: the Quality Gate uses the most capable model. |
 
-## Reference: what the bot never posts
+## Reference: what the bot never posts or stores
 
-Everything the bot posts (comments, pull request title and body, pull request comments, the Quality Gate
+**What it reads (spec 12).** A secret in a text the bot reads is replaced by `[REDACTED: <kind>]` before the model,
+the prompt stored in `execution_logs` or any table sees it, and the run goes on:
+
+- **On receipt:** every string of a webhook payload, before `webhook_events` stores it (after the signature
+  check). App log: `secret-scan payload <delivery>: redacted <n> (<kinds>)`. Nothing is posted: the event may be a
+  discussion the bot doesn't work on. Grill Me's answers come from these payloads, so `grill_answers` is clean too.
+- **In every model call:** the title, the description and every comment the step reads are redacted first, then
+  checked for injection, cut and wrapped. The stored prompt and answer are redacted again before the insert, so a
+  key-shaped string the model writes (AWS's documented example key) isn't stored either. `execution_logs.secret_kinds`
+  lists the kinds ("Usage data").
+- **Repo files:** the step skill, every `AGENTS.md`, the repo skills and every file the model loads or reads, with a
+  log line and no comment.
+- **The 🔑 notice:** a text people wrote (the title, the description, a comment the bot reads) that held a secret gets
+  one comment per text, ever, before the model call (at run start for the description): "🔑 **A secret was removed
+  from the issue description before the bot read it** (`google-api-key`) …". It names the kind, never the value,
+  and asks you to rotate the key: it is still on GitHub, edit history included. A retry, a later step or a
+  restarted run finds the comment by its marker and posts nothing. A Spec or Plan read back by a later step never
+  gets one, and an `own-secret` match (one of the bot's own values) is redacted but never named on GitHub, so
+  nobody can confirm a guessed value by posting it.
+- **Nothing is deleted:** stored rows are kept as they are; rows stored before spec 12 aren't rewritten.
+- **The limits of a pattern list:** a secret split over two lines, encoded (base64), or of another format is not
+  found and reaches the model and the database. A placeholder typed by hand gets a needless notice.
+
+**What it posts.** Everything the bot posts (comments, pull request title and body, pull request comments, the Quality Gate
 summary) passes the secret scanner first. A match is replaced by `[REDACTED: <kind>]` and logged as
 `secret-scan <method> <issue>: redacted <n> (<kinds>)`, never with the value:
 

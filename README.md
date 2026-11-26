@@ -5,7 +5,8 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by labels
 (target) repo, never on this one.
 
 **Status:** specs #1 (walking skeleton), #3 (GitHub providers), #2 (intake and authorization), #4 (LLM foundation),
-#5 (router and session lease), #6 (Grill Me), #11 (skill discovery) and #7 (Spec, Plan and approvals) built. The bot
+#5 (router and session lease), #6 (Grill Me), #11 (skill discovery), #7 (Spec, Plan and approvals), #14 (up-to-date
+approvals) and #12 (bot data protection) built. The bot
 receives signed webhooks, stores each delivery once, checks its GitHub App at startup (and creates its labels), and
 decides for each event what it is and whether its sender may do it: an issue opened, a workflow label added or
 removed, a comment, `/approve`, `/retry`, `/refresh` or `/restore`. A workflow label added by someone without access
@@ -22,7 +23,10 @@ skills and other `AGENTS.md` files when the issue needs them, within a limit per
 read, and every file it got is recorded with its size and tokens. After Grill Me the bot writes the Spec and, in
 `full-sdd`, the Plan as issue comments people edit and approve with `/approve`; when `main` changed files a
 document read, the bot asks before an `/approve` counts. `/refresh` brings one up to date with `main`, `/restore`
-brings back a deleted one, and every reply links the comment it answers. The code steps are
+brings back a deleted one, and every reply links the comment it answers. A secret pasted in an issue or a comment
+never reaches the model or the bot's database: it is replaced by a placeholder, and the issue gets one comment
+asking to rotate it; the bot's own settings, other tools' instruction files and `.env` files are never read, and the
+target repo names the files the bot may never change (`protectedPaths`). The code steps are
 not built yet, so the last `/approve` stops the run at the `workspace` step.
 
 ## Get started

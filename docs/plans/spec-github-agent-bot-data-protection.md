@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3); T9–T10 done 2026-11-26 (Checkpoint 4).
+> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3); T9–T10 done 2026-11-26 (Checkpoint 4); T11–T12 done 2026-11-26.
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -419,7 +419,7 @@ listed under T10. **Scope:** M (one source file, many one-line fixture edits).
 
 ### Phase 5: Invariants, docs, matrix
 
-- [ ] **Task 11: The invariant script**
+- [x] **Task 11: The invariant script**
 
 **Description:** `scripts/bot-data-protection-invariants.mjs` and its `.spec.mjs` (BDW15), read-only like spec 14's:
 `node --env-file-if-exists=.env scripts/bot-data-protection-invariants.mjs <issue>…`. Invariants 1–3 as the spec
@@ -427,16 +427,16 @@ words them (DP23 for their scope); the five patterns copied with a test that the
 `src/secret-scan/secret-patterns.ts`; invariant 4 is the `.spec.mjs` fixture with two notices for one key.
 
 **Acceptance criteria:**
-- [ ] The pure checks are exported and tested, each with a failing case (a stored value, two notices for one key, a
+- [x] The pure checks are exported and tested, each with a failing case (a stored value, two notices for one key, a
   `loaded` `.env` row, a notice not by the App).
-- [ ] Run against the dev database and an issue list, it exits 0 when clean and 1 with each failure named.
+- [x] Run against the dev database and an issue list, it exits 0 when clean and 1 with each failure named.
 
 **Verification:** `npm test` (the `.spec.mjs` runs with the unit suite, as spec 14's does); one run on the dev
 database after Checkpoint 2.
 
 **Dependencies:** T2–T8. **Files:** the two script files. **Scope:** M.
 
-- [ ] **Task 12: The guide, `AGENTS.md`, the README, the status lines**
+- [x] **Task 12: The guide, `AGENTS.md`, the README, the status lines**
 
 **Description:** BDW14 in `docs/guides/setup-github-agent-local.md`: "What the bot never reads or changes" (the
 floor, the recommended array, the hidden list, "a target repo can't remove the floor", people edit protected files
@@ -447,8 +447,8 @@ description; the two new `invalid workflow.json` rows in "Troubleshooting"; DP25
 test-branch table (DP2). This repo's `AGENTS.md`: BD7's Domain Rule and the state paragraph. The README's built list.
 
 **Acceptance criteria:**
-- [ ] Matrix row R holds.
-- [ ] No line of the guide still says the bot stores payloads exactly as received or that only `read_file` redacts.
+- [x] Matrix row R holds.
+- [x] No line of the guide still says the bot stores payloads exactly as received or that only `read_file` redacts.
 
 **Verification:** read-through; `grep -n -e "exactly as received" -e "only .read_file. redacts" -e "what the bot never
 posts$" docs/guides/setup-github-agent-local.md` finds nothing.
@@ -544,5 +544,10 @@ None: DP1–DP3 confirmed 2026-11-25.
   fail (1 of 27); reverted.
 - **2026-11-26, T10:** a missing required key's hint lives in `MISSING_HINTS` (`workflow-config.ts`), so the
   schema's generic "missing" form stays one place.
+- **2026-11-26, T11:** the first run on the dev database flagged #79's step skill (`.github-agent/skills/grill/
+  SKILL.md`, a `start` row): the hidden list is the read tools' (SPW1), and the step skill is given at start and
+  through `load_file` by design. Invariant 3 now reads `read_file` and `list_files` rows only (a fixture keeps both
+  cases); spec note added. Then all three passed on #79. A scratch change to one copied pattern and to the copied
+  `.env` rule made 5 of the 29 tests fail; reverted.
 - **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
   answer, catalog and `context` lines use it.

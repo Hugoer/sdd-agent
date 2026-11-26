@@ -65,9 +65,19 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   (`approve-asked`, `IGNORED`; `/refresh`, or `/approve` again); an `/approve` written before it gets
   `before-question`. No ⚠️ line, no warning reply; the Plan's prompt reads its range from `approved_from_commit`;
   `/refresh` gets a method sentence when the step's skill changed. `node scripts/up-to-date-approvals-invariants.mjs
-  <issues>` checks four invariants. Spec 12 (`bot-data-protection`) approved 2026-11-25, not
-  built: `docs/specs/spec-github-agent-bot-data-protection.md`. Next: plan and build spec 12; then the interview of
-  spec 13 (`bot-feedback`, with `status: plan-review`), then 8 (overview build order). Repo:
+  <issues>` checks four invariants. Spec 12 (`bot-data-protection`) built 2026-11-26 (its verification matrix,
+  plan T13, still to run): no secret reaches the model or the database. Webhook payloads are stored redacted
+  (`EventsService`), Grill answers are redacted when read, `buildPrompt()` redacts every untrusted block before
+  injection detection (a required `redact`), the stored prompt and answer pass `redactJson()`, and repo files
+  (step skills, `AGENTS.md`, repo skills, `load_file`, `read_file`) are redacted when read (`catalog` log line; a
+  skill header is checked on the text as read). A text people wrote that held a secret gets one 🔑 comment
+  (`SecretNoticeService`, marker per source; never for `own-secret` or a document read back);
+  `execution_logs.secret_kinds`. A new injection kind, `bot-data`. The read tools hide `.env` files (not
+  `.env.example`). `workflow.json` requires `protectedPaths` (`[]` is valid); `src/llm/protected-paths.ts` (the floor:
+  `.github-agent/` and every step skill folder, then picomatch globs) waits for specs 9 and 10;
+  `BOT_CONFIG_PATHS` and its coverage test. `node scripts/bot-data-protection-invariants.mjs <issues>` checks three
+  invariants. Next: spec 12's verification matrix; then the interview of spec 13 (`bot-feedback`, with
+  `status: plan-review`), then 8 (overview build order). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
@@ -121,7 +131,11 @@ Code conventions: ESM (`"type": "module"`, `nodenext`): relative imports end in 
 - Core logic talks to the `IssueProvider` interface, never to Octokit directly (Jira/Azure DevOps later).
 - Destructive GitHub/git actions require explicit human approval.
 - Issue text is untrusted input: injection/size guardrails run before it reaches the LLM;
-  secret scanning runs before anything is posted back.
+  secret scanning runs before anything is posted back, and (spec 12) secrets are redacted before the LLM or the
+  database sees any text.
+- Every file or folder the bot reads from the target repo to configure itself lives under `.github-agent/` or in a
+  step skill folder `workflow.json` names; the floor (spec 12) covers it, or the floor is extended in the same
+  change, and its path constant goes into `BOT_CONFIG_PATHS`.
 - The LLM never gets a git tool. All git work (branch, commit, push) is deterministic NestJS code
   running the `git` binary via `child_process.execFile` (argument array, no shell), only inside the
   bot's own `git worktree` — the bot never touches the developer's checkout.
