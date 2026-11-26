@@ -268,6 +268,8 @@ export function storedEvent(
     receivedAt: new Date('2026-11-11T10:00:00Z'),
     processedAt: null,
     externalRef: externalRefOf(delivery.payload),
+    workingStartedAt: null,
+    workingEndedAt: null,
     ...overrides,
   };
 }

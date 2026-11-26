@@ -135,8 +135,9 @@ export class DocumentsStore {
 
   /**
    * Plan P15, the spec's "The waiting document": chosen by status, never "the latest". `spec-review` → the
-   * current Spec, even when a Plan is posted; `ready-for-dev` → the current Plan or the go-signal; `needs-human` →
-   * the one of the status before the stop. It may be approved; the caller decides what that means.
+   * current Spec, even when a Plan is posted; `needs-human` →
+   * the one of the status before the stop. It may be approved; the caller decides what that means. Spec 13 (BFW6):
+   * `plan-review` → the current Plan; `ready-for-dev` → the go-signal (`code-only`), nothing in the other lanes.
    */
   async waiting(
     runId: string,
@@ -146,15 +147,10 @@ export class DocumentsStore {
     switch (status) {
       case 'spec-review':
         return this.current(runId, 'spec');
+      case 'plan-review':
+        return this.current(runId, 'plan');
       case 'ready-for-dev':
-        return this.prisma.taskDocument.findFirst({
-          where: {
-            runId,
-            kind: { in: ['plan', 'go-signal'] },
-            supersededAt: null,
-          },
-          orderBy: { createdAt: 'desc' },
-        });
+        return this.current(runId, 'go-signal');
       case 'needs-human':
         return statusBeforeStop && statusBeforeStop !== 'needs-human'
           ? this.waiting(runId, statusBeforeStop, null)
@@ -208,6 +204,14 @@ export class DocumentsStore {
 
   byId(id: string): Promise<TaskDocument | null> {
     return this.prisma.taskDocument.findUnique({ where: { id } });
+  }
+
+  /** Spec 13 (plan FP12): the run's latest approved document (by `approved_at`), or null. */
+  lastApproved(runId: string): Promise<TaskDocument | null> {
+    return this.prisma.taskDocument.findFirst({
+      where: { runId, approvedAt: { not: null } },
+      orderBy: { approvedAt: 'desc' },
+    });
   }
 
   /** The run's documents this event approved (`approve_event_id`): how the gate knows a retried `/approve`. */

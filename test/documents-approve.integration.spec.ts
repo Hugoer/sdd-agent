@@ -256,9 +256,9 @@ describe('/approve: approving the Spec (spec 7 "Approving")', () => {
     });
     expect(approved.approvedAt).not.toBeNull();
     expect(compares()).toEqual([]);
-    // Row 17: the Plan follows.
+    // Row 17: the Plan follows (spec 13: under `plan-review`).
     expect(await t.prisma.task.findFirstOrThrow()).toMatchObject({
-      status: 'ready-for-dev',
+      status: 'plan-review',
     });
   });
 

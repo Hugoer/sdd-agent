@@ -86,7 +86,8 @@ export function waitingStep(
     case 'plan-review':
       return 'plan';
     case 'ready-for-dev':
-      return run?.lane === 'full-sdd' ? 'plan' : 'go-signal';
+      // Spec 13 (BFW6): every approval is in, the workspace claim waits; `code-only`: its go-signal.
+      return run?.lane === 'code-only' ? 'go-signal' : 'workspace';
     case 'executing':
       return 'code';
     case 'in-review':

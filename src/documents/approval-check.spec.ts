@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { approvalVerdict, type WaitingDocument } from './approval-check.js';
+import {
+  approvalVerdict,
+  everyApprovalInVerdict,
+  type WaitingDocument,
+} from './approval-check.js';
 import { DOCUMENT_END, DOCUMENT_START } from './document-text.js';
 
 const POSTED = new Date('2026-11-22T10:00:00Z');
@@ -183,5 +187,20 @@ describe('approvalVerdict: the bot’s question (spec 14, UA5, UAW2)', () => {
     expect(
       approvalVerdict(spec(), at(-1), body('x'), null, false, asked(10)),
     ).toBe('before-document');
+  });
+});
+
+describe('everyApprovalInVerdict (spec 13 BFW6, plan FP12: ready-for-dev, nothing waits)', () => {
+  it("done when this event made the run's last approval (a retried /approve)", () => {
+    expect(everyApprovalInVerdict({ approveEventId: 'ev-1' }, 'ev-1')).toBe(
+      'done',
+    );
+  });
+
+  it('already-approved for any other event, also one that approved only an earlier document (the Spec)', () => {
+    // The last approved document is the Plan (by ev-2); ev-1 approved the Spec before.
+    expect(everyApprovalInVerdict({ approveEventId: 'ev-2' }, 'ev-1')).toBe(
+      'already-approved',
+    );
   });
 });

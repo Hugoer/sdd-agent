@@ -394,52 +394,30 @@ describe('decide(): overview §3 rows 1–31', () => {
     });
   });
 
-  it('row 17: spec-review (full-sdd), valid APPROVE → snapshot the Spec, generate the Plan → ready-for-dev', () => {
-    expect(
-      act(running({ status: 'spec-review', approval: 'valid' }), ev.approve()),
-    ).toEqual({
-      kind: 'steps',
-      calls: [
-        { handler: 'spec', op: 'approve' },
-        { handler: 'plan', op: 'generate' },
-      ],
-      statusFirst: null,
-      statusAfter: 'ready-for-dev',
-    });
-  });
-
-  it('row 18: spec-review (spec-code), valid APPROVE → snapshot the Spec, claim the workspace', () => {
-    expect(
-      act(
-        running(
-          { status: 'spec-review', approval: 'valid' },
-          runOf({ lane: 'spec-code' }),
+  it("rows 17, 18: spec-review, valid APPROVE → one call, the Spec's approval (plan FP4)", () => {
+    for (const lane of ['full-sdd', 'spec-code'] as const)
+      expect(
+        act(
+          running(
+            { status: 'spec-review', approval: 'valid' },
+            runOf({ lane }),
+          ),
+          ev.approve(),
         ),
-        ev.approve(),
-      ),
-    ).toEqual({
-      kind: 'steps',
-      calls: [
-        { handler: 'spec', op: 'approve' },
-        { handler: 'workspace', op: 'claim' },
-      ],
-      statusFirst: null,
-      statusAfter: null,
-    });
+      ).toEqual({
+        kind: 'steps',
+        calls: [{ handler: 'spec', op: 'approve' }],
+        statusFirst: null,
+        statusAfter: null,
+      });
   });
 
-  it('row 19: ready-for-dev, valid APPROVE → full-sdd: the Plan, code-only: the go-signal; then claim', () => {
+  it("row 19 (spec 13): plan-review, valid APPROVE → the Plan's approval; ready-for-dev (code-only) → the go-signal's", () => {
     expect(
-      act(
-        running({ status: 'ready-for-dev', approval: 'valid' }),
-        ev.approve(),
-      ),
+      act(running({ status: 'plan-review', approval: 'valid' }), ev.approve()),
     ).toEqual({
       kind: 'steps',
-      calls: [
-        { handler: 'plan', op: 'approve' },
-        { handler: 'workspace', op: 'claim' },
-      ],
+      calls: [{ handler: 'plan', op: 'approve' }],
       statusFirst: null,
       statusAfter: null,
     });
@@ -451,16 +429,62 @@ describe('decide(): overview §3 rows 1–31', () => {
         ),
         ev.approve(),
       ),
-    ).toMatchObject({
-      calls: [
-        { handler: 'go-signal', op: 'approve' },
-        { handler: 'workspace', op: 'claim' },
-      ],
+    ).toMatchObject({ calls: [{ handler: 'go-signal', op: 'approve' }] });
+  });
+
+  it('APPROVED (plan FP4): spec-review + full-sdd → the Plan, then plan-review (row 17, spec 13)', () => {
+    expect(
+      act(running({ status: 'spec-review' }), { type: 'APPROVED' }),
+    ).toEqual({
+      kind: 'steps',
+      calls: [{ handler: 'plan', op: 'generate' }],
+      statusFirst: null,
+      statusAfter: 'plan-review',
     });
   });
 
-  it('row 20: spec-review, ready-for-dev: SKIP_ADDED → ignored; a COMMENT and an invalid APPROVE → the documents reply (spec 7)', () => {
-    for (const status of ['spec-review', 'ready-for-dev'] as const) {
+  it.each([
+    ['spec-review', 'spec-code'],
+    ['plan-review', 'full-sdd'],
+  ] as const)(
+    'APPROVED (spec 13 BFW6): %s + %s → ready-for-dev first, then the workspace claim (rows 18, 19)',
+    (status, lane) => {
+      expect(
+        act(running({ status }, runOf({ lane })), { type: 'APPROVED' }),
+      ).toEqual({
+        kind: 'steps',
+        calls: [{ handler: 'workspace', op: 'claim' }],
+        statusFirst: 'ready-for-dev',
+        statusAfter: null,
+      });
+    },
+  );
+
+  it('APPROVED (plan FP4): ready-for-dev + code-only → the workspace claim, the status already there (row 19)', () => {
+    expect(
+      act(running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })), {
+        type: 'APPROVED',
+      }),
+    ).toEqual({
+      kind: 'steps',
+      calls: [{ handler: 'workspace', op: 'claim' }],
+      statusFirst: null,
+      statusAfter: null,
+    });
+  });
+
+  it('APPROVED anywhere else is a bug (throws)', () => {
+    expect(() =>
+      act(running({ status: 'grilling' }), { type: 'APPROVED' }),
+    ).toThrow(/APPROVED in grilling/);
+  });
+
+  it('row 20: spec-review, plan-review, ready-for-dev: SKIP_ADDED → ignored; a COMMENT and an invalid APPROVE → the documents reply (spec 7)', () => {
+    for (const status of [
+      'spec-review',
+      'plan-review',
+      'ready-for-dev',
+    ] as const) {
       expect(act(running({ status }), ev.comment())).toEqual({
         kind: 'steps',
         calls: [{ handler: 'documents', op: 'reply' }],
@@ -490,7 +514,11 @@ describe('decide(): overview §3 rows 1–31', () => {
       'before-question',
     ] as const) {
       it(`${verdict} → one reply by the documents handler, no status change`, () => {
-        for (const status of ['spec-review', 'ready-for-dev'] as const)
+        for (const status of [
+          'spec-review',
+          'plan-review',
+          'ready-for-dev',
+        ] as const)
           expect(
             act(running({ status, approval: verdict }), ev.approve()),
           ).toEqual({
@@ -502,13 +530,31 @@ describe('decide(): overview §3 rows 1–31', () => {
       });
     }
 
-    it('done → steps with no calls: the event ends DONE, nothing posted (P27)', () => {
-      for (const status of ['spec-review', 'ready-for-dev'] as const)
+    it('done in spec-review, plan-review → steps with no calls: the event ends DONE, nothing posted (P27)', () => {
+      for (const status of ['spec-review', 'plan-review'] as const)
         expect(
           act(running({ status, approval: 'done' }), ev.approve()),
         ).toEqual({
           kind: 'steps',
           calls: [],
+          statusFirst: null,
+          statusAfter: null,
+        });
+    });
+
+    it('done in ready-for-dev (spec 13 BFW6: this event made the last approval) → the workspace claim', () => {
+      for (const lane of ['full-sdd', 'spec-code'] as const)
+        expect(
+          act(
+            running(
+              { status: 'ready-for-dev', approval: 'done' },
+              runOf({ lane }),
+            ),
+            ev.approve(),
+          ),
+        ).toEqual({
+          kind: 'steps',
+          calls: [{ handler: 'workspace', op: 'claim' }],
           statusFirst: null,
           statusAfter: null,
         });
@@ -722,9 +768,10 @@ describe('decide(): a deleted bot comment (spec 7 row 33, D30)', () => {
     statusAfter: null,
   };
 
-  it('spec-review, ready-for-dev, needs-human → the documents handler checks it', () => {
+  it('spec-review, plan-review, ready-for-dev, needs-human → the documents handler checks it', () => {
     for (const status of [
       'spec-review',
+      'plan-review',
       'ready-for-dev',
       'needs-human',
     ] as const)
@@ -756,16 +803,16 @@ describe('decide(): /restore (spec 7 rows 5, 34, 35; RL19)', () => {
     statusAfter: null,
   });
 
-  it('row 34: spec-review (any lane), ready-for-dev full-sdd → the documents handler restores', () => {
+  it('row 34: spec-review (any lane), plan-review → the documents handler restores', () => {
     expect(act(running({ status: 'spec-review' }), ev.restore())).toEqual(
       calls('documents', 'restore'),
     );
-    expect(act(running({ status: 'ready-for-dev' }), ev.restore())).toEqual(
+    expect(act(running({ status: 'plan-review' }), ev.restore())).toEqual(
       calls('documents', 'restore'),
     );
   });
 
-  it('row 35: grilling, code-only ready-for-dev, executing, in-review, needs-human, draft with a run → one reply', () => {
+  it('row 35: grilling, ready-for-dev (every lane, spec 13), executing, in-review, needs-human, draft with a run → one reply', () => {
     for (const status of [
       'grilling',
       'executing',
@@ -776,12 +823,13 @@ describe('decide(): /restore (spec 7 rows 5, 34, 35; RL19)', () => {
       expect(act(running({ status }), ev.restore())).toEqual(
         calls('documents', 'reply'),
       );
-    expect(
-      act(
-        running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })),
-        ev.restore(),
-      ),
-    ).toEqual(calls('documents', 'reply'));
+    for (const lane of ['full-sdd', 'spec-code', 'code-only'] as const)
+      expect(
+        act(
+          running({ status: 'ready-for-dev' }, runOf({ lane })),
+          ev.restore(),
+        ),
+      ).toEqual(calls('documents', 'reply'));
   });
 
   it("row 5: no run → the gate; a closed issue → spec 5's reply", () => {
@@ -801,7 +849,7 @@ describe('decide(): /refresh (spec 7 rows 5, 32, 35; RL19)', () => {
   });
   const reply = calls({ handler: 'documents', op: 'reply' });
 
-  it('row 32: spec-review → the Spec step refreshes; ready-for-dev full-sdd → the Spec, then the Plan', () => {
+  it('row 32: spec-review → the Spec step refreshes; plan-review → the Spec, then the Plan', () => {
     expect(act(running({ status: 'spec-review' }), ev.refresh())).toEqual(
       calls({ handler: 'spec', op: 'refresh' }),
     );
@@ -811,7 +859,7 @@ describe('decide(): /refresh (spec 7 rows 5, 32, 35; RL19)', () => {
         ev.refresh(),
       ),
     ).toEqual(calls({ handler: 'spec', op: 'refresh' }));
-    expect(act(running({ status: 'ready-for-dev' }), ev.refresh())).toEqual(
+    expect(act(running({ status: 'plan-review' }), ev.refresh())).toEqual(
       calls(
         { handler: 'spec', op: 'refresh' },
         { handler: 'plan', op: 'refresh' },
@@ -819,7 +867,7 @@ describe('decide(): /refresh (spec 7 rows 5, 32, 35; RL19)', () => {
     );
   });
 
-  it('row 35: grilling, code-only ready-for-dev, executing, in-review, needs-human, draft with a run → one reply', () => {
+  it('row 35: grilling, ready-for-dev (every lane, spec 13), executing, in-review, needs-human, draft with a run → one reply', () => {
     for (const status of [
       'grilling',
       'executing',
@@ -828,12 +876,13 @@ describe('decide(): /refresh (spec 7 rows 5, 32, 35; RL19)', () => {
       'draft',
     ] as const)
       expect(act(running({ status }), ev.refresh())).toEqual(reply);
-    expect(
-      act(
-        running({ status: 'ready-for-dev' }, runOf({ lane: 'code-only' })),
-        ev.refresh(),
-      ),
-    ).toEqual(reply);
+    for (const lane of ['full-sdd', 'spec-code', 'code-only'] as const)
+      expect(
+        act(
+          running({ status: 'ready-for-dev' }, runOf({ lane })),
+          ev.refresh(),
+        ),
+      ).toEqual(reply);
   });
 
   it("row 5: no run → the gate answers; a closed issue → spec 5's reply (RL19)", () => {

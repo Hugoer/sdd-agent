@@ -406,7 +406,7 @@ describe('/refresh while the Spec waits (spec 7)', () => {
   });
 });
 
-// Spec 7 "`/refresh`" in `ready-for-dev`, `full-sdd` (SPW8, SPW17; plan P28, P34, P35; plan T20).
+// Spec 7 "`/refresh`" in `ready-for-dev`, `full-sdd` (SPW8, SPW17; plan P28, P34, P35; plan T20). Spec 13: the Plan waits under `plan-review`.
 
 const PLAN_V2 = PLAN_TEXT.replace('`split()`', '`splitEvenly()`');
 
@@ -434,7 +434,7 @@ describe('/refresh while the Plan waits (spec 7, full-sdd)', () => {
     expect(
       await deliver(t, commentNow(number, number * 100, '/approve')),
     ).toMatchObject({ status: 'DONE' });
-    expect(await task()).toMatchObject({ status: 'ready-for-dev' });
+    expect(await task()).toMatchObject({ status: 'plan-review' });
     return issue;
   }
 
@@ -507,10 +507,10 @@ describe('/refresh while the Plan waits (spec 7, full-sdd)', () => {
       origin: 'written',
       basedOnId: v2.id,
     });
-    expect(await task()).toMatchObject({ status: 'ready-for-dev' });
+    expect(await task()).toMatchObject({ status: 'plan-review' });
   });
 
-  it('a change only the Plan\'s files see → ONE Plan v2 ("The approved Spec v1 is still up to date."); status stays `ready-for-dev`; the row has both calls', async () => {
+  it('a change only the Plan\'s files see → ONE Plan v2 ("The approved Spec v1 is still up to date."); status stays `plan-review`; the row has both calls', async () => {
     const issue = await planWaiting(141);
     const [planV1] = await rows('plan');
     t.repo.seedFile('main', 'src/f-plan.ts', 'export const p = 2;\n');
@@ -523,7 +523,7 @@ describe('/refresh while the Plan waits (spec 7, full-sdd)', () => {
 
     await deliver(t, commentNow(141, 14101, '/refresh'));
 
-    expect(await task()).toMatchObject({ status: 'ready-for-dev' });
+    expect(await task()).toMatchObject({ status: 'plan-review' });
     expect(t.models.calls.at(-1)!.messages[0].text).toContain(
       'These files changed since, * marking the ones the Plan read: src/f-plan.ts *.',
     );

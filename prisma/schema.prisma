@@ -19,20 +19,24 @@ enum WebhookEventStatus {
 
 /// One row per GitHub webhook delivery (deduplicated by delivery ID).
 model WebhookEvent {
-  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  deliveryId   String             @unique @map("delivery_id")
-  eventName    String             @map("event_name")
-  action       String?
-  payload      Json               @db.JsonB
-  status       WebhookEventStatus @default(PENDING)
-  ignoreReason String?            @map("ignore_reason")
-  attempts     Int                @default(0)
-  availableAt  DateTime           @default(now()) @map("available_at") @db.Timestamptz
-  lastError    String?            @map("last_error")
-  receivedAt   DateTime           @default(now()) @map("received_at") @db.Timestamptz
-  processedAt  DateTime?          @map("processed_at") @db.Timestamptz
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deliveryId       String             @unique @map("delivery_id")
+  eventName        String             @map("event_name")
+  action           String?
+  payload          Json               @db.JsonB
+  status           WebhookEventStatus @default(PENDING)
+  ignoreReason     String?            @map("ignore_reason")
+  attempts         Int                @default(0)
+  availableAt      DateTime           @default(now()) @map("available_at") @db.Timestamptz
+  lastError        String?            @map("last_error")
+  receivedAt       DateTime           @default(now()) @map("received_at") @db.Timestamptz
+  processedAt      DateTime?          @map("processed_at") @db.Timestamptz
   /// The issue or PR the event is about, `owner/repo#number` (spec 2, IA14); null when the payload has none.
-  externalRef  String?            @map("external_ref")
+  externalRef      String?            @map("external_ref")
+  /// Spec 13 (BFW8): the event's first `working()` (kept through the worker's retries; cleared by a re-queue, FP3).
+  workingStartedAt DateTime?          @map("working_started_at") @db.Timestamptz
+  /// Spec 13 (BFW8): when an event that started working was finished for good (`DONE`, `IGNORED`, `FAILED`).
+  workingEndedAt   DateTime?          @map("working_ended_at") @db.Timestamptz
 
   @@index([status, availableAt, receivedAt])
   @@index([externalRef, receivedAt])
@@ -191,6 +195,9 @@ model Task {
   laneConflictLanes String[]         @default([]) @map("lane_conflict_lanes")
   /// Reminders posted so far (their marker's number).
   laneConflicts     Int              @default(0) @map("lane_conflicts")
+  /// Spec 13 (BFW2): the `webhook_events.id` of the event showing the working sign; null when none. No foreign
+  /// key: a deleted event is "gone" (BFW10).
+  workingEventId    String?          @map("working_event_id") @db.Uuid
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
   runs              Run[]            @relation("TaskRuns")

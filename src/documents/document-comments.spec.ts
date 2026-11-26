@@ -914,6 +914,17 @@ describe('nothingWaitsReply for `/refresh` and `/restore` (spec "Replies where n
       'code-only',
       'has nothing to restore: a `code-only` run has no Spec or Plan.',
     ],
+    // Spec 13 (plan FP1): `ready-for-dev` after every approval.
+    [
+      'refresh',
+      'approved',
+      'comes too late: every approval of run 2 is in, and the bot codes from the approved texts.',
+    ],
+    [
+      'restore',
+      'approved',
+      'has nothing to restore: every approval of run 2 is in, and the bot keeps the approved texts.',
+    ],
   ] as const)('/%s, %s → its text', (command, situation, text) => {
     expect(
       nothingWaitsReply(
@@ -942,6 +953,12 @@ describe('nothingWaitsReply for `/refresh` and `/restore` (spec "Replies where n
       nothingWaitsReply('approve', answered('922'), 'grilling', 2),
     ).toThrow('no /approve reply where nothing waits: grilling');
   });
+
+  it('/approve has no approved text either (the gate judges it, plan FP19)', () => {
+    expect(() =>
+      nothingWaitsReply('approve', answered('923'), 'approved', 2),
+    ).toThrow('no /approve reply where nothing waits: approved');
+  });
 });
 
 describe('no text of spec 7 notifies anyone: every login in backticks', () => {
@@ -967,6 +984,7 @@ describe('no text of spec 7 notifies anyone: every login in backticks', () => {
             'in-review',
             'stopped',
             'code-only',
+            'approved',
           ] as const
         ).map((situation) =>
           nothingWaitsReply(command, { id: '1' }, situation, 2, ['full-sdd']),

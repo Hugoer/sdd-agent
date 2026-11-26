@@ -76,7 +76,7 @@ describe('The Plan (spec 7, full-sdd)', () => {
     await t.app.close();
   });
 
-  it('Spec v1 edited (a requirement removed) → `/approve` → ONE Plan v1 from the edited text, `status: ready-for-dev`; its prompt has the title and the approved text only', async () => {
+  it('Spec v1 edited (a requirement removed) → `/approve` → ONE Plan v1 from the edited text, `status: plan-review`; its prompt has the title and the approved text only', async () => {
     const issue = seedIssue(t, 61, {
       labels: ['workflow: full-sdd'],
       description: 'The description says DESCRIPTION-61.',
@@ -112,8 +112,8 @@ describe('The Plan (spec 7, full-sdd)', () => {
     );
     expect(plan.body).not.toContain('⚠️');
     expect(await task()).toMatchObject({
-      status: 'ready-for-dev',
-      shownStatus: 'ready-for-dev',
+      status: 'plan-review',
+      shownStatus: 'plan-review',
     });
     const prompt = planPrompt()
       .map((message) => message.text)
@@ -221,16 +221,16 @@ describe('The Plan (spec 7, full-sdd)', () => {
         messages[0].text.startsWith('You are the Spec step'),
       ),
     ).toHaveLength(specCalls);
-    expect(await task()).toMatchObject({ status: 'ready-for-dev' });
+    expect(await task()).toMatchObject({ status: 'plan-review' });
   });
 
-  it('a crash after the Plan’s Tx2, before the status is written → the retried `/approve` (in spec-review) ends in ready-for-dev with ONE Plan and no model call', async () => {
+  it('a crash after the Plan’s Tx2, before the status is written → the retried `/approve` (in spec-review) ends in plan-review with ONE Plan and no model call', async () => {
     const issue = await specWritten(t, 65);
     t.models.reply({ answer: PLAN_TEXT });
     const tasks = t.app.get(TaskService);
     const setStatus = tasks.setStatus.bind(tasks);
     vi.spyOn(tasks, 'setStatus').mockImplementationOnce((lease, status) =>
-      status === 'ready-for-dev'
+      status === 'plan-review'
         ? Promise.reject(new Error('status write broke'))
         : setStatus(lease, status),
     );
@@ -249,7 +249,7 @@ describe('The Plan (spec 7, full-sdd)', () => {
     ).toMatchObject({ status: 'DONE' });
     expect(plans(issue)).toHaveLength(1);
     expect(t.models.calls).toHaveLength(calls);
-    expect(await task()).toMatchObject({ status: 'ready-for-dev' });
+    expect(await task()).toMatchObject({ status: 'plan-review' });
   });
 
   it('an injection in the approved Spec → spec 4’s warning once (key `spec-<versionId>`); the event run again posts no second one', async () => {

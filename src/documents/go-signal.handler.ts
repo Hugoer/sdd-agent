@@ -13,7 +13,7 @@ import type {
   StepHandler,
 } from '../workflow/step-handler.registry.js';
 import { goSignalComment } from './document-comments.js';
-import { DocumentPosts } from './document-posts.js';
+import { APPROVED, DocumentPosts } from './document-posts.js';
 import { DocumentsStore } from './documents.store.js';
 
 @Injectable()
@@ -71,14 +71,14 @@ export class GoSignalHandler implements StepHandler {
    * approved text; no comment is read (a deleted go-signal still counts). This event's approval already recorded (a
    * `/retry` of the `workspace` stop) → nothing.
    */
-  private async approve(context: StepContext): Promise<void> {
+  private async approve(context: StepContext): Promise<StepOutcome> {
     const { run, status, statusBeforeStop, lease, input, task } = context;
     if (input.type !== 'APPROVE')
       throw new Error(`go-signal approve: a ${input.type} event`);
     const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
     if (waiting?.kind !== 'go-signal')
       throw new Error(`go-signal approve: no go-signal in ${status}`);
-    if (waiting.approveEventId === lease.eventId) return;
+    if (waiting.approveEventId === lease.eventId) return APPROVED;
     const details = await this.issues.getTaskDetails(task.ref);
     await this.store.approve(lease, waiting.id, {
       approvedText: this.scanner.redact(
@@ -96,5 +96,6 @@ export class GoSignalHandler implements StepHandler {
       linesRemoved: null,
     });
     this.posts.log(context, `approved by ${input.sender}`, 'go-signal');
+    return APPROVED;
   }
 }

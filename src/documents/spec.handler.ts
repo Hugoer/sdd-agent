@@ -30,6 +30,7 @@ import {
 } from './document-comments.js';
 import {
   APPROVE_ASKED,
+  APPROVED,
   APPROVE_REFUSED,
   DocumentPosts,
   REFRESH_REFUSED,
@@ -156,15 +157,16 @@ export class SpecHandler implements StepHandler {
     const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
     if (waiting?.kind !== 'spec')
       throw new Error(`spec approve: no waiting Spec in ${status}`);
-    if (waiting.approveEventId === lease.eventId) return;
+    if (waiting.approveEventId === lease.eventId) return APPROVED;
     const result = await this.approvals.approve(context, waiting);
     if (result.kind === 'asked') return APPROVE_ASKED;
     if (result.kind === 'refused') return APPROVE_REFUSED;
+    return APPROVED;
   }
 
   /**
-   * Row 32 (spec "`/refresh`"): in `spec-review` the waiting Spec; in `ready-for-dev` the approved Spec, first of the
-   * two calls. Plan P34: a `/refresh` already answered (a retried event) replays its row, so the model is never asked
+   * Row 32 (spec "`/refresh`"): in `spec-review` the waiting Spec; in `plan-review` (spec 13; was `ready-for-dev`)
+   * the approved Spec, first of the two calls. Plan P34: a `/refresh` already answered (a retried event) replays its row, so the model is never asked
    * twice for a step that already answered (P28).
    */
   private async refresh(context: StepContext): Promise<StepOutcome | void> {
@@ -182,7 +184,7 @@ export class SpecHandler implements StepHandler {
     switch (status) {
       case 'spec-review':
         return this.refreshWaiting(context, input.comment);
-      case 'ready-for-dev':
+      case 'plan-review':
         return this.refreshApproved(context);
       default:
         throw new Error(`spec refresh in ${status}`);
@@ -260,7 +262,7 @@ export class SpecHandler implements StepHandler {
   }
 
   /**
-   * `ready-for-dev`, `full-sdd` (the Plan waits), the Spec's call: the waiting Plan deleted, empty or approved → one
+   * `plan-review` (spec 13; was `ready-for-dev`, `full-sdd`: the Plan waits), the Spec's call: the waiting Plan deleted, empty or approved → one
    * reply and nothing more, before any model call (P35 stops the list). Then from the approved text (SPW17):
    * `main` unmoved or still right → recorded on the row for the Plan's call, nothing posted; changed → Spec v(K+1),
    * which supersedes the approved one and the waiting Plan (SPW8), and `SPEC_REFRESHED` sends the issue back to
@@ -270,9 +272,9 @@ export class SpecHandler implements StepHandler {
     context: StepContext,
   ): Promise<StepOutcome | void> {
     const { run, lease } = context;
-    const plan = await this.store.waiting(run.id, 'ready-for-dev', null);
+    const plan = await this.store.waiting(run.id, 'plan-review', null);
     if (plan?.kind !== 'plan')
-      throw new Error('spec refresh: no waiting Plan in ready-for-dev');
+      throw new Error('spec refresh: no waiting Plan in plan-review');
     if (plan.approvedAt)
       return this.posts.refuseRefresh(context, 'already-approved', plan);
     const planNow = await this.refreshes.readNow(context, plan);

@@ -53,15 +53,31 @@ const RESTORE_REFUSALS = new Set(['nothing-deleted', 'approved']);
 const APPROVE_HINT: StepOutcome = { type: 'IGNORED', reason: 'approve-hint' };
 const LATE_COMMENT: StepOutcome = { type: 'IGNORED', reason: 'late-comment' };
 
-/** Rows 35, 36: a command in a status where nothing waits, by the result its row records. */
-const NOTHING_WAITS: Partial<Record<StepContext['status'], NothingWaits>> = {
-  draft: 'starting',
-  grilling: 'grilling',
-  'ready-for-dev': 'code-only', // a `/refresh` in `code-only` (decide() sends `full-sdd`'s to the steps)
-  executing: 'executing',
-  'in-review': 'in-review',
-  'needs-human': 'stopped',
-};
+/**
+ * Rows 35, 36: a command in a status where nothing waits, by the result its row records. Spec 13 (plan FP19):
+ * `ready-for-dev` by lane: `code-only` (its go-signal waits), otherwise every approval is in (`approved`).
+ */
+function nothingWaitsSituation(
+  status: StepContext['status'],
+  lane: StepContext['run']['lane'],
+): NothingWaits | undefined {
+  switch (status) {
+    case 'draft':
+      return 'starting';
+    case 'grilling':
+      return 'grilling';
+    case 'ready-for-dev':
+      return lane === 'code-only' ? 'code-only' : 'approved';
+    case 'executing':
+      return 'executing';
+    case 'in-review':
+      return 'in-review';
+    case 'needs-human':
+      return 'stopped';
+    default:
+      return undefined;
+  }
+}
 
 @Injectable()
 export class DocumentsHandler implements StepHandler {
@@ -323,7 +339,10 @@ export class DocumentsHandler implements StepHandler {
     const { approval, run, status, statusBeforeStop } = context;
     if (approval === null || approval === 'valid' || approval === 'done')
       throw new Error(`documents reply: an /approve judged ${approval}`);
-    const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
+    // Spec 13 (plan FP12): every approval is in (`ready-for-dev`) → the reply names the last approved document.
+    const waiting =
+      (await this.store.waiting(run.id, status, statusBeforeStop)) ??
+      (await this.store.lastApproved(run.id));
     if (!waiting)
       throw new Error(`documents reply: no waiting document in ${status}`);
     return this.posts.refuseApprove(context, approval, waiting);
@@ -335,7 +354,7 @@ export class DocumentsHandler implements StepHandler {
     command: 'approve' | 'refresh' | 'restore',
     comment: TaskComment,
   ): Promise<StepOutcome> {
-    const situation = NOTHING_WAITS[context.status];
+    const situation = nothingWaitsSituation(context.status, context.run.lane);
     if (!situation)
       throw new Error(`documents reply: a /${command} in ${context.status}`);
     await this.posts.answer(

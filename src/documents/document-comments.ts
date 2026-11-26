@@ -481,7 +481,9 @@ export type NothingWaits =
   | 'executing'
   | 'in-review'
   | 'stopped'
-  | 'code-only';
+  | 'code-only'
+  // Spec 13 (plan FP1, FP19): `ready-for-dev` after every approval; `/refresh` and `/restore` only.
+  | 'approved';
 
 /** The spec's table, a column per command; `/approve` while grilling is spec 6's reply, and its go-signal waits. */
 function nothingWaitsTexts(
@@ -510,6 +512,7 @@ function nothingWaitsTexts(
         'code-only':
           'has nothing to refresh: a `code-only` run has no Spec or Plan; the bot codes from the issue description ' +
           'as it reads at `/approve`.',
+        approved: `comes too late: every approval of run ${run} is in, and the bot codes from the approved texts.`,
       };
     case 'restore':
       return {
@@ -522,6 +525,7 @@ function nothingWaitsTexts(
         stopped: `has nothing to restore now: ${stopped}`,
         'code-only':
           'has nothing to restore: a `code-only` run has no Spec or Plan.',
+        approved: `has nothing to restore: every approval of run ${run} is in, and the bot keeps the approved texts.`,
       };
   }
 }

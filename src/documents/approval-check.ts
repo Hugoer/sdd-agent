@@ -55,6 +55,17 @@ export function approvalVerdict(
     : 'valid';
 }
 
+/**
+ * Spec 13 (BFW6, plan FP12): an `/approve` in `ready-for-dev` with nothing waiting (every approval is in): `done`
+ * when this event made the run's last approval (a retried `/approve`), else `already-approved`.
+ */
+export function everyApprovalInVerdict(
+  lastApproved: Pick<TaskDocument, 'approveEventId'>,
+  eventId: string,
+): ApprovalVerdict {
+  return lastApproved.approveEventId === eventId ? 'done' : 'already-approved';
+}
+
 const COMMANDS = {
   APPROVE: 'approve',
   REFRESH: 'refresh',
@@ -112,10 +123,18 @@ export class DocumentsGate implements ApprovalGate {
     if (input.type !== 'APPROVE')
       throw new Error(`approval gate: a ${input.type} event`);
     const waiting = await this.store.waiting(run.id, status, null);
-    if (!waiting)
-      throw new Error(
-        `approval gate: run ${run.number} has no waiting document in ${status}`,
-      );
+    if (!waiting) {
+      // Spec 13 (BFW6): every approval is in.
+      const last =
+        status === 'ready-for-dev'
+          ? await this.store.lastApproved(run.id)
+          : null;
+      if (!last)
+        throw new Error(
+          `approval gate: run ${run.number} has no waiting document in ${status}`,
+        );
+      return everyApprovalInVerdict(last, lease.eventId);
+    }
     const approved = await this.store.approvedByEvent(run.id, lease.eventId);
     const thisEvent =
       approved.length === 0

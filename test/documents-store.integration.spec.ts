@@ -503,19 +503,26 @@ describe('DocumentsStore (PostgreSQL)', () => {
       );
     });
 
-    it('ready-for-dev → the current Plan', async () => {
-      expect((await store.waiting(runId, 'ready-for-dev', null))?.id).toBe(
+    it('plan-review → the current Plan (spec 13)', async () => {
+      expect((await store.waiting(runId, 'plan-review', null))?.id).toBe(
         plan1.id,
       );
     });
 
+    it('ready-for-dev → nothing in full-sdd: every approval is in (spec 13 BFW6)', async () => {
+      expect(await store.waiting(runId, 'ready-for-dev', null)).toBeNull();
+    });
+
     it('needs-human → the one of the status before the stop', async () => {
       expect(
-        (await store.waiting(runId, 'needs-human', 'ready-for-dev'))?.id,
-      ).toBe(plan1.id);
+        await store.waiting(runId, 'needs-human', 'ready-for-dev'),
+      ).toBeNull();
       expect(
         (await store.waiting(runId, 'needs-human', 'spec-review'))?.id,
       ).toBe(spec1.id);
+      expect(
+        (await store.waiting(runId, 'needs-human', 'plan-review'))?.id,
+      ).toBe(plan1.id);
       expect(await store.waiting(runId, 'needs-human', 'grilling')).toBeNull();
       expect(await store.waiting(runId, 'needs-human', null)).toBeNull();
     });
@@ -530,6 +537,21 @@ describe('DocumentsStore (PostgreSQL)', () => {
         expect(await store.waiting(runId, status, null)).toBeNull();
       }
     });
+  });
+
+  it('lastApproved() → the latest approved document by approved_at, null when none (spec 13)', async () => {
+    const spec1 = version('spec', 1);
+    await store.insertVersion(lease, spec1);
+    expect(await store.lastApproved(runId)).toBeNull();
+    await approve(spec1.id);
+    const plan1 = version('plan', 1, { basedOnId: spec1.id });
+    await store.insertVersion(lease, plan1);
+    expect((await store.lastApproved(runId))?.id).toBe(spec1.id);
+    await prisma.taskDocument.update({
+      where: { id: plan1.id },
+      data: { approvedAt: new Date(Date.now() + 60_000), approvedBy: 'bob' },
+    });
+    expect((await store.lastApproved(runId))?.id).toBe(plan1.id);
   });
 
   it('waiting() in ready-for-dev → the go-signal of a code-only run', async () => {

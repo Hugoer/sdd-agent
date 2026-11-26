@@ -42,6 +42,9 @@ export const APPROVE_ASKED: StepOutcome = {
   reason: 'approve-asked',
 };
 
+/** Spec 13 (plan FP4): the approval is saved (by this event, now or on an earlier attempt); decide() says what follows. */
+export const APPROVED: StepOutcome = { type: 'APPROVED' };
+
 /** Plan P35: a `/refresh` that did nothing (deleted, empty, already approved) ends `IGNORED`. */
 export const REFRESH_REFUSED: StepOutcome = {
   type: 'IGNORED',

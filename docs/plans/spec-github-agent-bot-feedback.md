@@ -252,7 +252,7 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 
 ### Phase 2: The statuses and the migration
 
-- [ ] **Task 3: The `APPROVED` outcome (nothing changes on GitHub)**
+- [x] **Task 3: The `APPROVED` outcome (nothing changes on GitHub)**
 
 **Description:** FP4 with today's statuses: the three `approve` ops return `APPROVED`; `decide()` maps it
 (`spec-review` + `full-sdd` → the Plan, then `ready-for-dev` as today; `spec-review` + `spec-code` and
@@ -267,7 +267,7 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 **Dependencies:** T1. **Files:** `src/workflow/decide.ts` (+ spec), `src/documents/spec.handler.ts`,
 `src/documents/plan.handler.ts`, `src/documents/go-signal.handler.ts`. **Scope:** S.
 
-- [ ] **Task 4: `src/documents` reads `plan-review` (not produced yet)**
+- [x] **Task 4: `src/documents` reads `plan-review` (not produced yet)**
 
 **Description:** `DocumentsStore.waiting('plan-review')` → the current Plan (and `needs-human` stopped from it);
 `lastApproved(runId)` (FP12); the gate in `ready-for-dev` with nothing waiting answers `done` (this event made an
@@ -289,7 +289,7 @@ test/documents-store.integration.spec.ts test/bot-feedback.integration.spec.ts`;
 `src/documents/documents.handler.ts`, `src/documents/document-comments.ts` (+ spec),
 `test/documents-store.integration.spec.ts`, `test/bot-feedback.integration.spec.ts` (new). **Scope:** M.
 
-- [ ] **Task 5: The router produces `plan-review`; `ready-for-dev`'s new meaning**
+- [x] **Task 5: The router produces `plan-review`; `ready-for-dev`'s new meaning**
 
 **Description:** **Stop `npm run dev` before this task** (see "When `npm run dev` must be stopped"). `decide()`: row
 17 → `plan-review`; `APPROVED` in `spec-review` + `spec-code` and in `plan-review` → `ready-for-dev` first, then the
@@ -317,7 +317,9 @@ under `plan-review` (`spec.handler.ts:183–188,273`, `plan.handler.ts:188`).
 `src/documents/plan.handler.ts`, and the five integration suites listed. **Scope:** L (one behaviour, many small test
 edits; the source changes are a few lines each).
 
-- [ ] **Task 6: The migration: three columns and the data rule**
+- [x] **Task 6: The migration: three columns and the data rule** (2026-11-27: `20261126221256_bot_feedback`; the dev
+  database migrated with `prisma migrate deploy`; #90 and seven older sandbox issues, #49, #50, #55, #64, #73, #74,
+  #78, now read `plan-review` with `shown_status` `ready-for-dev`)
 
 **Description:** `tasks.working_event_id` (uuid, nullable, no foreign key), `webhook_events.working_started_at`,
 `working_ended_at` (timestamptz, nullable) in `prisma/schema.prisma`; one migration `…_bot_feedback` made with
@@ -340,7 +342,7 @@ commands.
 
 ### Checkpoint 2: after T3–T6
 
-- [ ] The four commands green; the dev database migrated (you).
+- [x] The four commands green; the dev database migrated (I did, as you asked on 2026-11-26).
 - [ ] You review and commit. `npm run dev` may run again during T7, and must be stopped when T8 starts; leave `#I`
   alone until Checkpoint 3 (its label still says `ready-for-dev` until the sweep runs).
 

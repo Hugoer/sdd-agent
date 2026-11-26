@@ -31,6 +31,7 @@ import {
 import { DocumentApprovals } from './document-approval.js';
 import {
   APPROVE_ASKED,
+  APPROVED,
   APPROVE_REFUSED,
   DocumentPosts,
   REFRESH_REFUSED,
@@ -163,14 +164,15 @@ export class PlanHandler implements StepHandler {
     const waiting = await this.store.waiting(run.id, status, statusBeforeStop);
     if (waiting?.kind !== 'plan')
       throw new Error(`plan approve: no waiting Plan in ${status}`);
-    if (waiting.approveEventId === lease.eventId) return;
+    if (waiting.approveEventId === lease.eventId) return APPROVED;
     const result = await this.approvals.approve(context, waiting);
     if (result.kind === 'asked') return APPROVE_ASKED;
     if (result.kind === 'refused') return APPROVE_REFUSED;
+    return APPROVED;
   }
 
   /**
-   * Row 32, `ready-for-dev`, the second call (spec "In `ready-for-dev`, `full-sdd`"): the Spec's call recorded its
+   * Row 32, `plan-review` (spec 13; was `ready-for-dev`), the second call (spec 7 "In `ready-for-dev`, `full-sdd`"): the Spec's call recorded its
    * result on the `/refresh` row (P28); the Plan's comment as it reads now; `main` unmoved since the Plan's starting
    * commit → no call, one reply for both; still right → "both still up to date"; changed → Plan v(M+1). Exactly one
    * comment or reply answers the `/refresh`. An answer already on the row (a retried event) is replayed (P34).
@@ -185,7 +187,7 @@ export class PlanHandler implements StepHandler {
       await this.posts.postReply(context, row);
       return REFRESH_REFUSALS.has(row.result) ? REFRESH_REFUSED : undefined;
     }
-    const plan = await this.store.waiting(run.id, 'ready-for-dev', null);
+    const plan = await this.store.waiting(run.id, 'plan-review', null);
     const spec = await this.store.current(run.id, 'spec');
     if (plan?.kind !== 'plan' || !spec?.approvedAt)
       throw new Error('plan refresh: no waiting Plan with an approved Spec');

@@ -548,7 +548,9 @@ export class RouterService {
       job.input.type !== 'APPROVE' ||
       !run ||
       !state.open ||
-      (state.status !== 'spec-review' && state.status !== 'ready-for-dev')
+      (state.status !== 'spec-review' &&
+        state.status !== 'plan-review' &&
+        state.status !== 'ready-for-dev')
     )
       return null;
     return this.registry.gate().verdict({

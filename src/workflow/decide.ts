@@ -48,10 +48,12 @@ export interface HandlerCall {
  * Overview §3 "Step outcomes". A result of the work that stops the run carries the step's comment body
  * (plan P4). A handler that only posts (a document, the go-signal) returns nothing instead. Spec 7:
  * `SPEC_REFRESHED` (a Spec v2 posted while the Plan waited → `spec-review`) and, plan P6, `IGNORED` (a step that
- * only replied, or found nothing to do: the event ends `IGNORED` with that reason).
+ * only replied, or found nothing to do: the event ends `IGNORED` with that reason). Spec 13 (plan FP4): `APPROVED`
+ * (every `approve` op, once the approval is saved; the steps after it come from decide(), D3).
  */
 export type StepOutcome =
   | { type: 'IGNORED'; reason: RouterIgnoreReason }
+  | { type: 'APPROVED' }
   | { type: 'SPEC_REFRESHED' }
   | { type: 'ASKED' }
   | { type: 'CLEAR' }
@@ -109,8 +111,8 @@ export interface RouterState {
   /** Plan Q3: the lanes the open lane-conflict reminder lists (`Task.laneConflictLanes`); empty = none open. */
   laneConflictLanes: Lane[];
   /**
-   * R2: the gate's verdict (spec 7, plan P7, P26), asked only for `APPROVE` in `spec-review` or `ready-for-dev` with a
-   * run (rows 17–20); null otherwise.
+   * R2: the gate's verdict (spec 7, plan P7, P26), asked only for `APPROVE` in `spec-review`, `plan-review` (spec 13)
+   * or `ready-for-dev` with a run (rows 17–20); null otherwise.
    */
   approval: ApprovalVerdict | null;
 }
@@ -375,52 +377,40 @@ function byStatus(
         return steps([{ handler: 'spec', op: 'refresh' }], null); // row 32
       if (event.type === 'RESTORE') return documentRestore(); // row 34
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
-      if (state.approval !== 'valid') return approvalAnswer(state.approval);
-      return run.lane === 'full-sdd'
-        ? steps(
-            [
-              { handler: 'spec', op: 'approve' },
-              { handler: 'plan', op: 'generate' },
-            ],
-            'ready-for-dev',
-          ) // row 17
-        : steps(
-            [
-              { handler: 'spec', op: 'approve' },
-              { handler: 'workspace', op: 'claim' },
-            ],
-            null,
-          ); // row 18
-    case 'ready-for-dev':
+      if (state.approval !== 'valid')
+        return approvalAnswer(state.approval, state.status);
+      // Rows 17, 18: the approval; its `APPROVED` brings the Plan or the workspace claim (plan FP4).
+      return steps([{ handler: 'spec', op: 'approve' }], null);
+    case 'plan-review':
+      // Spec 13: a `full-sdd` Plan waits (was `ready-for-dev`, spec 7).
       if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, or nothing
       if (event.type === 'BOT_COMMENT_DELETED') return documentDeleted(); // row 33
       if (event.type === 'REFRESH')
-        // Row 32: the Spec first, then the Plan (D3: two calls, no step calls another); `code-only`: row 35.
-        return run.lane === 'full-sdd'
-          ? steps(
-              [
-                { handler: 'spec', op: 'refresh' },
-                { handler: 'plan', op: 'refresh' },
-              ],
-              null,
-            )
-          : documentsReply();
-      if (event.type === 'RESTORE')
-        // Row 34 (`full-sdd`: the Plan waits); `code-only`: row 35.
-        return run.lane === 'full-sdd' ? documentRestore() : documentsReply();
+        // Row 32: the Spec first, then the Plan (D3: two calls, no step calls another).
+        return steps(
+          [
+            { handler: 'spec', op: 'refresh' },
+            { handler: 'plan', op: 'refresh' },
+          ],
+          null,
+        );
+      if (event.type === 'RESTORE') return documentRestore(); // row 34
       if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
-      if (state.approval !== 'valid') return approvalAnswer(state.approval);
-      // Row 19.
-      return steps(
-        [
-          {
-            handler: run.lane === 'full-sdd' ? 'plan' : 'go-signal',
-            op: 'approve',
-          },
-          { handler: 'workspace', op: 'claim' },
-        ],
-        null,
-      );
+      if (state.approval !== 'valid')
+        return approvalAnswer(state.approval, state.status);
+      // Row 19: the Plan's approval; its `APPROVED` brings `ready-for-dev` and the workspace claim (plan FP4).
+      return steps([{ handler: 'plan', op: 'approve' }], null);
+    case 'ready-for-dev':
+      // Spec 13 (BFW6): every approval is in; `code-only`: its go-signal waits.
+      if (event.type === 'COMMENT') return documentsReply(); // row 20: a hint, or nothing
+      if (event.type === 'BOT_COMMENT_DELETED') return documentDeleted(); // row 33
+      if (event.type === 'REFRESH' || event.type === 'RESTORE')
+        return documentsReply(); // row 35, every lane
+      if (event.type !== 'APPROVE') return ignore('no-transition'); // row 20
+      if (state.approval !== 'valid')
+        return approvalAnswer(state.approval, state.status);
+      // Row 19 (`code-only`): the go-signal's approval; its `APPROVED` brings the workspace claim (plan FP4).
+      return steps([{ handler: 'go-signal', op: 'approve' }], null);
     default:
       // Row 27 (in-review, needs-human); also `draft` before the first step and `executing`: nothing to do, but
       // an `/approve` gets one reply why (spec 7 row 36), and a `/refresh` too (row 35). Row 33: a run stopped while a
@@ -440,13 +430,45 @@ function byStatus(
 
 /**
  * Spec 7 "`/approve`": `done` (this event already approved an earlier document of the run) → nothing, the event
- * ends DONE (plan P27); a refusal → one reply by the `documents` handler (row 20).
+ * ends DONE (plan P27); a refusal → one reply by the `documents` handler (row 20). Spec 13 (BFW6): `done` in
+ * `ready-for-dev` (this event made the run's last approval: a retried `/approve`, a `/retry` of the `workspace`
+ * stop) → the workspace claim.
  */
-function approvalAnswer(verdict: ApprovalVerdict | null): Action {
+function approvalAnswer(
+  verdict: ApprovalVerdict | null,
+  status: TaskStatus,
+): Action {
   if (verdict === null)
     throw new Error('decide: an APPROVE in review without the gate’s verdict');
-  if (verdict === 'done') return steps([], null);
+  if (verdict === 'done')
+    return status === 'ready-for-dev'
+      ? steps([{ handler: 'workspace', op: 'claim' }], null)
+      : steps([], null);
   return documentsReply();
+}
+
+/**
+ * Spec 13 (plan FP4, BFW6): what follows a saved approval. `spec-review` + `full-sdd` → the Plan, then
+ * `plan-review` (row 17); `spec-review` + `spec-code` (row 18) and `plan-review` (row 19) → `ready-for-dev`, then
+ * the workspace claim; `ready-for-dev` (`code-only`, row 19) → the claim.
+ */
+function approved(state: RouterState): Action {
+  const lane = state.run?.lane;
+  const claim: HandlerCall = { handler: 'workspace', op: 'claim' };
+  if (state.status === 'spec-review' && lane === 'full-sdd')
+    return steps([{ handler: 'plan', op: 'generate' }], 'plan-review');
+  if (
+    (state.status === 'spec-review' && lane === 'spec-code') ||
+    state.status === 'plan-review'
+  )
+    return {
+      kind: 'steps',
+      calls: [claim],
+      statusFirst: 'ready-for-dev',
+      statusAfter: null,
+    };
+  if (state.status === 'ready-for-dev') return steps([claim], null);
+  throw new Error(`decide: APPROVED in ${state.status} (${lane ?? 'no run'})`);
 }
 
 /**
@@ -522,6 +544,8 @@ function otherInput(
         : ignore('no-transition');
     case 'IGNORED':
       return ignore(input.reason); // spec 7, plan P6
+    case 'APPROVED':
+      return approved(state);
     case 'SPEC_REFRESHED':
       return { kind: 'set-status', status: 'spec-review' }; // row 32
     case 'ASKED':
