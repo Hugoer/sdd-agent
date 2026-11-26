@@ -27,6 +27,8 @@
 > parts not yet moved), the `interview-me` skill (addyosmani/agent-skills 0.6.15, MIT), and the interview of
 > 2026-11-17.
 
+> **2026-11-26, spec 13 (`bot-feedback`, approved):** the evaluation calls `working()` before its model call (🚀 on the answer, `bot: working`); its 👀 replaces the bot's 🚀 on the comment (BF8). See `docs/specs/spec-github-agent-bot-feedback.md`.
+
 ## Objective
 
 One NestJS module, `GrillModule` (`src/grill`), registered as the `grill` step handler, so that on a `full-sdd` or

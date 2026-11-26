@@ -25,6 +25,8 @@
 > idempotency and concurrency" and §11 "Future" (`/retry`, Rewind), and the interview of 2026-11-16 (decisions
 > RL1–RL11).
 
+> **2026-11-26, spec 13 (`bot-feedback`, approved):** the step context's `working()` (🚀 + `bot: working` before a model call), the mark `tasks.working_event_id`, the label off when the event is finished for good (also in the failure hook) and as a pending side effect, the startup sweep (leftover labels, status labels), 🚀 on an accepted `/retry` (BF10); `plan-review` in `decide()` and `ready-for-dev` after the last approval (rows 17–20, 30, 32–35). See `docs/specs/spec-github-agent-bot-feedback.md`.
+
 ## Objective
 
 One NestJS module, `WorkflowModule` (`src/workflow`), that takes every accepted input, locks its issue, and moves

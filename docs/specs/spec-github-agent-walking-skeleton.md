@@ -15,6 +15,8 @@
 > the interview of 2026-11-09/10 (decisions W1–W9). Reference project for tooling:
 > `~/Projects/web-perf-app/web-perf-monorepo` (NestJS + Prisma 7 + Vitest + Docker).
 
+> **2026-11-26, spec 13 (`bot-feedback`, approved):** `webhook_events` gains `working_started_at` and `working_ended_at` (the wait people feel, BFW8); the worker awaits the processor's recovery hook (the startup sweep) after resetting interrupted events and before its first tick (BFW10). See `docs/specs/spec-github-agent-bot-feedback.md`.
+
 ## Objective
 
 A NestJS app on the developer's machine that receives the sandbox repo's webhooks through ngrok, rejects unsigned

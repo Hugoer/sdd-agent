@@ -19,6 +19,8 @@
 > `docs/idea/github-ai-agent-master-technical-spec.md` §10 "Identity", and the interview of 2026-11-10
 > (decisions G1–G14). GitHub response shapes were checked against the sandbox repo on 2026-11-10.
 
+> **2026-11-26, spec 13 (`bot-feedback`, approved):** 18 bot labels (`bot: working`, `status: plan-review`); G10 changes: the bootstrap updates the description of a bot-managed label that differs, never its colour or name (BFW7); the issue port gains `reactWorking` (🚀) and `setWorkingLabel`, and `acknowledgeComment` also removes the bot's own 🚀 (BFW5, BFW12). See `docs/specs/spec-github-agent-bot-feedback.md`.
+
 ## Objective
 
 One NestJS module, `GitHubModule`, that authenticates as the GitHub App on the target repo and implements every

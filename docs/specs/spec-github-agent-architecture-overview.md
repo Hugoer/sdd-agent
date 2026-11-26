@@ -25,7 +25,9 @@
 > §1 row 14 and the build order) · amended 2026-11-23 with spec 14's draft (interview UA1–UA7, write-time UAW5: D34
 > annotated; §1 row 14; §3 R2 and rows 17–19; §5 `APPROVAL_LARGE_CHANGE_FILES`; §6), approved with that spec on
 > 2026-11-23 · amended 2026-11-25 with spec 12's approval (interview BD1–BD12, write-time BDW10,
-> BDW11, review fixes: D32 annotated; §1 rows 9, 10, 12; §4 `protectedPaths` and the hidden list; §7 rules 9, 10)
+> BDW11, review fixes: D32 annotated; §1 rows 9, 10, 12; §4 `protectedPaths` and the hidden list; §7 rules 9, 10) ·
+> amended 2026-11-26 with spec 13's approval (interview BF1–BF10, write-time BFW7, BFW8, review fixes: D33 annotated;
+> §1 row 13; §3 the states, rows 17–20, 30, 32–35 and the diagram; §4 `TaskStatus` and the issue port; §6)
 >
 > **Why this file exists:** the system is too large for one spec (idea doc §12). This overview is the spine every
 > capability spec (#1–#11) loads. It fixes the module boundaries, the status/lane state machine, the shared
@@ -261,6 +263,14 @@ comments, without acting under the developer's identity or touching their checko
   (from spec 8: waiting for the workspace). Its interview also decides: what `code-only`'s waiting go-signal shows,
   `spec-code` after its Spec's approval, issues already labelled when it ships, the label bootstrap (17 labels),
   §3's rows and spec 7's "waiting document by status" (its plan P15).
+  2026-11-26 (spec 13, approved): resolved by `docs/specs/spec-github-agent-bot-feedback.md`. When a human action
+  makes the bot call the model, it puts 🚀 on the triggering comment and `bot: working` on the issue, after the
+  sender and the action are checked (BF1, BF2); the label stays through the worker's retries and comes off in code
+  when the event is finished for good; a mark on the task and a startup sweep clean up after a crash (BF5); Grill
+  Me's 👀 replaces its 🚀 (BF8); an accepted `/retry` gets 🚀 (BF10). `status: plan-review` while a `full-sdd` Plan
+  waits; `ready-for-dev` after the last approval, and for `code-only`'s go-signal (BF6); a migration and the sweep
+  move issues already waiting (BF7); 18 labels, descriptions of bot-managed labels updated at startup (BFW7); the
+  wait people feel stored per event (BFW8).
 - **D34 An `/approve` on a Spec or a Plan asks first when files it read changed (2026-11-23, the user, during spec
   7's Checkpoint 4; a new spec 14, to interview).** Spec 7 approves at once and only tells people afterwards: a
   `full-sdd` Spec's approval writes the Plan with a ⚠️ line, and the last document before code (a `spec-code` Spec,
@@ -316,7 +326,7 @@ Numbers are IDs, not build order.
 | 10 | `quality-gate` | `QualityGateModule` · `src/quality-gate` | Quality Gate agent loop (LangGraph) on bot PRs, `report-only`, PR comment + check run; 2026-11-18 (D27): spec 11's discovery, the `AGENTS.md` files of the changed files; 2026-11-25 (spec 12 BDW10): a protected path in the diff is one report line, never a failure | 4, 9, 11 (2026-11-18), 12 | xhigh |
 | 11 | `skill-discovery` (2026-11-18, D27) | `LlmModule` · `src/llm` (extends spec 4's module) | The target repo's skills and `AGENTS.md` files discoverable in every step: their lists in the prompt, a tool that loads one at the step's base-branch commit, a bounded tool loop for the steps without an agent loop (Grill Me, Spec, Plan), what each call loaded ~~in `ExecutionLog`~~ (2026-11-20: in `ContextLoad`); switches Grill Me over. 2026-11-20 (spec 11): the root `AGENTS.md` always in the prompt, step-skill files loaded on demand too, two tools (`load_skill`, `load_file`), two limits, `ContextLoad`, one `ExecutionLog` row per model request, token counts | 3, 4, 6 | xhigh |
 | 12 | `bot-data-protection` (2026-11-22, D32; id confirmed 2026-11-24) | `SecretScanModule`, `EventsModule`, `LlmModule` · `src/secret-scan`, `src/events`, `src/llm` (changes to their code; 2026-11-25, spec 12 BDW13) | The bot's own data (`.github-agent/`, the other tools' instruction files, its secrets, its records) never changed or exposed by a step, enforced by deterministic code (D32): redaction before the model and before a prompt is stored, injection detection, the paths the Coder may never change, edits to the bot's comments, prompt retention | 3, 4, 7 (changes to their code); 2026-11-25 (spec 12): also 1, 5, 6, 11 | high |
-| 13 | `bot-feedback` (2026-11-23, D33; id to confirm at its interview) | to decide at its interview | A quick visible signal that the bot got a human action and is working on it (D33): a reaction on the triggering comment and a label while it works, removed in code when the work ends, also after a crash; `status: plan-review` while the Plan waits, `ready-for-dev` only after the last approval | 3, 5, 6, 7 (changes to their code) | to decide |
+| 13 | `bot-feedback` (2026-11-23, D33; id confirmed 2026-11-26) | `WorkflowModule`, `GitHubModule`, `GrillModule`, `DocumentsModule` · `src/workflow`, `src/github`, `src/grill`, `src/documents` (changes to their code; 2026-11-26, BF9) | A quick visible signal that the bot got a human action and is working on it (D33): 🚀 on the triggering comment and `bot: working` while a model call runs, removed in code when the event is finished for good, also after a crash (a task mark, a startup sweep); `status: plan-review` while the Plan waits, `ready-for-dev` only after the last approval; the wait per event stored (2026-11-26) | 3, 5, 6, 7 (changes to their code); 2026-11-26 (spec 13): also 1 (two `webhook_events` columns, the worker's recovery hook) | high |
 | 14 | `up-to-date-approvals` (2026-11-23, D34; id confirmed at its interview) | `DocumentsModule` · `src/documents` (extends spec 7's module) | An `/approve` on a Spec or a Plan asks first when files it read changed on `main` (D34): one reply with the files and a compare link, `/refresh` or `/approve` again; replaces spec 7's warning after the approval. 2026-11-23 (spec 14): the step skill's files count, `/refresh` follows a changed method; a failed comparison or more changed files than `APPROVAL_LARGE_CHANGE_FILES` ask too; the `before-question` reply; `asked_commit`, `approved_from_commit`, the question rows | 7 (changes to its code); 1 (a config variable) | high |
 
 **Build order:** 1 → 3 → 2 → 4 → 5 → 6 → 11 → 7 → 14 → ~~8~~ 12 → 13 → 8 → 9 → 10 (2026-11-18: spec 11
@@ -381,7 +391,9 @@ from the target repo's skill (D18, 2026-11-10; was "their own built-in default p
 ### States, runs and lanes
 
 - **States** = `Task.status`, shown as the `status: *` label: `draft` (no run; also any issue without a `Task`
-  row), `grilling`, `spec-review`, `ready-for-dev`, `executing`, `in-review`, `needs-human`.
+  row), `grilling`, `spec-review`, `plan-review` (2026-11-26, spec 13: a `full-sdd` Plan waits), `ready-for-dev`
+  (2026-11-26, spec 13: every approval is in; in `code-only`, its go-signal waits), `executing`, `in-review`,
+  `needs-human`.
   "Run state" = any state except `draft`.
 - **Run:** started by a lane label. It owns its lane, Grill session, documents, approvals and PR, and ends only
   when cancelled. A restart cancels the run and starts a new one from scratch (D6). **2026-11-16 (D24, D25):**
@@ -478,10 +490,10 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 14 | ↳ Grill outcome | `LIMIT` (max rounds, below threshold) | One summary comment (confidence + gaps; 2026-11-17, spec 6 GM9: plus three numbered steps to continue, which replace the generic restart line) | needs-human |
 | 15 | grilling | `COMMENT` | Grill round with the merged answer (every comment since the last question). 2026-11-17 (spec 6 GM4, GM6, GM12): every answer comment not read yet, also those written while the run was stopped; a comment already read → nothing; nothing new to ask while questions are open → 👀 on the comments, keep waiting (no round) | rows 12–14, or grilling |
 | 16 | grilling | `APPROVE`, `SKIP_ADDED` | ~~Ignored (force continue is Future)~~ 2026-11-17 (spec 6 GM8): `APPROVE` → one reply (nothing to approve yet, the open questions, how to stop them); `SKIP_ADDED` → close the Grill session (`STOPPED`) + one comment → generate and post the Spec, only while the label is still on (GM15; ~~otherwise ignored~~ otherwise read like a `COMMENT`, row 15, which usually finds nothing new: 2026-11-17, spec 6 plan P1). A `COMMENT` with `grill: skip` on the issue takes this path too. Once Grill Me has ended, a later Grill call of the run posts its missing closing comment and goes on to the Spec without a model call (spec 6 plan P1) | grilling (`APPROVE`), spec-review (`SKIP_ADDED`) |
-| 17 | spec-review (`full-sdd`) | valid `APPROVE` | Snapshot the approved Spec → generate and post the Plan. 2026-11-23 (spec 14): files it read changed on the base branch since its starting point, more files changed than `APPROVAL_LARGE_CHANGE_FILES`, or the bot can't compare → one question instead, nothing else changes | ready-for-dev (unchanged after a question) |
-| 18 | spec-review (`spec-code`) | valid `APPROVE` | Snapshot the approved Spec → claim the workspace. ~~2026-11-22 (spec 7, SPW13): files it read changed on the base branch → one warning reply first~~ 2026-11-23 (spec 14): row 17's question instead, nothing else changes | rows 21–23 (unchanged after a question) |
-| 19 | ready-for-dev | valid `APPROVE` | `full-sdd`: snapshot the approved Plan (~~2026-11-22, spec 7 SPW13: with row 18's warning reply~~ 2026-11-23, spec 14: row 17's question instead, nothing else changes). Then claim the workspace | rows 21–23 (unchanged after a question) |
-| 20 | spec-review, ready-for-dev | `COMMENT`, `SKIP_ADDED`, invalid `APPROVE` | ~~Ignored~~ 2026-11-21 (spec 7): invalid `APPROVE` → one reply with the reason (R2); a near-miss `/approve` → one hint per document; a comment written while the bot wrote the run's first Spec → one reply (SP12); anything else ignored | unchanged |
+| 17 | spec-review (`full-sdd`) | valid `APPROVE` | Snapshot the approved Spec → generate and post the Plan. 2026-11-23 (spec 14): files it read changed on the base branch since its starting point, more files changed than `APPROVAL_LARGE_CHANGE_FILES`, or the bot can't compare → one question instead, nothing else changes | ~~ready-for-dev~~ plan-review (2026-11-26, spec 13) (unchanged after a question) |
+| 18 | spec-review (`spec-code`) | valid `APPROVE` | Snapshot the approved Spec → (2026-11-26, spec 13: `ready-for-dev`) → claim the workspace. ~~2026-11-22 (spec 7, SPW13): files it read changed on the base branch → one warning reply first~~ 2026-11-23 (spec 14): row 17's question instead, nothing else changes | rows 21–23 (unchanged after a question) |
+| 19 | ~~ready-for-dev~~ plan-review (`full-sdd`), ready-for-dev (`code-only`) (2026-11-26, spec 13) | valid `APPROVE` | `full-sdd`: snapshot the approved Plan (~~2026-11-22, spec 7 SPW13: with row 18's warning reply~~ 2026-11-23, spec 14: row 17's question instead, nothing else changes). Then claim the workspace. 2026-11-26 (spec 13): `full-sdd` shows `ready-for-dev` after the approval is saved, before the claim; in `ready-for-dev` with nothing waiting, the `/approve` that made the approval (retried) goes on to the claim, any other gets one reply | rows 21–23 (unchanged after a question) |
+| 20 | spec-review, ready-for-dev (2026-11-26, spec 13: and plan-review) | `COMMENT`, `SKIP_ADDED`, invalid `APPROVE` | ~~Ignored~~ 2026-11-21 (spec 7): invalid `APPROVE` → one reply with the reason (R2); a near-miss `/approve` → one hint per document; a comment written while the bot wrote the run's first Spec → one reply (SP12); anything else ignored | unchanged |
 | 21 | ↳ workspace claim | `WS_BUSY` | Approval recorded; event marked `WAITING_WORKSPACE`; one "queued" comment. Retried oldest first through the whole pipeline once the workspace is free | unchanged |
 | 22 | ↳ workspace claim | `WS_DIRTY` | Comment; release the workspace lease | needs-human |
 | 23 | ↳ workspace claim | `WS_CLAIMED` | Start the Coder job (heartbeat on) | executing |
@@ -491,12 +503,12 @@ event without a label (the label was deleted from the repo); invalid payloads; a
 | 27 | in-review, needs-human | `COMMENT`, `APPROVE`, `SKIP_ADDED` | Ignored. 2026-11-21 (spec 7): `APPROVE` → one reply (row 36) | unchanged |
 | 28 | any with a running run | `FAILED(cause)` | One comment naming the run, the step and the cause, with `/retry` and the restart (2026-11-16); the stop is saved first; release held leases. A failing `/retry` event never stops the run (RL13) | needs-human |
 | 29 | any (the task has a bot PR) | `PR_UPDATED` | Quality Gate on the newest head commit (older heads skipped) → PR comment + check run | unchanged |
-| 30 | needs-human, entered on a failure (row 28) | `RETRY` received after the stop (2026-11-16, D25) | Back to the status before the stop; process the failed event again in the same run | status before the stop |
+| 30 | needs-human, entered on a failure (row 28) | `RETRY` received after the stop (2026-11-16, D25) | Back to the status before the stop; process the failed event again in the same run. 2026-11-26 (spec 13, BF10): 🚀 on the `/retry` | status before the stop |
 | 31 | needs-human, entered as a result of the work (rows 14, 25, 26) | `RETRY` received after the stop (2026-11-16) | One reply per `/retry`: a restart is needed | needs-human |
-| 32 | spec-review (any lane), ready-for-dev (`full-sdd`) | `REFRESH` (2026-11-21, spec 7, D29) | Refresh: the Spec first; a Spec v2 while the Plan waits → `SPEC_REFRESHED`; otherwise a new version or one reply | spec-review or unchanged |
-| 33 | spec-review (any lane), ready-for-dev (`full-sdd`), needs-human stopped from one of them | `BOT_COMMENT_DELETED` of the waiting document, not approved (2026-11-21, spec 7, D30) | Record it + one explanation; any other deleted bot comment → ignored | unchanged |
-| 34 | spec-review (any lane), ready-for-dev (`full-sdd`) | `RESTORE` (2026-11-21, spec 7, D30) | Restore the waiting document if its comment is gone and it isn't approved; otherwise one reply | unchanged |
-| 35 | grilling, ready-for-dev (`code-only`), executing, in-review, needs-human, draft with a run | `REFRESH`, `RESTORE` (2026-11-21, spec 7) | One reply why | unchanged |
+| 32 | spec-review (any lane), ~~ready-for-dev (`full-sdd`)~~ plan-review (2026-11-26, spec 13) | `REFRESH` (2026-11-21, spec 7, D29) | Refresh: the Spec first; a Spec v2 while the Plan waits → `SPEC_REFRESHED`; otherwise a new version or one reply | spec-review or unchanged |
+| 33 | spec-review (any lane), ~~ready-for-dev (`full-sdd`)~~ plan-review (2026-11-26, spec 13), needs-human stopped from one of them | `BOT_COMMENT_DELETED` of the waiting document, not approved (2026-11-21, spec 7, D30) | Record it + one explanation; any other deleted bot comment → ignored | unchanged |
+| 34 | spec-review (any lane), ~~ready-for-dev (`full-sdd`)~~ plan-review (2026-11-26, spec 13) | `RESTORE` (2026-11-21, spec 7, D30) | Restore the waiting document if its comment is gone and it isn't approved; otherwise one reply | unchanged |
+| 35 | grilling, ready-for-dev (`code-only`; 2026-11-26, spec 13: any lane), executing, in-review, needs-human, draft with a run | `REFRESH`, `RESTORE` (2026-11-21, spec 7) | One reply why | unchanged |
 | 36 | draft, executing, in-review, needs-human | `APPROVE` (2026-11-21, spec 7) | One reply why | unchanged |
 
 `RETRY` in any other case does nothing but gets one reply saying why (no run, not stopped, written before the
@@ -513,6 +525,7 @@ stateDiagram-v2
     state "draft" as draft
     state "grilling" as grilling
     state "spec-review" as specReview
+    state "plan-review" as planReview
     state "ready-for-dev" as readyForDev
     state "executing" as executing
     state "in-review" as inReview
@@ -526,13 +539,15 @@ stateDiagram-v2
     grilling --> grilling: answer, next round or wait
     grilling --> specReview: confidence reached or grill skip added, Spec posted
     grilling --> needsHuman: round limit
-    specReview --> readyForDev: /approve full-sdd, Plan posted
-    specReview --> executing: /approve spec-code
-    readyForDev --> executing: /approve
-    readyForDev --> specReview: /refresh full-sdd, Spec v2 posted
+    specReview --> planReview: /approve full-sdd, Plan posted
+    specReview --> readyForDev: /approve spec-code
+    planReview --> readyForDev: /approve
+    readyForDev --> executing: workspace claimed, or code-only /approve
+    planReview --> specReview: /refresh, Spec v2 posted
     executing --> inReview: lint and tests green, PR opened
     executing --> needsHuman: red, failure or crash
     specReview --> needsHuman: dirty worktree or failure
+    planReview --> needsHuman: failure
     readyForDev --> needsHuman: dirty worktree or failure
 
     note right of draft
@@ -554,7 +569,8 @@ A spec that needs another method adds it here first.
 export type Platform = 'GITHUB' | 'JIRA' | 'AZURE_DEVOPS';
 export type Lane = 'full-sdd' | 'spec-code' | 'code-only';
 export type TaskStatus =
-  | 'draft' | 'grilling' | 'spec-review' | 'ready-for-dev' | 'executing' | 'in-review' | 'needs-human';
+  | 'draft' | 'grilling' | 'spec-review' | 'plan-review' | 'ready-for-dev' | 'executing' | 'in-review' | 'needs-human';
+  // 'plan-review': 2026-11-26, spec 13
 /** What a user may do with the bot, lowest first (D19, added 2026-11-11). Never a platform's role name. */
 export type AccessLevel = 'none' | 'participant' | 'approver';
 
@@ -595,12 +611,18 @@ export interface IssueProvider {
   /** true when login is the bot's own account (added 2026-11-11, spec 2) */
   isSelf(login: string): boolean;
   /** marks a human comment as read, with nothing to add (GitHub: the 👀 reaction); doing it twice changes
-   *  nothing, and a comment that no longer exists is not an error (added 2026-11-17, spec 6 GM6) */
+   *  nothing, and a comment that no longer exists is not an error (added 2026-11-17, spec 6 GM6);
+   *  2026-11-26 (spec 13, BFW5): also removes the bot's own 🚀 from it */
   acknowledgeComment(task: TaskRef, commentId: string): Promise<void>;
+  /** 🚀 on the comment of an action the bot works on; a gone comment is skipped (2026-11-26, spec 13) */
+  reactWorking(task: TaskRef, commentId: string): Promise<void>;
+  /** adds or removes the `bot: working` label; removing a missing one is not an error (2026-11-26, spec 13) */
+  setWorkingLabel(task: TaskRef, shown: boolean): Promise<void>;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): { lanes: Lane[]; grillSkip: boolean; maxModelSteps: StepName[] };
   // maxModelSteps: the steps whose `model: max-*` label is on the task (D23, spec 4, 2026-11-12)
-  /** creates missing status / workflow / modifier / model labels (startup) */
+  /** creates missing status / workflow / modifier / model labels (startup); 2026-11-26 (spec 13): 18 labels, and
+   *  updates the description of a bot-managed label that differs (never its colour or name) */
   ensureLabels(): Promise<void>;
 }
 
@@ -832,10 +854,10 @@ can be joined to it; the many calls of an agent loop are found by run and step.
 
 | Table | Owner | Purpose | Extended by |
 |---|---|---|---|
-| `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`) |
+| `WebhookEvent` | 1 | Every received delivery (unique `X-GitHub-Delivery`): payload, receipt time, processing state, ignore reason, the issue or PR it is about | 2 (ignore reasons; `externalRef`, added 2026-11-11), 8 (`WAITING_WORKSPACE`), 13 (2026-11-26: `workingStartedAt`, `workingEndedAt`, the wait people feel) |
 | `ExecutionLog` | 4 | One row per LLM call attempt: issue, run, lane, step, provider, model and level (D23), tokens (empty when not reported), prompt sizes, duration, status, error, the prompt and the answer (2026-11-12, spec 4; was "node, tokens, status, confidence, lane, error") | 11 (2026-11-20: one row per model request, with the call id, the turn and three more sizes; after the first row of a call, only its new messages) |
 | `ContextLoad` | 11 | One row per file a step's model got or asked for (2026-11-20): when (call, turn), what (kind, path, commit), why (the model's reason), the outcome, characters, the provider's token count and the bot's estimate | 7 (2026-11-21: the `list_files` and `read_file` tools, kinds `listing` and `repo-file`; no new column) |
-| `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | — |
+| `Task` | 5 | One row per issue: status (source of truth), the shown status label, current run, run count, session lease, lane-conflict reminder state (2026-11-16) | 13 (2026-11-26: `workingEventId`, the event that shows `bot: working`) |
 | `Run` | 5 | One row per run (D24, 2026-11-16): UUID (the run id everywhere), number per issue, lane, `grill: skip`, start event, start and end with its reason, the latest stop (step, cause, retryable, failed event, status before) and stop and retry counts; the run-ended comment's id (2026-11-16, spec 5 plan Q1: null on an ended run while the comment is still to post) and the event that ended the run (2026-11-16, spec 5 plan Checkpoint 2: so a late run-ended comment still names who changed the label) | — |
 | `GrillSession` | 6 | One per run that grills or skips (only one active per task): ~~conversation (`StoredMessage` JSON),~~ status, round count. 2026-11-17 (spec 6 GMW2): the run id, the last question number, first and last confidence, who stopped it; no conversation JSON, the prompt is rebuilt from the Grill tables every time | — |
 | `GrillRound` | 6 | One per bot question comment: its 1..K questions, ~~the merged answer, confidence before/after, gaps,~~ comment IDs, post state. 2026-11-17 (spec 6): numbered questions with guesses, the earlier ones still open, its full text, the `ExecutionLog` id; answers and confidence live in the two tables below | — |

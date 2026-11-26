@@ -1434,6 +1434,10 @@ live; test once that it can fail, e.g. with a wrong issue list)
   seconds. Spec 7 adds no signal (its plan P42 was moved there). Also there (2026-11-23, the user): `status:
   plan-review` while the Plan waits, `ready-for-dev` only after the last approval; this spec keeps row 17's
   `ready-for-dev` until then.
+  2026-11-26: approved as `docs/specs/spec-github-agent-bot-feedback.md`. The Spec, Plan and refresh calls show the
+  sign through `working()`; the Plan waits under `plan-review`; the waiting document by status (plan P15):
+  `plan-review` → the Plan, `ready-for-dev` → the go-signal (`code-only`) or nothing; the gate answers in
+  `ready-for-dev` when nothing waits (BFW6).
 
 ## Open questions
 

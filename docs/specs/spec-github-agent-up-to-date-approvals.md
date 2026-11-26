@@ -722,6 +722,8 @@ the question's build (plan UP20, 2026-11-23); test once that it can fail, e.g. w
 - **Spec 13 (`bot-feedback`):** the question needs no quick signal and no new label (UA6); the `/approve` that counts
   and leads to the Plan or the code gets spec 13's signal like any other. While a question is open the issue keeps
   its waiting status (`spec-review`, or `status: plan-review` once spec 13 adds it).
+  2026-11-26: approved as `docs/specs/spec-github-agent-bot-feedback.md` (the question gets no sign, BF2;
+  `plan-review` added).
 - **Spec 8 (`workspace-git`):** an approval queued for the workspace (`WS_BUSY`) counted already: no question when it
   runs (UAW8).
 - **Spec 9 (`coder`):** gets the last approval's flagged files (spec 7), which an Approver chose to approve after a

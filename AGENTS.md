@@ -75,8 +75,8 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   `.env.example`). `workflow.json` requires `protectedPaths` (`[]` is valid); `src/llm/protected-paths.ts` (the floor:
   `.github-agent/` and every step skill folder, then picomatch globs) waits for specs 9 and 10;
   `BOT_CONFIG_PATHS` and its coverage test. `node scripts/bot-data-protection-invariants.mjs <issues>` checks three
-  invariants. Next: the interview of spec 13 (`bot-feedback`, with
-  `status: plan-review`), then 8 (overview build order). Repo:
+  invariants. Spec 13 (`bot-feedback`) approved 2026-11-26, not built: 🚀 + a `bot: working` label while a model
+  call runs, `status: plan-review`. Next: spec 13's plan, then 8 (overview build order). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 
