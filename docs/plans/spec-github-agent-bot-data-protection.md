@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2).
+> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3).
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -334,28 +334,28 @@ smoke script.
 
 ### Phase 3: What the model never reads, and `bot-data`
 
-- [ ] **Task 7: `.env` files are hidden from the read tools**
+- [x] **Task 7: `.env` files are hidden from the read tools**
 
 **Description:** BDW7's file-name rule in `isHiddenPath()`: a last segment equal to `.env`, or starting with `.env.`
 other than `.env.example`, any folder, any letter case.
 
 **Acceptance criteria:**
-- [ ] `.env`, `a/.env.local`, `.ENV`, `.devcontainer/.env`, `.env.example.bak` hidden; `.env.example`,
+- [x] `.env`, `a/.env.local`, `.ENV`, `.devcontainer/.env`, `.env.example.bak` hidden; `.env.example`,
   `a/.ENV.EXAMPLE`, `env.ts`, `.envrc` visible (`.envrc` isn't in the spec's rule).
-- [ ] `list_files` leaves them out; `read_file .env` answers `Not available: \`.env\`.` with outcome `not-found`.
+- [x] `list_files` leaves them out; `read_file .env` answers `Not available: \`.env\`.` with outcome `not-found`.
 
 **Verification:** `context-tools.spec.ts`; the new suite (`read_file .env` → `Not available`, no `loaded` row);
 full four commands.
 
 **Dependencies:** None. **Files:** `src/llm/context-tools.ts`, `context-tools.spec.ts`, the new suite. **Scope:** S.
 
-- [ ] **Task 8: The `bot-data` injection kind**
+- [x] **Task 8: The `bot-data` injection kind**
 
 **Description:** `'bot-data'` in `InjectionKind`, last in the list; the three patterns above.
 
 **Acceptance criteria:**
-- [ ] Every match and non-match case above passes; the warning names `bot-data`.
-- [ ] Sandbox #51's text gives `bot-data` (and no other new kind).
+- [x] Every match and non-match case above passes; the warning names `bot-data`.
+- [x] Sandbox #51's text gives `bot-data` (and no other new kind).
 
 **Verification:** `injection-patterns.spec.ts`, `injection-warning.service.spec.ts`; full four commands.
 
@@ -363,7 +363,8 @@ full four commands.
 
 ### Checkpoint 3: after T7–T8
 
-- [ ] All four commands green; you review and commit.
+- [x] All four commands green (2026-11-26: 1,635 unit tests, 418 integration tests).
+- [ ] You review and commit.
 
 ### Phase 4: `protectedPaths`
 

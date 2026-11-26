@@ -303,13 +303,15 @@ export function unreadableAnswer(file: RequestedFile): string {
 /**
  * Spec 7 SPW1 and plan P10: what the read tools never show: another tool's instruction file (`CLAUDE.md`,
  * `GEMINI.md`, `.cursorrules`, `.windsurfrules` in any folder; `.github/copilot-instructions.md`; anything under a
- * `.cursor` folder) and the bot's own settings under `.github-agent/`. Any letter case.
+ * `.cursor` folder) and the bot's own settings under `.github-agent/`. Spec 12 (BD9, BDW7): a `.env` file in any folder
+ * (`.env`, or a name starting with `.env.` other than `.env.example`). Any letter case.
  */
 export function isHiddenPath(path: string): boolean {
   const segments = path.toLowerCase().split('/');
   const name = segments.at(-1) ?? '';
   return (
     HIDDEN_FILE_NAMES.has(name) ||
+    isEnvFile(name) ||
     segments.join('/') === '.github/copilot-instructions.md' ||
     hiddenFolder(segments.slice(0, -1))
   );
@@ -321,6 +323,13 @@ const HIDDEN_FILE_NAMES = new Set([
   '.cursorrules',
   '.windsurfrules',
 ]);
+
+/** Spec 12 BDW7: a lowercased file name that holds secrets by definition; `.env.example` holds only the names. */
+function isEnvFile(name: string): boolean {
+  return (
+    name === '.env' || (name.startsWith('.env.') && name !== '.env.example')
+  );
+}
 
 function hiddenFolder(segments: string[]): boolean {
   return segments[0] === '.github-agent' || segments.includes('.cursor');

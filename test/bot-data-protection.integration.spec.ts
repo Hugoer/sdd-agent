@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   afterAll,
   afterEach,
@@ -12,6 +13,9 @@ import {
 import type { TaskRef } from '../src/contracts/issue-provider.js';
 import { LlmError } from '../src/contracts/llm-error.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
+import { ContextLoaderService } from '../src/llm/context-loader.service.js';
+import type { LoadRequest } from '../src/llm/context-tools.js';
+import { StepConfigService } from '../src/llm/step-config.service.js';
 import { newDeliveryId, postWebhook, startApp, type TestApp } from './app.js';
 import { resetDatabase } from './db.js';
 import {
@@ -383,6 +387,66 @@ describe('Bot data protection (spec 12)', () => {
       expect(logs).toContain(
         `secret-scan grill ${TARGET_REPO}#69 title: redacted 1 (github-token)`,
       );
+    });
+  });
+
+  describe('.env files are hidden from the read tools (BD9, BDW7)', () => {
+    afterEach(() => {
+      for (const path of ['.env', '.devcontainer/.env', '.env.example'])
+        t.repo.removeFile('main', path);
+    });
+
+    it('read_file .env → Not available, a not-found row and no loaded one; list_files shows .env.example only', async () => {
+      t.repo.seedFile('main', '.env', `TOKEN=${GITHUB_TOKEN}\n`);
+      t.repo.seedFile('main', '.devcontainer/.env', `TOKEN=${GITHUB_TOKEN}\n`);
+      t.repo.seedFile('main', '.env.example', 'TOKEN=\n');
+      const issue = seedIssue(t, 70);
+      const setup = await t.app
+        .get(StepConfigService)
+        .prepare('spec', await t.issues.getTaskDetails(issue));
+      const loader = t.app.get(ContextLoaderService);
+      const budget = loader.budget(setup);
+      const call = {
+        task: issue,
+        step: 'spec' as const,
+        callId: randomUUID(),
+        turn: 1,
+        setup,
+        repoFiles: { tag: 'untrusted-data-0123456789abcdef' },
+      };
+      const ask = (request: LoadRequest) => loader.load(call, request, budget);
+
+      const listed = await ask({ tool: 'list_files', folder: '', reason: 'r' });
+      const env = await ask({ tool: 'read_file', path: '.env', reason: 'r' });
+      const nested = await ask({
+        tool: 'read_file',
+        path: '.devcontainer/.env',
+        reason: 'r',
+      });
+
+      expect(listed.answer).toContain('.env.example');
+      expect(listed.answer).not.toMatch(/\.env \(|\.env\n|devcontainer\/\.env/);
+      expect(env).toEqual({
+        outcome: 'not-found',
+        answer: 'Not available: `.env`.',
+      });
+      expect(nested.outcome).toBe('not-found');
+      const rows = await t.prisma.contextLoad.findMany({
+        where: { callId: call.callId },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(
+        rows.map(({ tool, requested, outcome }) => [tool, requested, outcome]),
+      ).toEqual([
+        ['list_files', '', 'loaded'],
+        ['read_file', '.env', 'not-found'],
+        ['read_file', '.devcontainer/.env', 'not-found'],
+      ]);
+      expect(
+        t.repo.calls.some(
+          (c) => c.method === 'readFile' && String(c.args[1]).endsWith('.env'),
+        ),
+      ).toBe(false);
     });
   });
 });

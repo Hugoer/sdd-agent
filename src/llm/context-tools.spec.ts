@@ -577,6 +577,54 @@ describe('spec 7: the read tools (SP2, SPW1, SPW3, plan P10, P19)', () => {
     expect(isHiddenPath('docs/CLAUDE.md.bak')).toBe(false);
   });
 
+  it.each([
+    ['.env', true],
+    ['a/.env.local', true],
+    ['.ENV', true],
+    ['.devcontainer/.env', true],
+    ['.env.example.bak', true],
+    ['.env.production', true],
+    ['.env.example', false],
+    ['a/.ENV.EXAMPLE', false],
+    ['env.ts', false],
+    ['.envrc', false],
+    ['src/.env-loader.ts', false],
+  ])('spec 12 (BDW7): isHiddenPath(%s) → %s', (path, hidden) => {
+    expect(isHiddenPath(path)).toBe(hidden);
+  });
+
+  it('spec 12 (BDW7): list_files leaves the .env files out (any folder), keeps .env.example; read_file .env → Not available', () => {
+    const files = [
+      entry('.env', 40),
+      entry('.env.example', 30),
+      entry('.env.local', 20),
+      entry('.devcontainer/.env', 10),
+      entry('.devcontainer/devcontainer.json', 50),
+      entry('README.md', 5),
+    ];
+    const budget = newBudget(SETUP, LIMITS);
+
+    const root = checkRepo(list(''), budget, files);
+    const container = checkRepo(list('.devcontainer'), budget, files);
+
+    expect(root.outcome === 'listed' ? root.answer.split('\n') : []).toEqual([
+      '<listing folder="">',
+      '.devcontainer/devcontainer.json (50 bytes)',
+      '.env.example (30 bytes)',
+      'README.md (5 bytes)',
+      '</listing>',
+    ]);
+    expect(
+      container.outcome === 'listed' ? container.answer : '',
+    ).not.toContain('.env');
+    for (const path of ['.env', '.env.local', '.devcontainer/.env'])
+      expect(checkRepo(read(path), budget, files)).toEqual({
+        outcome: 'not-found',
+        answer: `Not available: \`${path}\`.`,
+      });
+    expect(checkRepo(read('.env.example'), budget, files).outcome).toBe('read');
+  });
+
   it('list_files: every file under the folder at any depth, sorted, with sizes; the hidden ones left out', () => {
     const budget = newBudget(SETUP, LIMITS);
 
