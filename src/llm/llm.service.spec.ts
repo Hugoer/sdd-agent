@@ -697,6 +697,7 @@ describe('LlmService.call: load turns (spec 11)', () => {
       [WORKFLOW_CONFIG_PATH]: JSON.stringify({
         skills: { spec: SPEC_DIR },
         repoSkills: ['.claude/skills'],
+        protectedPaths: [],
         models: { standard: { default: 'm' }, max: { default: 'm' } },
       }),
       'AGENTS.md': '# Conventions',
@@ -1147,6 +1148,7 @@ describe('LlmService.call: the read tools (spec 7, SP2)', () => {
     const files: Record<string, string> = {
       [WORKFLOW_CONFIG_PATH]: JSON.stringify({
         skills: { spec: SPEC_DIR },
+        protectedPaths: [],
         models: { standard: { default: 'm' }, max: { default: 'm' } },
       }),
       'AGENTS.md': '# Conventions',

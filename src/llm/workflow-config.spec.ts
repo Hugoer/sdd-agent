@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { StepConfigError } from '../contracts/llm-error.js';
 import type { StepName } from '../contracts/step.js';
+import { protectedRuleFor, protectedRules } from './protected-paths.js';
 import {
   parseWorkflowConfig,
   resolveModel,
@@ -17,6 +18,7 @@ const SANDBOX = {
     code: '.github-agent/skills/code',
     qualityGate: '.github-agent/skills/quality-gate',
   },
+  protectedPaths: [],
   models: {
     standard: { default: 'gemini-4-argon' },
     max: { default: 'gemini-4-carbon' },
@@ -270,5 +272,72 @@ describe('stepsFor', () => {
     ['code-only', true, ['code', 'qualityGate']],
   ] as const)('%s, grillSkip %s → %j', (lane, grillSkip, steps) => {
     expect(stepsFor(lane, grillSkip)).toEqual(steps);
+  });
+});
+
+describe('parseWorkflowConfig: protectedPaths (spec 12 BD8, BDW8, plan DP16)', () => {
+  const RULE =
+    'must be a path glob relative to the repo root: 1–256 characters, no leading "/", no ".." segment, no "\\", ' +
+    'no control character';
+
+  it('missing → the key named and how to fix it', () => {
+    expect(errorOf(variant(['protectedPaths', undefined]))).toBe(
+      'invalid workflow.json: protectedPaths: missing (list the paths the bot must never change, [] for none)',
+    );
+  });
+
+  it.each<[string, string[]]>([
+    ['[]', []],
+    [
+      'the recommended array',
+      ['**/AGENTS.md', '**/.env.!(example)', '.claude/skills/**'],
+    ],
+    ['a glob that matches nothing, twice', ['nothing/**', 'nothing/**']],
+    ['200 globs', [...Array(200).keys()].map((n) => `g${n}/**`)],
+    ['256 characters', ['a'.repeat(256)]],
+  ])('%s → accepted and returned', (_name, value) => {
+    expect(
+      parseWorkflowConfig(variant(['protectedPaths', value])).protectedPaths,
+    ).toEqual(value);
+  });
+
+  it.each<[string, unknown, string]>([
+    ['a leading /', ['/abs/**'], `protectedPaths.0: ${RULE}`],
+    ['a .. segment', ['ok/**', 'a/../b'], `protectedPaths.1: ${RULE}`],
+    ['a backslash', ['a\\b'], `protectedPaths.0: ${RULE}`],
+    ['a control character', ['a\u0007b'], `protectedPaths.0: ${RULE}`],
+    ['an empty glob', [''], `protectedPaths.0: ${RULE}`],
+    ['257 characters', ['a'.repeat(257)], `protectedPaths.0: ${RULE}`],
+    [
+      '201 globs',
+      [...Array(201).keys()].map((n) => `g${n}/**`),
+      'protectedPaths: must list at most 200 globs',
+    ],
+    [
+      'a number in it',
+      ['a', 'b', 'c', 7],
+      'protectedPaths.3: must be a string',
+    ],
+    ['not an array', '**/AGENTS.md', 'protectedPaths: must be an array'],
+  ])('%s → %j', (_name, value, message) => {
+    expect(errorOf(variant(['protectedPaths', value]))).toBe(
+      `invalid workflow.json: ${message}`,
+    );
+  });
+
+  it('the parsed config feeds protectedRules', () => {
+    const config = parseWorkflowConfig(
+      variant(['protectedPaths', ['**/AGENTS.md']]),
+    );
+    expect(protectedRuleFor('docs/AGENTS.md', protectedRules(config))).toEqual({
+      glob: '**/AGENTS.md',
+      source: 'workflow.json',
+    });
+    expect(
+      protectedRuleFor(
+        '.github-agent/skills/code/SKILL.md',
+        protectedRules(config),
+      ),
+    ).toEqual({ glob: '.github-agent/**', source: 'bot' });
   });
 });

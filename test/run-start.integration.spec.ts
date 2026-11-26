@@ -87,6 +87,7 @@ describe('run start without step handlers (spec 5, T14)', () => {
       WORKFLOW_CONFIG_PATH,
       JSON.stringify({
         skills: { qualityGate: '.github-agent/skills/quality-gate' },
+        protectedPaths: [],
         models: {
           standard: { default: 'gemini-4-hydrogen' },
           max: { default: 'gemini-4-carbon' },

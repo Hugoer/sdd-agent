@@ -27,6 +27,7 @@ const SKILL_DIRS: Record<StepName, string> = {
 };
 const WORKFLOW = {
   skills: SKILL_DIRS,
+  protectedPaths: [],
   models: {
     standard: { default: 'gemini-4-argon' },
     max: { default: 'gemini-4-carbon' },
@@ -294,6 +295,7 @@ describe('StepConfigService.checkRun', () => {
     seed(repo, {
       workflow: JSON.stringify({
         skills: SKILL_DIRS,
+        protectedPaths: [],
         models: { standard: { default: 'gemini-4-argon' } },
       }),
     });

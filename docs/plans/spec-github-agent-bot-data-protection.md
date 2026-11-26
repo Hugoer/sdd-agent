@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-25 · **Status:** draft 2026-11-25; fresh-context review 2026-11-25, its fixes applied (see
 > "Review"); DP1, DP2 and DP3 confirmed one at a time the same day, all as recommended; approved 2026-11-25;
-> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3).
+> building: T0–T3 done 2026-11-25 (Checkpoint 1); T4–T6 done 2026-11-25 (Checkpoint 2); T7–T8 done 2026-11-26 (Checkpoint 3); T9–T10 done 2026-11-26 (Checkpoint 4).
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-data-protection.md` (spec 12,
 > `bot-data-protection`, approved 2026-11-25 in `1e6e950`) into ordered, verifiable tasks (skill
@@ -368,18 +368,18 @@ full four commands.
 
 ### Phase 4: `protectedPaths`
 
-- [ ] **Task 9: The matcher, the floor and its coverage test**
+- [x] **Task 9: The matcher, the floor and its coverage test**
 
 **Description:** `npm i -E picomatch@4.0.7` and `npm i -E -D @types/picomatch@4.0.3` (DP19).
 `src/llm/protected-paths.ts` (BDW9, DP17) and `BOT_CONFIG_PATHS` (DP18). `WorkflowConfig` gains `protectedPaths`
 only in T10; here the functions take `Pick<WorkflowConfig, 'skills'> & { protectedPaths: string[] }`.
 
 **Acceptance criteria:**
-- [ ] The table: the floor first (`.github-agent/x` → `bot` even when the array also names it); a step skill outside
+- [x] The table: the floor first (`.github-agent/x` → `bot` even when the array also names it); a step skill outside
   `.github-agent/` (`skills/spec/SKILL.md`) → `bot`; `AGENTS.md`, `docs/agents.md`, `.github/AGENTS.md` → the
   array's `**/AGENTS.md`; `./AGENTS.md` and `/AGENTS.md` too; `.env.local` protected and `.env.example` not with the
   recommended array; `src/index.ts` → `null`; a step missing from `skills` adds no floor rule.
-- [ ] The coverage test: every `BOT_CONFIG_PATHS` entry is matched by a `bot` rule with `protectedPaths: []`; adding
+- [x] The coverage test: every `BOT_CONFIG_PATHS` entry is matched by a `bot` rule with `protectedPaths: []`; adding
   `bot-config.yml` to the list makes it fail (checked once by hand, matrix Q).
 
 **Verification:** `npx vitest run src/llm/protected-paths.spec.ts`; full four commands; `npm ls picomatch` shows the
@@ -388,18 +388,22 @@ direct dependency.
 **Dependencies:** None. **Files:** `package.json`, `package-lock.json`, `src/llm/protected-paths.ts` (+ spec),
 `src/llm/workflow-config.ts`. **Scope:** S.
 
-- [ ] **Task 10: `protectedPaths` is required**
+- [x] **Task 10: `protectedPaths` is required**
 
 **Description:** Before the code: the sandbox commits (DP26 on `main`; DP2's eight branch commits), with your OK.
 Then the schema (BDW8, DP16) and every fixture listed under T10; the stop case in
 `test/repo-content-stops.integration.spec.ts`.
 
 **Acceptance criteria:**
-- [ ] A `workflow.json` without the key stops a new run `step-config` with one comment naming `protectedPaths:
+- [x] A `workflow.json` without the key stops a new run `step-config` with one comment naming `protectedPaths:
   missing (list the paths the bot must never change, [] for none)`; with `[]` it runs; `/retry` after the fix goes on.
-- [ ] Each invalid entry gives DP16's message with its index; 201 entries give the count message.
-- [ ] `parseWorkflowConfig` returns `protectedPaths`; `protectedRules(config)` works on it.
-- [ ] `npm run llm:smoke -- --issue <n> --step grill` check 1 passes on the sandbox (you stop `npm run dev` first).
+- [x] Each invalid entry gives DP16's message with its index; 201 entries give the count message.
+- [x] `parseWorkflowConfig` returns `protectedPaths`; `protectedRules(config)` works on it.
+- [x] `npm run llm:smoke -- --issue <n> --step grill` check 1 passes on the sandbox (you stop `npm run dev` first).
+  2026-11-26, #79: checks 1–5 PASS (check 1 at `main @ a7de57d` with the array; check 5 `secrets google-api-key,
+  notice already-there`); check 6 FAIL `provider-unavailable`: Google gave no answer in 300 s, and a plain
+  `generateContent` request with no bot code got none in 120 s either (the Mac was awake): the provider, not this
+  task. To run again at Checkpoint 5.
 
 **Verification:** `workflow-config.spec.ts`, `step-config.service.spec.ts`, `repo-content-stops`; the sandbox file at
 the new commit (`gh api …/contents/.github-agent/workflow.json?ref=main`); full four commands.
@@ -409,7 +413,8 @@ listed under T10. **Scope:** M (one source file, many one-line fixture edits).
 
 ### Checkpoint 4: after T9–T10
 
-- [ ] All four commands green; the sandbox's `main` and each of the eight test branches has the array (DP2).
+- [x] All four commands green (2026-11-26: 1,677 unit tests, 419 integration tests); the sandbox's `main`
+  (`a7de57d`) and each of the eight test branches has the array (DP2; one `gh api` commit each, 2026-11-26).
 - [ ] You review and commit.
 
 ### Phase 5: Invariants, docs, matrix
@@ -535,5 +540,9 @@ None: DP1–DP3 confirmed 2026-11-25.
   how many.
 - **2026-11-25, T6:** smoke check 5's `secrets` lists every placeholder kind of the text (`own-secret` too: the
   line is local output, never posted); `notice` follows `noticeKinds`.
+- **2026-11-26, T9 (matrix Q):** adding `'bot-config.yml'` to `BOT_CONFIG_PATHS` by hand made the coverage test
+  fail (1 of 27); reverted.
+- **2026-11-26, T10:** a missing required key's hint lives in `MISSING_HINTS` (`workflow-config.ts`), so the
+  schema's generic "missing" form stays one place.
 - **2026-11-25, T2:** `kindList()` (the kinds, each once, for a log line) sits in `secret-scanner.ts`; the payload,
   answer, catalog and `context` lines use it.

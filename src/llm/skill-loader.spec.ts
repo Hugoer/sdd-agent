@@ -27,6 +27,7 @@ function seedMap(repo: InMemoryRepoProvider): void {
     WORKFLOW_CONFIG_PATH,
     JSON.stringify({
       skills: SKILLS,
+      protectedPaths: [],
       models: { standard: { default: 'm' }, max: { default: 'm' } },
     }),
   );

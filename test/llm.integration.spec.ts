@@ -66,6 +66,7 @@ describe('LlmService.call() in the booted app (real PostgreSQL, fakes)', () => {
       WORKFLOW_CONFIG_PATH,
       JSON.stringify({
         skills: { spec: SKILL_DIR },
+        protectedPaths: [],
         models: {
           standard: { default: 'gemini-4-hydrogen' },
           max: { default: 'gemini-4-carbon' },

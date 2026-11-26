@@ -18,6 +18,7 @@ import {
   askedRound1,
   botComments,
   commented,
+  grillAnswer,
   grillRows,
   laneAdded,
 } from './grill-helpers.js';
@@ -88,6 +89,7 @@ describe('the run stops for the repo content (spec 11)', () => {
           ]),
         ),
         repoSkills: ['.claude/skill'],
+        protectedPaths: [],
         models: {
           standard: { default: 'gemini-4-hydrogen' },
           max: { default: 'gemini-4-carbon' },
@@ -101,6 +103,34 @@ describe('the run stops for the repo content (spec 11)', () => {
       'invalid workflow.json: repoSkills folder not found: .claude/skill';
     expect(row).toMatchObject({ status: 'FAILED', lastError: reason });
     expectStoppedAtStart(issue, reason);
+  });
+
+  it('spec 12 (BD8): a workflow.json without protectedPaths → the stop naming the key; [] added, /retry → Grill Me asks', async () => {
+    const config = JSON.parse(
+      (await t.repo.readFile('main', WORKFLOW_CONFIG_PATH)) ?? '{}',
+    ) as Record<string, unknown>;
+    delete config.protectedPaths;
+    t.repo.seedFile('main', WORKFLOW_CONFIG_PATH, JSON.stringify(config));
+
+    const { issue, row } = await startRun(65);
+
+    const reason =
+      'invalid workflow.json: protectedPaths: missing (list the paths the bot must never change, [] for none)';
+    expect(row).toMatchObject({ status: 'FAILED', lastError: reason });
+    expectStoppedAtStart(issue, reason);
+
+    t.repo.seedFile(
+      'main',
+      WORKFLOW_CONFIG_PATH,
+      JSON.stringify({ ...config, protectedPaths: [] }),
+    );
+    t.models.replyJson(grillAnswer({ confidence: 50, questions: 2 }));
+    await deliver(t, commented(65, 6501, '/retry'));
+
+    expect((await grillRows(t)).rounds).toHaveLength(1);
+    expect(botComments(t, issue).at(-1)?.body).toContain(
+      '**Grill Me, round 1 of 5**',
+    );
   });
 
   it('SDW2: a root AGENTS.md over the cap → the same stop, naming the size and the limit', async () => {

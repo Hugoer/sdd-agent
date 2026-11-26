@@ -85,6 +85,7 @@ export function seedWorkflow(
     JSON.stringify({
       skills,
       ...(repoSkills ? { repoSkills } : {}),
+      protectedPaths: [],
       models: {
         standard: { default: 'gemini-4-hydrogen' },
         max: { default: 'gemini-4-carbon' },

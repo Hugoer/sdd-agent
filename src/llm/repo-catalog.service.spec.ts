@@ -17,6 +17,7 @@ const WORKFLOW = {
     spec: '.github-agent/skills/spec',
   },
   repoSkills: ['.claude/skills'],
+  protectedPaths: [],
   models: { standard: { default: 'm' }, max: { default: 'm' } },
 };
 

@@ -48,6 +48,7 @@ const SKILLS = {
 };
 const WORKFLOW = {
   skills: SKILLS,
+  protectedPaths: [],
   models: {
     standard: { default: 'gemini-4-hydrogen' },
     max: { default: 'gemini-4-carbon' },
