@@ -43,6 +43,21 @@ async function failureOf(fake: FakeGitHubFetch): Promise<GitHubStartupError> {
   throw new Error('expected startup to fail');
 }
 
+/** Spec 3's eleven labels (named, so later specs' labels don't change this fixture). */
+const SPEC_3_LABELS = [
+  'status: draft',
+  'status: grilling',
+  'status: spec-review',
+  'status: ready-for-dev',
+  'status: executing',
+  'status: in-review',
+  'status: needs-human',
+  'workflow: full-sdd',
+  'workflow: spec-code',
+  'workflow: code-only',
+  'grill: skip',
+];
+
 describe('GitHubStartup', () => {
   it('connects, identifies the bot, creates the labels and logs one ready line', async () => {
     const fake = healthy();
@@ -50,10 +65,10 @@ describe('GitHubStartup', () => {
 
     await startupWith(fake).onModuleInit();
 
-    expect(fake.to(LABELS, 'POST')).toHaveLength(16);
+    expect(fake.to(LABELS, 'POST')).toHaveLength(18);
     const lines = log.mock.calls.map(([line]) => String(line));
     expect(lines).toContainEqual(
-      expect.stringContaining('16 created, 0 already present'),
+      expect.stringContaining('18 created, 0 updated, 0 already present'),
     );
     expect(lines).toContainEqual(
       expect.stringMatching(
@@ -64,8 +79,10 @@ describe('GitHubStartup', () => {
     );
   });
 
-  it('on a repo with the 11 labels of spec 3, creates only the five model labels', async () => {
-    const old = BOT_LABELS.filter((label) => !label.name.startsWith('model: '));
+  it('on a repo with the 11 labels of spec 3, creates only the labels added since', async () => {
+    const old = BOT_LABELS.filter((label) =>
+      SPEC_3_LABELS.includes(label.name),
+    );
     const fake = healthy().on('GET', LABELS, { body: old });
     const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
 
@@ -76,9 +93,13 @@ describe('GitHubStartup', () => {
       fake
         .to(LABELS, 'POST')
         .map((request) => (request.body as { name: string }).name),
-    ).toEqual(STEPS.map(modelLabel));
+    ).toEqual([
+      'status: plan-review',
+      'bot: working',
+      ...STEPS.map(modelLabel),
+    ]);
     expect(log.mock.calls.map(([line]) => String(line))).toContainEqual(
-      expect.stringContaining('5 created, 11 already present'),
+      expect.stringContaining('7 created, 0 updated, 11 already present'),
     );
   });
 

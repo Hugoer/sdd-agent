@@ -2,17 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   BOT_LABELS,
   STEPS,
+  isBotManagedLabel,
+  isHumanControlLabel,
   laneOfLabel,
   modelLabel,
   stepOfModelLabel,
 } from './labels.js';
 
 describe('BOT_LABELS', () => {
-  it('holds 16 labels with distinct names, the five model labels among them', () => {
+  it('holds 18 labels with distinct names, the five model labels among them', () => {
     const names = BOT_LABELS.map((label) => label.name);
 
-    expect(names).toHaveLength(16);
-    expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(16);
+    expect(names).toHaveLength(18);
+    expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(18);
     expect(BOT_LABELS.filter((label) => label.color === 'fef2c0')).toEqual(
       STEPS.map((step) => ({
         name: modelLabel(step),
@@ -22,6 +24,45 @@ describe('BOT_LABELS', () => {
         ) as string,
       })),
     );
+  });
+
+  it("holds the two labels of spec 13 (BFW9) and ready-for-dev with BF6's description", () => {
+    expect(BOT_LABELS).toContainEqual({
+      name: 'status: plan-review',
+      color: 'bfd4f2',
+      description: 'Bot-managed: Plan posted, waiting for /approve.',
+    });
+    expect(BOT_LABELS).toContainEqual({
+      name: 'bot: working',
+      color: 'd93f0b',
+      description:
+        'Bot-managed: the bot is working on this issue; removed when it ends.',
+    });
+    expect(BOT_LABELS).toContainEqual({
+      name: 'status: ready-for-dev',
+      color: '0e8a16',
+      description:
+        'Bot-managed: approved and ready for the Coder; in code-only, waiting for /approve to start it.',
+    });
+  });
+});
+
+describe('isBotManagedLabel (spec 13 BFW7)', () => {
+  it.each([
+    ['status: plan-review', true],
+    ['Status: Ready-For-Dev', true],
+    ['bot: working', true],
+    ['Bot: Working', true],
+    ['workflow: full-sdd', false],
+    ['grill: skip', false],
+    ['model: max-plan', false],
+    ['bug', false],
+  ])('%j → %j', (name, managed) => {
+    expect(isBotManagedLabel(name)).toBe(managed);
+  });
+
+  it('bot: working is not a human-control label (removeLabel refuses it, spec 3 A4)', () => {
+    expect(isHumanControlLabel('bot: working')).toBe(false);
   });
 });
 

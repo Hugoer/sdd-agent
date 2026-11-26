@@ -83,6 +83,8 @@ export function waitingStep(
       return 'grill';
     case 'spec-review':
       return 'spec';
+    case 'plan-review':
+      return 'plan';
     case 'ready-for-dev':
       return run?.lane === 'full-sdd' ? 'plan' : 'go-signal';
     case 'executing':

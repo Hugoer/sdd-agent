@@ -70,6 +70,14 @@ export class ScanningIssueProvider implements IssueProvider {
     return this.inner.acknowledgeComment(task, commentId);
   }
 
+  reactWorking(task: TaskRef, commentId: string): Promise<void> {
+    return this.inner.reactWorking(task, commentId);
+  }
+
+  setWorkingLabel(task: TaskRef, shown: boolean): Promise<void> {
+    return this.inner.setWorkingLabel(task, shown);
+  }
+
   readControls(task: UnifiedTask): ReturnType<IssueProvider['readControls']> {
     return this.inner.readControls(task);
   }

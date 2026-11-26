@@ -13,6 +13,7 @@ import {
   REPO_PROVIDER,
   type RepoProvider,
 } from '../../contracts/repo-provider.js';
+import { GitHubClient } from '../github-client.js';
 import { GitHubStartupError } from '../github-startup.js';
 import { GitHubModule } from '../github.module.js';
 import { runSmoke } from './run-smoke.js';
@@ -78,11 +79,32 @@ try {
 }
 
 const config = context.get<ConfigService<Env, true>>(ConfigService);
+const issues = context.get<IssueProvider>(ISSUE_PROVIDER);
+const github = context.get(GitHubClient, { strict: false });
 const ok = await runSmoke(
   {
-    issues: context.get<IssueProvider>(ISSUE_PROVIDER),
+    issues,
     repo: context.get<RepoProvider>(REPO_PROVIDER),
     fetch: globalThis.fetch,
+    // Spec 13 (plan FP14): one GET …/reactions through the client, the bot's own only.
+    botReactions: async (commentId) => {
+      const reactions = await github.request((octokit) =>
+        octokit.paginate(
+          'GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions',
+          {
+            owner: github.owner,
+            repo: github.repo,
+            comment_id: Number(commentId),
+            per_page: 100,
+          },
+        ),
+      );
+      return reactions
+        .filter(
+          (reaction) => reaction.user && issues.isSelf(reaction.user.login),
+        )
+        .map((reaction) => reaction.content);
+    },
   },
   {
     ...options,

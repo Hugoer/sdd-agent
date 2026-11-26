@@ -3,7 +3,7 @@ import { ProviderError } from '../src/contracts/provider-error.js';
 import { ISSUE_PROVIDER } from '../src/contracts/issue-provider.js';
 import { REPO_PROVIDER } from '../src/contracts/repo-provider.js';
 import { GitHubStartupError } from '../src/github/github-startup.js';
-import { BOT_LABELS, STEPS, modelLabel } from '../src/github/labels.js';
+import { STEPS, modelLabel } from '../src/github/labels.js';
 import { ScanningIssueProvider } from '../src/secret-scan/scanning-issue.provider.js';
 import { ScanningRepoProvider } from '../src/secret-scan/scanning-repo.provider.js';
 import { startApp } from './app.js';
@@ -17,7 +17,7 @@ describe('GitHub startup (spec 3, offline)', () => {
       expect(t.issues.calls.map((call) => call.method)).toEqual([
         'ensureLabels',
       ]);
-      expect(t.issues.repoLabels).toHaveLength(16);
+      expect(t.issues.repoLabels).toHaveLength(18);
       expect(t.app.get(ISSUE_PROVIDER)).toBeInstanceOf(ScanningIssueProvider);
       expect(t.app.get(REPO_PROVIDER)).toBeInstanceOf(ScanningRepoProvider);
       expect(t.repo.calls).toEqual([]);
@@ -26,17 +26,33 @@ describe('GitHub startup (spec 3, offline)', () => {
     }
   });
 
-  it('on a repo with the 11 labels of spec 3, adds the five model labels', async () => {
+  it('on a repo with the 11 labels of spec 3, adds the labels added since', async () => {
     const issues = new InMemoryIssueProvider(testEnv.TARGET_REPO);
-    const old = BOT_LABELS.map((label) => label.name).filter(
-      (name) => !name.startsWith('model: '),
-    );
+    // Spec 3's eleven, named (so later specs' labels don't change this fixture).
+    const old = [
+      'status: draft',
+      'status: grilling',
+      'status: spec-review',
+      'status: ready-for-dev',
+      'status: executing',
+      'status: in-review',
+      'status: needs-human',
+      'workflow: full-sdd',
+      'workflow: spec-code',
+      'workflow: code-only',
+      'grill: skip',
+    ];
     issues.repoLabels.push(...old);
 
     const t = await startApp({ issues });
     try {
       expect(old).toHaveLength(11);
-      expect(t.issues.repoLabels).toEqual([...old, ...STEPS.map(modelLabel)]);
+      expect(t.issues.repoLabels).toEqual([
+        ...old,
+        'status: plan-review',
+        'bot: working',
+        ...STEPS.map(modelLabel),
+      ]);
     } finally {
       await t.app.close();
     }

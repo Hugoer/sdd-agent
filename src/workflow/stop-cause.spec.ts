@@ -99,6 +99,7 @@ describe('waitingStep (plan P3: the step a stop names outside a handler)', () =>
     ['draft', 'full-sdd', 'run-start'],
     ['grilling', 'full-sdd', 'grill'],
     ['spec-review', 'spec-code', 'spec'],
+    ['plan-review', 'full-sdd', 'plan'],
     ['ready-for-dev', 'full-sdd', 'plan'],
     ['ready-for-dev', 'code-only', 'go-signal'],
     ['executing', 'code-only', 'code'],

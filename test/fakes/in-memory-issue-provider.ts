@@ -16,6 +16,7 @@ const STATUSES: TaskStatus[] = [
   'draft',
   'grilling',
   'spec-review',
+  'plan-review',
   'ready-for-dev',
   'executing',
   'in-review',
@@ -32,6 +33,7 @@ const MODEL_LABELS: [StepName, string][] = [
 ];
 const BOT_LABELS = [
   ...STATUSES.map((status) => `status: ${status}`),
+  'bot: working',
   ...LANES.map((lane) => `workflow: ${lane}`),
   'grill: skip',
   ...MODEL_LABELS.map(([, label]) => label),
@@ -62,6 +64,8 @@ export class InMemoryIssueProvider implements IssueProvider {
   private readonly accessLevels = new Map<string, AccessLevel>();
   /** Spec 6: the comments with the bot's 👀, per issue, in the order first acknowledged. */
   private readonly acknowledgements = new Map<string, string[]>();
+  /** Spec 13 (plan FP15): the bot's reactions per comment (`<externalRef> <commentId>`), in the order added. */
+  private readonly reactions = new Map<string, ('rocket' | 'eyes')[]>();
   private nextError: ProviderError | undefined;
   private readonly nextErrorOn = new Map<string, ProviderError>();
   private nextCommentId = 1;
@@ -164,6 +168,11 @@ export class InMemoryIssueProvider implements IssueProvider {
   /** Spec 6: the comment ids `acknowledgeComment` marked on this issue (each once, in order). */
   acknowledged(task: TaskRef): string[] {
     return [...(this.acknowledgements.get(task.externalRef) ?? [])];
+  }
+
+  /** Spec 13 (plan FP15): the bot's reactions on one comment (`rocket`, `eyes`), in the order added. */
+  reactionsOf(task: TaskRef, commentId: string): ('rocket' | 'eyes')[] {
+    return [...(this.reactions.get(`${task.externalRef} ${commentId}`) ?? [])];
   }
 
   // ── IssueProvider ──
@@ -272,6 +281,35 @@ export class InMemoryIssueProvider implements IssueProvider {
       const ids = this.acknowledgements.get(task.externalRef) ?? [];
       if (!ids.includes(commentId)) ids.push(commentId);
       this.acknowledgements.set(task.externalRef, ids);
+      // Spec 13 BFW5: the 👀 replaces the bot's own 🚀.
+      const key = `${task.externalRef} ${commentId}`;
+      const own = (this.reactions.get(key) ?? []).filter(
+        (reaction) => reaction !== 'rocket',
+      );
+      if (!own.includes('eyes')) own.push('eyes');
+      this.reactions.set(key, own);
+    });
+  }
+
+  /** Spec 13: like `acknowledgeComment`, an unknown or deleted comment is not an error; twice changes nothing. */
+  reactWorking(task: TaskRef, commentId: string): Promise<void> {
+    return this.call('reactWorking', [task, commentId], () => {
+      this.inRepo(task);
+      const key = `${task.externalRef} ${commentId}`;
+      const own = this.reactions.get(key) ?? [];
+      if (!own.includes('rocket')) own.push('rocket');
+      this.reactions.set(key, own);
+    });
+  }
+
+  /** Spec 13: adds or removes `bot: working`; removing a missing one is no error. */
+  setWorkingLabel(task: TaskRef, shown: boolean): Promise<void> {
+    return this.call('setWorkingLabel', [task, shown], () => {
+      const issue = this.issue(task);
+      issue.labels = issue.labels.filter(
+        (label) => !same(label, 'bot: working'),
+      );
+      if (shown) issue.labels.push('bot: working');
     });
   }
 

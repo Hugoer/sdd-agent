@@ -101,6 +101,8 @@ describe('ScanningIssueProvider', () => {
     getAccessLevel: [TASK, 'octocat'],
     isSelf: ['octocat'],
     acknowledgeComment: [TASK, '91'],
+    reactWorking: [TASK, '91'],
+    setWorkingLabel: [TASK, true],
     readControls: [task],
     ensureLabels: [],
   };

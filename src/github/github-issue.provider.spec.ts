@@ -28,6 +28,16 @@ async function providerWith(
   return new GitHubIssueProvider(await connectedTestClient(fake));
 }
 
+/** A label as GitHub lists it, with BOT_LABELS' description (spec 13: a differing one is updated). */
+function listed(name: string): { name: string; description: string | null } {
+  const label = BOT_LABELS.find(
+    (item) => item.name.toLowerCase() === name.toLowerCase(),
+  );
+  return { name, description: label?.description ?? null };
+}
+
+const LABEL_PATCH = new RegExp(`^${LABELS}/`);
+
 function postedLabelNames(fake: FakeGitHubFetch): string[] {
   return fake
     .to(LABELS, 'POST')
@@ -55,9 +65,9 @@ describe('GitHubIssueProvider.ensureLabels', () => {
     fake
       .on('GET', LABELS, (request) =>
         request.query.get('page') === '2'
-          ? { body: [{ name: 'Status: Grilling' }, { name: 'grill: skip' }] }
+          ? { body: [listed('Status: Grilling'), listed('grill: skip')] }
           : {
-              body: [{ name: 'bug' }, { name: 'status: draft' }],
+              body: [listed('bug'), listed('status: draft')],
               headers: {
                 link: `<https://api.github.com${LABELS}?per_page=100&page=2>; rel="next"`,
               },
@@ -76,7 +86,7 @@ describe('GitHubIssueProvider.ensureLabels', () => {
     expect(fake.to(LABELS, 'GET')).toHaveLength(2);
   });
 
-  it('never edits or deletes a label', async () => {
+  it('never edits a colour or a name, never deletes a label', async () => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
     fake.on('GET', LABELS, {
@@ -90,6 +100,60 @@ describe('GitHubIssueProvider.ensureLabels', () => {
         ['PATCH', 'DELETE', 'POST'].includes(request.method),
       ),
     ).toEqual(fake.to(/access_tokens$/));
+  });
+
+  it("updates only a bot-managed label's differing description (spec 13 BFW7), description only", async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    // Spec 4's 16 labels with their old descriptions: ready-for-dev's differs, the two new labels are missing.
+    const before = BOT_LABELS.filter(
+      (label) => !['status: plan-review', 'bot: working'].includes(label.name),
+    ).map((label) =>
+      label.name === 'status: ready-for-dev'
+        ? {
+            ...label,
+            color: '0e8a17',
+            description:
+              'Bot-managed: waiting for /approve to start the Coder.',
+          }
+        : label.name === 'grill: skip'
+          ? { ...label, description: 'A team wrote its own text.' }
+          : label.name === 'status: draft'
+            ? { ...label, description: null }
+            : label,
+    );
+    fake
+      .on('GET', LABELS, { body: before })
+      .on('POST', LABELS, { status: 201, body: {} })
+      .on('PATCH', LABEL_PATCH, { body: {} });
+
+    await issues.ensureLabels();
+
+    expect(postedLabelNames(fake)).toEqual([
+      'status: plan-review',
+      'bot: working',
+    ]);
+    expect(
+      fake
+        .to(LABEL_PATCH, 'PATCH')
+        .map((request) => [
+          decodeURIComponent(request.path.slice(LABELS.length + 1)),
+          request.body,
+        ]),
+    ).toEqual([
+      ['status: draft', { description: listed('status: draft').description }],
+      [
+        'status: ready-for-dev',
+        { description: listed('status: ready-for-dev').description },
+      ],
+    ]);
+    expect(fake.requests.some((request) => request.method === 'DELETE')).toBe(
+      false,
+    );
+    expect(log).toHaveBeenCalledWith(
+      `Labels on ${TEST_REPO}: 2 created, 2 updated, 14 already present`,
+    );
   });
 
   it('counts a label created meanwhile ("already exists") as present', async () => {
@@ -553,6 +617,7 @@ describe('GitHubIssueProvider.removeLabel', () => {
 
   it.each([
     'status: draft',
+    'bot: working',
     'bug',
     'workflow',
     'grill: skipped',
@@ -585,13 +650,21 @@ describe('GitHubIssueProvider.removeLabel', () => {
 
 describe('GitHubIssueProvider.acknowledgeComment', () => {
   const REACTIONS_91 = `/repos/${TEST_REPO}/issues/comments/91/reactions`;
+  /** The bot's login is known after `identifyBot()` (startup), as in production. */
+  async function identified(fake: FakeGitHubFetch) {
+    const client = await connectedTestClient(fake);
+    await client.identifyBot();
+    return new GitHubIssueProvider(client);
+  }
 
   it.each([201, 200])(
     'adds an eyes reaction to the comment (%i)',
     async (status) => {
       const fake = new FakeGitHubFetch();
       const issues = await providerWith(fake);
-      fake.on('POST', REACTIONS_91, { status, body: { content: 'eyes' } });
+      fake
+        .on('POST', REACTIONS_91, { status, body: { content: 'eyes' } })
+        .on('GET', REACTIONS_91, { body: [] });
 
       await expect(
         issues.acknowledgeComment(task5, '91'),
@@ -600,10 +673,80 @@ describe('GitHubIssueProvider.acknowledgeComment', () => {
       expect(fake.to(REACTIONS_91, 'POST').map((r) => r.body)).toEqual([
         { content: 'eyes' },
       ]);
+      // Spec 13 BFW5: the bot's 🚀 is looked up; none → no DELETE.
+      expect(
+        fake.to(REACTIONS_91, 'GET').map((r) => r.query.get('content')),
+      ).toEqual(['rocket']);
+      expect(fake.requests.some((r) => r.method === 'DELETE')).toBe(false);
     },
   );
 
-  it('succeeds when the comment no longer exists (404)', async () => {
+  it("removes only the bot's own 🚀, over all pages; a person's 🚀 stays (spec 13 BFW5)", async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await identified(fake);
+    fake
+      .on('POST', REACTIONS_91, { status: 201, body: { content: 'eyes' } })
+      .on('GET', REACTIONS_91, (request) =>
+        request.query.get('page') === '2'
+          ? {
+              body: [
+                {
+                  id: 702,
+                  content: 'rocket',
+                  user: { login: 'Test-App[bot]' },
+                },
+              ],
+            }
+          : {
+              body: [
+                { id: 701, content: 'rocket', user: { login: 'octocat' } },
+              ],
+              headers: {
+                link: `<https://api.github.com${REACTIONS_91}?content=rocket&per_page=100&page=2>; rel="next"`,
+              },
+            },
+      )
+      .on('DELETE', `${REACTIONS_91}/702`, { status: 204 });
+
+    await issues.acknowledgeComment(task5, '91');
+
+    expect(
+      fake.requests.filter((r) => r.method === 'DELETE').map((r) => r.path),
+    ).toEqual([`${REACTIONS_91}/702`]);
+  });
+
+  it.each([
+    ['the lookup', 'GET'],
+    ['the delete', 'DELETE'],
+  ])('a 404 at %s counts as already gone', async (_step, method) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await identified(fake);
+    const gone = { status: 404, body: { message: 'Not Found' } };
+    fake
+      .on('POST', REACTIONS_91, { status: 201, body: { content: 'eyes' } })
+      .on(
+        'GET',
+        REACTIONS_91,
+        method === 'GET'
+          ? gone
+          : {
+              body: [
+                {
+                  id: 702,
+                  content: 'rocket',
+                  user: { login: 'test-app[bot]' },
+                },
+              ],
+            },
+      )
+      .on('DELETE', `${REACTIONS_91}/702`, gone);
+
+    await expect(
+      issues.acknowledgeComment(task5, '91'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('succeeds when the comment no longer exists (404), and sends nothing more', async () => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);
     fake.on('POST', REACTIONS_91, {
@@ -614,6 +757,7 @@ describe('GitHubIssueProvider.acknowledgeComment', () => {
     await expect(
       issues.acknowledgeComment(task5, '91'),
     ).resolves.toBeUndefined();
+    expect(fake.to(REACTIONS_91).map((r) => r.method)).toEqual(['POST']);
   });
 
   it.each([
@@ -629,6 +773,91 @@ describe('GitHubIssueProvider.acknowledgeComment', () => {
       detail: { status },
     });
     expect(fake.to(REACTIONS_91, 'POST')).toHaveLength(1);
+  });
+});
+
+describe('GitHubIssueProvider.reactWorking (spec 13)', () => {
+  const REACTIONS_91 = `/repos/${TEST_REPO}/issues/comments/91/reactions`;
+
+  it.each([201, 200])('adds a rocket reaction (%i)', async (status) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', REACTIONS_91, { status, body: { content: 'rocket' } });
+
+    await expect(issues.reactWorking(task5, '91')).resolves.toBeUndefined();
+
+    expect(fake.to(REACTIONS_91, 'POST').map((r) => r.body)).toEqual([
+      { content: 'rocket' },
+    ]);
+  });
+
+  it('skips a comment that no longer exists (404), with a log line', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    fake.on('POST', REACTIONS_91, {
+      status: 404,
+      body: { message: 'Not Found' },
+    });
+
+    await expect(issues.reactWorking(task5, '91')).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith(
+      `reactWorking ${TEST_REPO}#5 → comment 91 (gone)`,
+    );
+  });
+
+  it.each([
+    [500, 'transient'],
+    [403, 'permanent'],
+  ])('throws on a %i (%s)', async (status, kind) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', REACTIONS_91, { status, body: { message: 'boom' } });
+
+    await expect(issues.reactWorking(task5, '91')).rejects.toMatchObject({
+      kind,
+      detail: { status },
+    });
+  });
+});
+
+describe('GitHubIssueProvider.setWorkingLabel (spec 13)', () => {
+  const WORKING = `${ISSUE_5}/labels/${encodeURIComponent('bot: working')}`;
+
+  it('true adds bot: working with one request', async () => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('POST', `${ISSUE_5}/labels`, { body: [] });
+
+    await issues.setWorkingLabel(task5, true);
+
+    expect(fake.to(`${ISSUE_5}/labels`, 'POST').map((r) => r.body)).toEqual([
+      { labels: ['bot: working'] },
+    ]);
+  });
+
+  it.each([
+    [200, { body: [] }],
+    [404, { status: 404, body: { message: 'Label does not exist' } }],
+  ])('false removes it (%i counts as removed)', async (_status, answer) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake.on('DELETE', WORKING, answer);
+
+    await expect(issues.setWorkingLabel(task5, false)).resolves.toBeUndefined();
+    expect(fake.to(WORKING, 'DELETE')).toHaveLength(1);
+  });
+
+  it.each([true, false])('throws on a 500 (shown %s)', async (shown) => {
+    const fake = new FakeGitHubFetch();
+    const issues = await providerWith(fake);
+    fake
+      .on('POST', `${ISSUE_5}/labels`, { status: 500, body: {} })
+      .on('DELETE', WORKING, { status: 500, body: {} });
+
+    await expect(issues.setWorkingLabel(task5, shown)).rejects.toMatchObject({
+      kind: 'transient',
+    });
   });
 });
 
@@ -807,6 +1036,8 @@ describe('GitHubIssueProvider on another repo', () => {
       'acknowledgeComment',
       (issues) => issues.acknowledgeComment(elsewhere, '91'),
     ],
+    ['reactWorking', (issues) => issues.reactWorking(elsewhere, '91')],
+    ['setWorkingLabel', (issues) => issues.setWorkingLabel(elsewhere, true)],
   ])('%s throws a permanent error and sends nothing', async (_name, call) => {
     const fake = new FakeGitHubFetch();
     const issues = await providerWith(fake);

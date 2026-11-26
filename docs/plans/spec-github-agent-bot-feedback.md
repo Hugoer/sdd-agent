@@ -2,7 +2,7 @@
 
 > **Created:** 2026-11-26 · **Status:** draft 2026-11-26; fresh-context review 2026-11-26, its fixes with no choice
 > applied (see "Review"); FP1, FP2, FP23 (GitHub-visible) and FP3, FP24 (write-time) confirmed one at a time the same
-> day, all as recommended; waits for your approval
+> day, all as recommended; approved 2026-11-26 (`f5a2bc4`); build started 2026-11-26
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-feedback.md` (spec 13,
 > `bot-feedback`, approved 2026-11-26 in `cb27de3`) into ordered, verifiable tasks (skill
@@ -176,7 +176,8 @@ isn't done until its rows pass.
 
 ### Phase 0: The spec and `#I`
 
-- [ ] **Task 0: This plan's fixes in the spec; sandbox issue `#I` on today's code**
+- [x] **Task 0: This plan's fixes in the spec; sandbox issue `#I` on today's code** (done 2026-11-26: `#I` is sandbox
+  #90, Spec v1 approved, Plan v1 waiting under `status: ready-for-dev`)
 
 **Description:** Write the "Fixes to the spec with no choice" and the confirmed FP1–FP3 lines into the spec (and the
 overview's "Step outcomes"), each marked "2026-11-26, plan", and a status note pointing at this plan. Then the one
@@ -197,7 +198,7 @@ check `tasks.status = 'ready-for-dev'` for `#I` and its Plan's `approved_at` nul
 
 ### Phase 1: Labels and the port
 
-- [ ] **Task 1: 18 labels, `plan-review` as a status, descriptions updated at startup**
+- [x] **Task 1: 18 labels, `plan-review` as a status, descriptions updated at startup**
 
 **Description:** `TaskStatus` gains `plan-review` (`src/contracts/issue-provider.ts`); `BOT_LABELS` gains `status:
 plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BFW9, FP18); `isBotManagedLabel()`;
@@ -218,7 +219,7 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 (+ spec), `test/fakes/in-memory-issue-provider.ts` (+ spec), `test/github-startup.integration.spec.ts`. **Scope:** M
 (small edits in many files).
 
-- [ ] **Task 2: The port: `reactWorking`, `setWorkingLabel`, `acknowledgeComment` removes the bot's 🚀**
+- [x] **Task 2: The port: `reactWorking`, `setWorkingLabel`, `acknowledgeComment` removes the bot's 🚀**
 
 **Description:** BFW12 on `IssueProvider`, the GitHub adapter (FP16), the scanning wrapper (pass-through), the fake
 (FP15) and `npm run github:smoke` (FP14). No caller yet.
@@ -238,8 +239,8 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 
 ### Checkpoint 1: after T1–T2
 
-- [ ] The four commands green.
-- [ ] **Sandbox (your OK for `gh` writes on the sandbox's labels, a GitHub write outside the bot):** `npm run dev` is
+- [x] The four commands green.
+- [x] (2026-11-26: as written; the smoke ran on a new issue, #91, closed after) **Sandbox (your OK for `gh` writes on the sandbox's labels, a GitHub write outside the bot):** `npm run dev` is
   still stopped (since T0). I build and run my instance on 3000 → the log reads `Labels on Hugoer/sdd-agent-sandbox:
   2 created, 1 updated, 15 already present` (checked 2026-11-26: the sandbox has spec 4's 16 labels with today's
   descriptions); `gh api …/labels` lists both new labels, `status: ready-for-dev` with BF6's description and colour

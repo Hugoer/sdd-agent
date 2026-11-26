@@ -11,6 +11,8 @@ export interface LabelDefinition {
 export const STATUS_PREFIX = 'status: ';
 export const WORKFLOW_PREFIX = 'workflow: ';
 export const GRILL_SKIP = 'grill: skip';
+/** Spec 13 (BF4): bot-managed like `status: *`; says only "busy". */
+export const WORKING_LABEL = 'bot: working';
 
 /** Fixed order: readControls returns lanes in this order. */
 export const LANES: readonly Lane[] = ['full-sdd', 'spec-code', 'code-only'];
@@ -50,9 +52,15 @@ export const BOT_LABELS: readonly LabelDefinition[] = [
     description: 'Bot-managed: Spec posted, waiting for /approve.',
   },
   {
+    name: 'status: plan-review',
+    color: 'bfd4f2',
+    description: 'Bot-managed: Plan posted, waiting for /approve.',
+  },
+  {
     name: 'status: ready-for-dev',
     color: '0e8a16',
-    description: 'Bot-managed: waiting for /approve to start the Coder.',
+    description:
+      'Bot-managed: approved and ready for the Coder; in code-only, waiting for /approve to start it.',
   },
   {
     name: 'status: executing',
@@ -69,6 +77,12 @@ export const BOT_LABELS: readonly LabelDefinition[] = [
     color: 'b60205',
     description:
       'Bot-managed: stopped. Remove and re-add the workflow label to restart.',
+  },
+  {
+    name: WORKING_LABEL,
+    color: 'd93f0b',
+    description:
+      'Bot-managed: the bot is working on this issue; removed when it ends.',
   },
   {
     name: 'workflow: full-sdd',
@@ -131,6 +145,11 @@ export function laneLabel(lane: Lane): string {
 
 export function isStatusLabel(name: string): boolean {
   return name.toLowerCase().startsWith(STATUS_PREFIX);
+}
+
+/** The labels whose description the bootstrap keeps up to date (spec 13 BFW7): `status: *` and `bot: working`. */
+export function isBotManagedLabel(name: string): boolean {
+  return isStatusLabel(name) || sameLabel(name, WORKING_LABEL);
 }
 
 /** The only labels removeLabel may touch (spec 3 A4, spec 4): human-assigned lane, modifier and model labels. */

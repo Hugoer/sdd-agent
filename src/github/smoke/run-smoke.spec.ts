@@ -50,7 +50,13 @@ function setup(
   const lines: string[] = [];
   const run = (runId = 'run-1') =>
     runSmoke(
-      { issues, repo, fetch },
+      {
+        issues,
+        repo,
+        fetch,
+        botReactions: (commentId) =>
+          Promise.resolve(issues.reactionsOf(task, commentId)),
+      },
       {
         targetRepo: REPO,
         issue: 5,
@@ -99,9 +105,24 @@ describe('runSmoke (issue checks)', () => {
     );
     const posted = issues.commentsOf(task)[0].id;
     expect(lines.filter((line) => line.includes('acknowledgeComment'))).toEqual(
-      [`PASS acknowledgeComment: 👀 on comment ${posted}`],
+      [
+        `PASS acknowledgeComment: 👀 on comment ${posted}, the bot's 🚀 removed`,
+      ],
     );
     expect(issues.acknowledged(task)).toEqual([posted]);
+    // Spec 13 (plan FP14): the three new lines.
+    expect(lines).toEqual(
+      expect.arrayContaining([
+        `PASS reactWorking: 🚀 on comment ${posted}`,
+        'PASS setWorkingLabel true, false, false: labels [grill: skip, bug]',
+      ]),
+    );
+    expect(issues.reactionsOf(task, posted)).toEqual(['eyes']);
+    expect(
+      issues.calls
+        .filter((call) => call.method === 'setWorkingLabel')
+        .map((call) => call.args[1]),
+    ).toEqual([true, false, false]);
   });
 
   it('passes again on a second run: still one status label, one more comment', async () => {

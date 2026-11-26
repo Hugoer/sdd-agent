@@ -20,6 +20,8 @@ export interface SmokePorts {
   repo: RepoProvider;
   /** Plain fetch for the comment attempt with the push token (spec: no Octokit there). */
   fetch: typeof fetch;
+  /** Spec 13 (plan FP14): the bot's own reactions on a comment, read straight from the platform. */
+  botReactions: (commentId: string) => Promise<string[]>;
 }
 
 export interface SmokeOptions {
@@ -47,7 +49,10 @@ export async function runSmoke(
   print: Print,
 ): Promise<boolean> {
   const results = [
-    await runGroup(issueChecks(ports.issues, options), print),
+    await runGroup(
+      issueChecks(ports.issues, ports.botReactions, options),
+      print,
+    ),
     await runGroup(repoChecks(ports.repo, options), print),
     await runGroup(
       credentialChecks(ports.repo, ports.issues, ports.fetch, options),
@@ -86,6 +91,7 @@ function assert(ok: boolean, message: string): asserts ok {
 
 function issueChecks(
   issues: IssueProvider,
+  botReactions: SmokePorts['botReactions'],
   { targetRepo, issue, runId }: SmokeOptions,
 ): Check[] {
   // `id` is the DB identity and isn't sent to GitHub; the details give the real one.
@@ -149,11 +155,46 @@ function issueChecks(
       },
     ],
     [
-      // Spec 6 GM6: the bot's 👀 on the comment it just posted.
+      // Spec 13 BFW12: the bot's 🚀 on the comment it just posted.
+      'reactWorking',
+      async () => {
+        await issues.reactWorking(task, comment.id);
+        const own = await botReactions(comment.id);
+        assert(own.includes('rocket'), `bot reactions [${own.join(', ')}]`);
+        return `🚀 on comment ${comment.id}`;
+      },
+    ],
+    [
+      // Spec 6 GM6: the bot's 👀 on the comment it just posted; spec 13 BFW5: it replaces the bot's 🚀.
       'acknowledgeComment',
       async () => {
         await issues.acknowledgeComment(task, comment.id);
-        return `👀 on comment ${comment.id}`;
+        const own = await botReactions(comment.id);
+        assert(
+          own.includes('eyes') && !own.includes('rocket'),
+          `bot reactions [${own.join(', ')}]`,
+        );
+        return `👀 on comment ${comment.id}, the bot's 🚀 removed`;
+      },
+    ],
+    [
+      // Spec 13 BFW12: on, off, off again (a missing label is no error).
+      'setWorkingLabel true, false, false',
+      async () => {
+        await issues.setWorkingLabel(task, true);
+        const on = (await issues.getTaskDetails(task)).labels;
+        assert(
+          on.some((label) => sameLabel(label, 'bot: working')),
+          `not added: labels [${on.join(', ')}]`,
+        );
+        await issues.setWorkingLabel(task, false);
+        await issues.setWorkingLabel(task, false);
+        const { labels } = await issues.getTaskDetails(task);
+        assert(
+          !labels.some((label) => sameLabel(label, 'bot: working')),
+          `still there: labels [${labels.join(', ')}]`,
+        );
+        return `labels [${labels.join(', ')}]`;
       },
     ],
     [

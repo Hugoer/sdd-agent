@@ -4,7 +4,9 @@
 > confirmed by the developer; BFW1–BFW15 were decided while writing (to review). A fresh-context review's fixes are
 > applied (marked "2026-11-26, review"); its one choice became BF10. In the write-time interview of 2026-11-26 the
 > developer changed BFW7 (label descriptions updated at startup) and BFW8 (the wait stored per event); the other BFW
-> decisions follow from rules already settled and are reviewed with this spec.
+> decisions follow from rules already settled and are reviewed with this spec. 2026-11-26, plan: built from
+> `docs/plans/spec-github-agent-bot-feedback.md`; its fixes with no choice and its confirmed FP1–FP3, FP23, FP24 are
+> written in below, each marked "2026-11-26, plan".
 >
 > **Repos:** bot [`Hugoer/sdd-agent`](https://github.com/Hugoer/sdd-agent) (this repo) · target
 > [`Hugoer/sdd-agent-sandbox`](https://github.com/Hugoer/sdd-agent-sandbox)
@@ -116,8 +118,10 @@ Who benefits: everyone on an issue the bot works on, above all an Approver waiti
   - A `/retry` never calls the model itself: spec 5's `acceptRetry` puts the status back and queues the stopped event
     again, which calls the model a few seconds later (with the label; its own comment already has its 🚀).
   - The bot adds 🚀 to the `/retry` when it accepts it, whatever step the run stopped at; a refused `/retry` gets
-    its reply as today, no 🚀. Example: Bob comments `/retry` → within seconds 🚀 on it, `needs-human` →
-    `plan-review`, then `bot: working` and the Plan.
+    its reply as today, no 🚀. Example: Bob comments `/retry` → within seconds 🚀 on it, ~~`needs-human` →
+    `plan-review`, then `bot: working` and the Plan~~ (2026-11-26, plan: a stop during the Plan's call happens before
+    `plan-review` is set, since row 17 sets it after the Plan is posted) `needs-human` → `spec-review`, then `bot:
+    working`, the Plan, `plan-review`.
   - Alternative (rejected): no reaction on the `/retry`; the status label and `bot: working` a few seconds later.
     The person who typed it looks at their own comment first.
 
@@ -187,7 +191,11 @@ Who benefits: everyone on an issue the bot works on, above all an Approver waiti
       (`documents.handler.ts`) gives `ready-for-dev`'s reply by lane, not always `code-only`'s; the Spec refresh and
       the Plan read the waiting Plan under `plan-review` (`spec.handler.ts`, `plan.handler.ts`, both hard-code
       `ready-for-dev` today).
-    - The path people can test today: the Plan's `/approve` → the `workspace` stop (status before it `ready-for-dev`);
+    - 2026-11-26, plan (FP1, confirmed): row 35's replies in `ready-for-dev` after every approval, worded like spec 7's
+    `executing` replies: `/refresh` → "Your `/refresh` comes too late: every approval of run 1 is in, and the bot codes
+    from the approved texts."; `/restore` → "Your `/restore` has nothing to restore: every approval of run 1 is in, and
+    the bot keeps the approved texts." (`code-only`'s go-signal keeps spec 7's `code-only` replies.)
+  - The path people can test today: the Plan's `/approve` → the `workspace` stop (status before it `ready-for-dev`);
       `/retry` → back to `ready-for-dev`, the `/approve` runs again → `done` → the claim → the same stop, NO
       "already approved" reply. Row 35's replies in `ready-for-dev` can't last on the sandbox before spec 8: tests.
 - **BFW7 The bootstrap updates the description of a bot-managed label that differs** (write-time interview
@@ -207,13 +215,19 @@ Who benefits: everyone on an issue the bot works on, above all an Approver waiti
     calls, Grill's re-asks and the 5 s / 30 s retries. A dashboard can show e.g. "`/approve` → Plan: median 95 s,
     longest 6 min, 3 through a retry". No command (project rule: stored in tables, a dashboard later).
   - Written through spec 1's `EventsService` (the table's owner); never by the worker's status update.
+  - 2026-11-26, plan (FP3, confirmed): a re-queue (an accepted `/retry`, or spec 2's redelivery of a `FAILED` row)
+    clears both, so the re-run's wait starts at its own first `working()`.
 - **BFW9 Labels:** `bot: working`, colour `d93f0b` (orange, unlike every status), "Bot-managed: the bot is working on
   this issue; removed when it ends."; `status: plan-review`, colour `bfd4f2` (next to `spec-review`'s `c5def5`),
   "Bot-managed: Plan posted, waiting for /approve."; `ready-for-dev`'s new description (BF6).
 - **BFW10 The startup sweep** (`WorkflowModule`, at application bootstrap, before the worker claims its first event;
-  2026-11-26, review: the worker's bootstrap resets interrupted events, then awaits the registered processor's
-  recovery hook, the sweep, and only then schedules its first tick, so `src/events` still imports no feature module.
-  The lease: a task's lease is taken by the sweep as the marked event (or, for a status repair, as a new id) when it
+  2026-11-26, review: the worker's bootstrap resets interrupted events, then ~~awaits the registered processor's
+  recovery hook, the sweep, and only then schedules its first tick~~ (2026-11-26, plan FP23, confirmed: schedules its
+  first tick as today, and that first tick awaits the registered processor's recovery hook, the sweep, before its
+  first claim, so the webhook port opens at once), so `src/events` still imports no feature module.
+  The lease: a task's lease is taken by the sweep ~~as the marked event (or, for a status repair, as a new id)~~
+  (2026-11-26, plan FP9: as a new id in both cases; the mark is cleared only if it still names the event the sweep
+  read) when it
   is free, expired, or owned by an event that isn't `PROCESSING`; after a `kill -9` the dead job's lease belongs to an
   event the worker just reset to `PENDING`, so the sweep isn't held up for `SESSION_LEASE_SECONDS`. A crash inside
   the failure hook, after the event became `FAILED`, leaves a mark whose event is finished: the sweep removes it):
@@ -230,7 +244,9 @@ Who benefits: everyone on an issue the bot works on, above all an Approver waiti
   `reactWorking(task, commentId)` (🚀; `404` skipped) and `setWorkingLabel(task, shown: boolean)` (add, or remove with
   `404` as removed); `acknowledgeComment` also removes the bot's 🚀 (BFW5). `removeLabel` still refuses every
   bot-managed label (spec 3 A4). The secret-scanning wrapper (spec 4) passes both through.
-- **BFW13 People touching `bot: working`:** removed by a person while the bot works → the bot doesn't put it back;
+- **BFW13 People touching `bot: working`:** removed by a person while the bot works → the bot doesn't put it back
+  (2026-11-26, plan FP2, confirmed: within one attempt; when the event is tried again, the retried attempt's
+  `working()` adds the label again, which is what repairs a crash between the mark and the label, BFW2);
   its own removal at the end finds it gone. Added by a person → intake ignores the event (`other-label`, spec 2), as
   today for any label the bot doesn't use; it stays until the bot's next sign on that issue ends. The bot's own label
   events come back as webhooks and end `IGNORED` `own-event` (spec 2); GitHub sends no webhook for a reaction.
@@ -385,7 +401,10 @@ Changed rows of overview §3:
 ### Logging
 
 One line when the sign goes on (`#90 working on (event <delivery>)`), one when it comes off (`#90 working off`), one
-per sweep (`startup sweep: 2 working labels removed, 1 status label repaired, 0 failed`).
+per sweep (~~`startup sweep: 2 working labels removed, 1 status label repaired, 0 failed`~~ 2026-11-26, plan FP10:
+`startup sweep: 2 working labels removed, 1 left for its event, 1 status label repaired, 0 skipped (lease held), 0
+failed`). Also `#90 working off failed: <message>` (the mark stays) and, from the sweep, `#90 working label left for
+event <delivery> (pending)`.
 
 ## Contracts
 
@@ -419,7 +438,8 @@ None.
 
 ## Commands
 
-None new. `npm run db:runs` shows `plan-review` like any status.
+None new. ~~`npm run db:runs` shows `plan-review` like any status.~~ 2026-11-26, plan: `npm run db:runs` has no status
+column; the task query ("Verification matrix" → "Setup") shows `plan-review` like any status.
 
 ## Testing strategy
 
@@ -427,8 +447,8 @@ None new. `npm run db:runs` shows `plan-review` like any status.
   per status; the label list (18, names, `isStatusLabel`, `removeLabel` refusing `bot: working`).
 - Integration (fake `IssueProvider`, test database): the sign on and off around each model-call path (run start,
   Grill answer, `grill: skip`, `/approve` → Plan, `/refresh`, `/retry`); no sign on reply-only paths and on spec 14's
-  question; a retriable error keeps it, a final failure removes it after the stop comment; a second event taking over
-  the mark; the pending removal on the next event; the sweep (finished, pending, gone events; status repair; a
+  question; a retriable error keeps it, a final failure removes it after the stop comment; ~~a second event taking over
+  the mark~~ a second event leaving the mark (2026-11-26, plan; BFW2 after the review); the pending removal on the next event; the sweep (finished, pending, gone events; status repair; a
   GitHub failure); Grill's 👀 removing the 🚀; the migration's rule on seeded rows.
 - Existing suites that assert `ready-for-dev` after a `full-sdd` Plan, the 16 labels or `acknowledgeComment`'s
   calls change with the task that changes them (the plan lists them).
@@ -499,11 +519,15 @@ None new. `npm run db:runs` shows `plan-review` like any status.
 the mark:
 
 ```sh
-docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT external_ref, status, shown_status, working_event_id FROM tasks ORDER BY updated_at DESC LIMIT 10"
+docker compose exec -T postgres psql -U sdd_agent -d sdd_agent -c "SELECT t.external_ref, t.status, t.shown_status, t.working_event_id, r.status_before_stop FROM tasks t LEFT JOIN runs r ON r.id = t.current_run_id ORDER BY t.updated_at DESC LIMIT 10"
 ```
 
+(2026-11-26, plan: the query gains `runs.status_before_stop`, since `npm run db:runs` has no status column.)
+
 Each row: a sandbox issue named in the plan's checkpoints; "within seconds": the 🚀 and the label appear before the
-model's answer, at most ~10 s after the event's `received_at` when nothing else is queued.
+model's answer, at most ~10 s after the event's `received_at` when nothing else is queued (2026-11-26, plan: measured
+from `webhook_events.received_at` to the `created_at` of the issue's `labeled bot: working` event, `gh api
+…/issues/<n>/events`, and of the bot's 🚀, `…/reactions`).
 
 **The working sign** (`#A`, `full-sdd`)
 - [ ] Add `workflow: full-sdd` → `bot: working` within seconds, NO reaction anywhere; the questions posted; then
@@ -514,7 +538,9 @@ model's answer, at most ~10 s after the event's `received_at` when nothing else 
   comment has 👀 only (NO 🚀 by the bot); `bot: working` gone.
 - [ ] `#A`: `/approve` the Spec → 🚀 + `bot: working` within seconds; the Plan posted; the status label `status:
   plan-review` (NOT `ready-for-dev`); then `bot: working` gone.
-- [ ] `#A`: `/refresh` → 🚀 + `bot: working`; "still up to date" or v2; then gone.
+- [ ] `#A`: `/refresh` → 🚀 + `bot: working`; "still up to date" or v2; then gone. (2026-11-26, plan: with `main`
+  unmoved since the Plan, `/refresh` answers "nothing changed" with no model call and no sign, so the row first
+  commits a file no document read, `docs/bot-feedback-matrix.md`.)
 - [ ] `#A`: a plain comment while the Plan waits → NO 🚀, NO label (row 20).
 - [ ] The usage query (see "Usage data"): one row per event above that showed the sign, with a `wait_s`; NO row for
   the plain comment.
@@ -526,7 +552,8 @@ model's answer, at most ~10 s after the event's `received_at` when nothing else 
 
 **The statuses**
 - [ ] `#A`: `/approve` the Plan → `status: ready-for-dev`, then the `workspace` stop: `status: needs-human`, the stop
-  comment; `db:runs` "before stop" `ready-for-dev`; NO sign.
+  comment; ~~`db:runs` "before stop"~~ the task query's `status_before_stop` (2026-11-26, plan) `ready-for-dev`; NO
+  sign.
 - [ ] (`#D`, `spec-code`) `/approve` the Spec → `ready-for-dev`, then the `workspace` stop; NO Plan.
 - [ ] (`#E`, `code-only`) Add the lane → "Ready to code" under `status: ready-for-dev`; `/approve` → the `workspace`
   stop.
@@ -538,10 +565,15 @@ model's answer, at most ~10 s after the event's `received_at` when nothing else 
 **Retries, failures, crashes**
 - [ ] (`#F`, Spec waiting) Wi-Fi off right after `/approve` (the waiting script), back within ~20 s → the label stays
   on through the retry (timeline: ONE `bot: working` added and ONE removed); the Plan posted; the usage query: the
-  `/approve`'s `attempts` 2, `wait_s` from the first attempt to the Plan (BFW8).
+  `/approve`'s ~~`attempts` 2~~ `attempts` ≥ 2, `wait_s` from the first attempt to the Plan (BFW8). (2026-11-26, plan:
+  the worker retries 5 s, then 30 s after a failure, so with Wi-Fi back within ~20 s the Plan comes at attempt 2 or 3.
+  The waiting script, in the plan's Checkpoint 5: it waits for `#F working on` after the `/approve`, says "Wi-Fi off",
+  waits for `attempt 1/3 failed` (at most 60 s), says "Wi-Fi on", waits for `#F working off` and writes the issue
+  events, `attempts` and `wait_s` to a file.)
 - [ ] (`#G`) Break the `plan` model in `workflow.json` (one sandbox commit), `/approve` the Spec → 🚀 + label; the stop
   comment; then `bot: working` gone; status `needs-human`. Fix the commit, `/retry` → 🚀 on the `/retry` within
-  seconds (BF10), `plan-review`, then the label, the Plan, the label gone.
+  seconds (BF10), ~~`plan-review`, then the label, the Plan, the label gone~~ (2026-11-26, plan: the stop came before
+  `plan-review` was set) `spec-review`, then the label, the Plan under `plan-review`, the label gone.
 - [ ] (`#H`) Kill the app (`kill -9`) while the Plan is written → the label stays on GitHub; restart → the sweep log
   leaves it (event `PENDING`); the Plan posted; then the label gone.
 - [ ] Leftover: set a task's mark to a `DONE` event with SQL and add `bot: working` with `gh` → restart → the sweep
@@ -552,9 +584,11 @@ model's answer, at most ~10 s after the event's `received_at` when nothing else 
 **Migration and bootstrap**
 - [ ] Before migrating: an issue with a `full-sdd` Plan waiting under `ready-for-dev` (`#I`) → after `db:migrate` and
   a start: `status: plan-review`; `/approve` → `ready-for-dev` and the stop, as above.
-- [ ] Startup log: "2 created, 1 updated, 15 already present"; the repo's labels list `bot: working` and `status:
+- [x] Startup log: "2 created, 1 updated, 15 already present"; the repo's labels list `bot: working` and `status:
   plan-review`; `status: ready-for-dev`'s description is BF6's, its colour unchanged. Edit that description by hand
-  and restart → back to BF6's, "1 updated"; recolour it → the colour stays.
+  and restart → back to BF6's, "1 updated"; recolour it → the colour stays. (2026-11-26, Checkpoint 1: as written;
+  "0 created, 1 updated, 17 already present" after the hand edit, "0 updated" after recolouring to `0e8a17`, which
+  stayed; `0e8a16` put back; `npm run github:smoke -- --issue 91`: every line `PASS`.)
 - [ ] A person removes `bot: working` during work → NOT put back; the work ends normally. A person adds it to an idle
   issue → `db:events` `IGNORED` `other-label`.
 
@@ -562,8 +596,11 @@ model's answer, at most ~10 s after the event's `received_at` when nothing else 
 - [ ] No issue carries `bot: working`, and no task has a mark.
 - [ ] No comment carries both 🚀 and 👀 by the bot.
 - [ ] Every 🚀 by the bot is on a comment whose event (`webhook_events`, by the comment id in its payload) has
-  `execution_logs` rows of the same task between its `received_at` and its `processed_at` (2026-11-26, review:
-  `execution_logs` has no event id; one event at a time makes the window exact), or is an accepted `/retry` (BF10).
+  `execution_logs` rows of the same task ~~between its `received_at` and its `processed_at` (2026-11-26, review:
+  `execution_logs` has no event id; one event at a time makes the window exact)~~ within its own `working_started_at`
+  … `working_ended_at` (2026-11-26, plan FP24, confirmed: `execution_logs` has no event id, and an event's
+  `received_at` … `processed_at` includes its wait behind another event of the issue, so a 🚀 wrongly put on the
+  second comment of a burst would pass), or is an accepted `/retry` (BF10).
 - [ ] No `full-sdd` issue shows `status: ready-for-dev` while its current Plan isn't approved.
 
 ## Success criteria

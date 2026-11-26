@@ -7,6 +7,7 @@ export type TaskStatus =
   | 'draft'
   | 'grilling'
   | 'spec-review'
+  | 'plan-review'
   | 'ready-for-dev'
   | 'executing'
   | 'in-review'
@@ -63,6 +64,13 @@ export interface IssueProvider {
   /** marks a human comment as read, with nothing to add (GitHub: the 👀 reaction); doing it twice changes
    *  nothing, and a comment that no longer exists is not an error (added 2026-11-17, spec 6 GM6) */
   acknowledgeComment(task: TaskRef, commentId: string): Promise<void>;
+  // 2026-11-26 (spec 13 BFW5): acknowledgeComment also removes the bot's own "working" mark (🚀) from that comment.
+  /** the bot is working on this comment's action (GitHub: the 🚀 reaction; spec 13 BFW12); twice changes nothing,
+   *  a comment that no longer exists is skipped */
+  reactWorking(task: TaskRef, commentId: string): Promise<void>;
+  /** shows or hides the bot's "working" label (GitHub: `bot: working`; spec 13 BFW12); hiding a missing one is
+   *  no error */
+  setWorkingLabel(task: TaskRef, shown: boolean): Promise<void>;
   /** platform label names → neutral controls; returns every lane found, so callers can detect two */
   readControls(task: UnifiedTask): {
     lanes: Lane[];

@@ -16,6 +16,8 @@ import {
   GRILL_SKIP,
   LANES,
   STEPS,
+  WORKING_LABEL,
+  isBotManagedLabel,
   isHumanControlLabel,
   isStatusLabel,
   laneLabel,
@@ -188,17 +190,80 @@ export class GitHubIssueProvider implements IssueProvider {
     return bot !== '' && login.toLowerCase() === bot.toLowerCase();
   }
 
-  /** Spec 6 GM6: the 👀 reaction (`201` added, `200` already there); a deleted comment (`404`) is skipped. */
+  /**
+   * Spec 6 GM6: the 👀 reaction (`201` added, `200` already there); a deleted comment (`404`) is skipped.
+   * Spec 13 BFW5 (plan FP16): then the bot's own 🚀 on that comment is looked up and deleted; a `404` at either
+   * step is "already gone"; a person's 🚀 stays.
+   */
   async acknowledgeComment(task: TaskRef, commentId: string): Promise<void> {
+    const { owner, repo } = this.github.target(task);
+    const comment_id = Number(commentId);
+    const reacted = await this.github.requestOrNull((octokit) =>
+      octokit.request(
+        'POST /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions',
+        { owner, repo, comment_id, content: 'eyes' },
+      ),
+    );
+    let rocketRemoved = false;
+    if (reacted) {
+      const rockets = await this.github.requestOrNull((octokit) =>
+        octokit.paginate(
+          'GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions',
+          { owner, repo, comment_id, content: 'rocket', per_page: 100 },
+        ),
+      );
+      const own = rockets?.find(
+        (reaction) => reaction.user != null && this.isSelf(reaction.user.login),
+      );
+      if (own) {
+        await this.github.requestOrNull((octokit) =>
+          octokit.request(
+            'DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions/{reaction_id}',
+            { owner, repo, comment_id, reaction_id: own.id },
+          ),
+        );
+        rocketRemoved = true;
+      }
+    }
+    this.logger.log(
+      `acknowledgeComment ${task.externalRef} → comment ${commentId}${reacted ? '' : ' (gone)'}${rocketRemoved ? ' (🚀 removed)' : ''}`,
+    );
+  }
+
+  /** Spec 13 BFW12: the 🚀 reaction (`201` added, `200` already there); a deleted comment (`404`) is skipped. */
+  async reactWorking(task: TaskRef, commentId: string): Promise<void> {
     const { owner, repo } = this.github.target(task);
     const reacted = await this.github.requestOrNull((octokit) =>
       octokit.request(
         'POST /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions',
-        { owner, repo, comment_id: Number(commentId), content: 'eyes' },
+        { owner, repo, comment_id: Number(commentId), content: 'rocket' },
       ),
     );
     this.logger.log(
-      `acknowledgeComment ${task.externalRef} → comment ${commentId}${reacted ? '' : ' (gone)'}`,
+      `reactWorking ${task.externalRef} → comment ${commentId}${reacted ? '' : ' (gone)'}`,
+    );
+  }
+
+  /** Spec 13 BFW12: adds or removes `bot: working`; a label already gone (`404`) counts as removed. */
+  async setWorkingLabel(task: TaskRef, shown: boolean): Promise<void> {
+    const target = this.github.target(task);
+    if (shown) {
+      await this.github.request((octokit) =>
+        octokit.request(
+          'POST /repos/{owner}/{repo}/issues/{issue_number}/labels',
+          { ...target, labels: [WORKING_LABEL] },
+        ),
+      );
+    } else {
+      await this.github.requestOrNull((octokit) =>
+        octokit.request(
+          'DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}',
+          { ...target, name: WORKING_LABEL },
+        ),
+      );
+    }
+    this.logger.log(
+      `setWorkingLabel ${task.externalRef} → ${shown ? 'added' : 'removed'} "${WORKING_LABEL}"`,
     );
   }
 
@@ -216,7 +281,7 @@ export class GitHubIssueProvider implements IssueProvider {
     };
   }
 
-  /** G10: creates each missing bot label; never edits or deletes one. */
+  /** G10: creates each missing bot label; never deletes one (spec 13 BFW7: updates a bot-managed description). */
   async ensureLabels(): Promise<void> {
     const { owner, repo } = this.github;
     const existing = await this.github.request((octokit) =>
@@ -230,6 +295,7 @@ export class GitHubIssueProvider implements IssueProvider {
       (label) => !existing.some((found) => sameLabel(found.name, label.name)),
     );
     let created = 0;
+    let updated = 0;
     for (const label of missing) {
       try {
         await this.github.request((octokit) =>
@@ -245,8 +311,28 @@ export class GitHubIssueProvider implements IssueProvider {
           throw error;
       }
     }
+    // Spec 13 BFW7: a bot-managed label whose description differs gets BOT_LABELS' one; never its colour or name,
+    // never a human-assigned label.
+    for (const label of BOT_LABELS) {
+      const found = existing.find((item) => sameLabel(item.name, label.name));
+      if (
+        !found ||
+        !isBotManagedLabel(label.name) ||
+        found.description === label.description
+      )
+        continue;
+      await this.github.request((octokit) =>
+        octokit.request('PATCH /repos/{owner}/{repo}/labels/{name}', {
+          owner,
+          repo,
+          name: found.name,
+          description: label.description,
+        }),
+      );
+      updated++;
+    }
     this.logger.log(
-      `Labels on ${this.github.targetRepo}: ${created} created, ${BOT_LABELS.length - created} already present`,
+      `Labels on ${this.github.targetRepo}: ${created} created, ${updated} updated, ${BOT_LABELS.length - created - updated} already present`,
     );
   }
 }

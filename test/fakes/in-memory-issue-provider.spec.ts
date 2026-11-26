@@ -229,6 +229,43 @@ describe('InMemoryIssueProvider', () => {
     ).rejects.toMatchObject({ kind: 'permanent' });
   });
 
+  it("reactWorking (spec 13): 🚀 once per comment, an unknown id is fine; the 👀 replaces the bot's 🚀", async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const task = issues.seedIssue({ number: 3 });
+
+    await issues.reactWorking(task, '41');
+    await issues.reactWorking(task, '41');
+    await issues.reactWorking(task, '42');
+    expect(issues.reactionsOf(task, '41')).toEqual(['rocket']);
+
+    await issues.acknowledgeComment(task, '41');
+    await issues.acknowledgeComment(task, '43');
+
+    expect(issues.reactionsOf(task, '41')).toEqual(['eyes']);
+    expect(issues.reactionsOf(task, '42')).toEqual(['rocket']);
+    expect(issues.reactionsOf(task, '43')).toEqual(['eyes']);
+    expect(issues.acknowledged(task)).toEqual(['41', '43']);
+  });
+
+  it('setWorkingLabel (spec 13): adds bot: working once, removes it, removing a missing one is fine', async () => {
+    const issues = new InMemoryIssueProvider(REPO);
+    const task = issues.seedIssue({ number: 3, labels: ['status: grilling'] });
+
+    await issues.setWorkingLabel(task, true);
+    await issues.setWorkingLabel(task, true);
+    expect(issues.labelsOf(task)).toEqual(['status: grilling', 'bot: working']);
+
+    await issues.setWorkingLabel(task, false);
+    await issues.setWorkingLabel(task, false);
+    expect(issues.labelsOf(task)).toEqual(['status: grilling']);
+    expect(issues.calls.map((call) => call.args[1])).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+  });
+
   it('isSelf: its bot login in any case, nobody else, and no call recorded', () => {
     const issues = new InMemoryIssueProvider(REPO, 'my-app[bot]');
     expect(issues.isSelf('my-app[bot]')).toBe(true);
@@ -295,7 +332,7 @@ describe('InMemoryIssueProvider', () => {
     await issues.ensureLabels();
     await issues.ensureLabels();
 
-    expect(issues.repoLabels).toHaveLength(16);
+    expect(issues.repoLabels).toHaveLength(18);
   });
 
   it('records every call and fails the next one on demand', async () => {
