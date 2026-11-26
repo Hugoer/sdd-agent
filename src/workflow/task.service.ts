@@ -97,6 +97,28 @@ export class TaskService {
     });
   }
 
+  /**
+   * Spec 13 (BFW2): the mark set to `eventId` when empty or already this event's; true when this event holds it
+   * (another unfinished event's mark is left as it is).
+   */
+  markWorking(lease: HeldLease, eventId: string): Promise<boolean> {
+    return this.write(lease, async (tx) => {
+      const { count } = await tx.task.updateMany({
+        where: {
+          id: lease.taskId,
+          OR: [{ workingEventId: null }, { workingEventId: eventId }],
+        },
+        data: { workingEventId: eventId },
+      });
+      return count === 1;
+    });
+  }
+
+  /** Spec 13 (plan FP7): the task whose mark names this event, if any (an event that ends outside the router). */
+  byWorkingEvent(eventId: string): Promise<Task | null> {
+    return this.prisma.task.findFirst({ where: { workingEventId: eventId } });
+  }
+
   /** Spec 13 (BFW2): the mark cleared, only if it still names `eventId`; true when it did. */
   clearWorkingMark(lease: HeldLease, eventId: string): Promise<boolean> {
     return this.write(lease, async (tx) => {

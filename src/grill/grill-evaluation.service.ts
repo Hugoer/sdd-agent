@@ -112,6 +112,8 @@ export class GrillEvaluationService {
     const { task, run } = context;
     const details = await this.issues.getTaskDetails(task.ref);
     const setup = await this.stepConfig.prepare('grill', details);
+    // Spec 13 (BFW1): the working sign, right before the model call (after a step-config stop could happen).
+    await context.working();
     return this.llm.call({
       context: { task: task.ref, step: 'grill', lane: run.lane, runId: run.id },
       setup,

@@ -13,6 +13,7 @@ import { StartupSweepService } from './startup-sweep.service.js';
 import { StepHandlerRegistry } from './step-handler.registry.js';
 import { TaskService } from './task.service.js';
 import { WorkflowEventProcessor } from './workflow-event.processor.js';
+import { WorkingSignService } from './working-sign.service.js';
 
 /**
  * Spec 5: the router. Processes every stored event (intake, then the router) and owns `tasks` and `runs`. Step
@@ -36,6 +37,7 @@ import { WorkflowEventProcessor } from './workflow-event.processor.js';
     NeedsHumanService,
     RouterService,
     StartupSweepService,
+    WorkingSignService,
     WorkflowEventProcessor,
   ],
   // Spec 6: SessionLeaseService for `assertHeld` in the step modules' own writes.

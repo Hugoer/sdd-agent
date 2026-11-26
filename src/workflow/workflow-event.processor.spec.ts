@@ -14,6 +14,7 @@ function setup(result: () => Promise<IntakeResult>) {
   const intake = { intake: vi.fn(result) };
   const router = {
     route: vi.fn(() => Promise.resolve({ status: 'DONE' as const })),
+    endOutsideRouter: vi.fn(() => Promise.resolve()),
   };
   const worker = { registerProcessor: vi.fn() };
   const sweep = { sweep: vi.fn(() => Promise.resolve()) };

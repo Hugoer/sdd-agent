@@ -13,6 +13,7 @@ import {
 import { ProviderError } from '../contracts/provider-error.js';
 import type { WorkflowInput } from '../contracts/workflow-input.js';
 import type { ProcessResult } from '../events/event-processor.js';
+import { EventsService } from '../events/events.service.js';
 import type { Run, Task, WebhookEvent } from '../generated/prisma/client.js';
 import {
   decide,
@@ -39,6 +40,7 @@ import {
 import { StepHandlerRegistry, type StepRun } from './step-handler.registry.js';
 import { stopCauseOf, waitingStep } from './stop-cause.js';
 import { issueTag, labelPending, refOf, TaskService } from './task.service.js';
+import { WorkingSignService } from './working-sign.service.js';
 import {
   issueClosedComment,
   issueClosedMarker,
@@ -84,6 +86,8 @@ interface Job {
   mark: RouterMark;
   /** Plan P9: the `/retry` was accepted and written; any later error ends the event `FAILED` at once. */
   retryWritten: boolean;
+  /** Spec 13 (plan FP6): `working()` already ran in this job (each worker attempt is a new job). */
+  workingShown: boolean;
 }
 
 @Injectable()
@@ -98,6 +102,8 @@ export class RouterService {
     private readonly registry: StepHandlerRegistry,
     private readonly needsHuman: NeedsHumanService,
     @Inject(ISSUE_PROVIDER) private readonly issues: IssueProvider,
+    private readonly sign: WorkingSignService,
+    private readonly events: EventsService,
   ) {}
 
   async route(
@@ -123,10 +129,15 @@ export class RouterService {
         stale: false,
       },
       retryWritten: false,
+      workingShown: false,
     };
     const result = await this.leases.withLease(job.lease, async () => {
       try {
-        return await this.handle(job);
+        const outcome = await this.handle(job);
+        // Spec 13 (BFW3, plan FP7): finished for good: the sign comes off last of the event's writes.
+        await this.events.workingEnded(event.id);
+        await this.sign.end(targetOf(job), event.id);
+        return outcome;
       } catch (error) {
         throw markError(
           job.retryWritten ? afterRetryWrite(error) : error,
@@ -148,18 +159,54 @@ export class RouterService {
    * the claim (plan P2) can stop the run, and only as decide() says: a running run, not a `/retry`, not stale.
    */
   async failed(event: WebhookEvent, error: unknown): Promise<void> {
+    // Spec 13 (BFW8, plan FP7): outside the lease, so a hook that can't take it still records the end.
+    await this.events.workingEnded(event.id);
     const mark = routerMarkOf(error);
-    if (!mark) return; // Before the claim (intake): a silent FAILED (IA9).
+    if (!mark) {
+      // Before the claim (intake): a silent FAILED (IA9); an earlier attempt may have shown the sign.
+      await this.endOutsideRouter(event);
+      return;
+    }
     const lease = { taskId: mark.taskId, eventId: event.id };
-    const result = await this.leases.withLease(lease, () =>
-      this.stopOnFailure(event, error, mark, lease),
-    );
+    const result = await this.leases.withLease(lease, async () => {
+      try {
+        await this.stopOnFailure(event, error, mark, lease);
+      } finally {
+        // Spec 13 (BFW3): after the stop (also when there is none), the sign comes off.
+        const task = await this.tasks.get(lease.taskId);
+        await this.sign.end(
+          { lease, ref: refOf(task), tag: issueTag(task.externalRef) },
+          event.id,
+        );
+      }
+    });
     if (!result.claimed) {
       // Plan P10: only with two instances on one database; a redelivery runs the event again.
       this.logger.error(
         `task ${mark.taskId}: the session lease is taken, so event ${event.deliveryId} stays FAILED without a stop`,
       );
     }
+  }
+
+  /**
+   * Spec 13 (plan FP7, review): an event that ends outside the router (intake ignores it, or fails it before the
+   * claim, on an attempt after one that showed the sign): the task whose mark names it, under the lease.
+   */
+  async endOutsideRouter(event: WebhookEvent): Promise<void> {
+    await this.events.workingEnded(event.id);
+    const task = await this.tasks.byWorkingEvent(event.id);
+    if (!task) return;
+    const lease = { taskId: task.id, eventId: event.id };
+    const result = await this.leases.withLease(lease, () =>
+      this.sign.end(
+        { lease, ref: refOf(task), tag: issueTag(task.externalRef) },
+        event.id,
+      ),
+    );
+    if (!result.claimed)
+      this.logger.error(
+        `${issueTag(task.externalRef)}: the session lease is taken, so bot: working stays for the sweep or the next event`,
+      );
   }
 
   private async stopOnFailure(
@@ -223,7 +270,9 @@ export class RouterService {
     if (task.externalRef !== job.ref.externalRef)
       await this.tasks.refreshExternalRef(job.lease, job.ref.externalRef);
 
-    // RL5: the pending side effects first, even when the event then does nothing.
+    // RL5: the pending side effects first, even when the event then does nothing. Spec 13 (plan FP8): a
+    // `bot: working` an ended event left comes off first.
+    await this.sign.pending(targetOf(job), task, job.event.id);
     let shownStatus = task.shownStatus as TaskStatus | null;
     if (labelPending(status, shownStatus)) {
       await this.showStatus(job, status);
@@ -471,6 +520,8 @@ export class RouterService {
     routing: Routing,
   ): Promise<ProcessResult> {
     const run = requireRun(routing);
+    // Spec 13 (BF10, plan FP5): 🚀 before the write, so a GitHub failure retries the /retry like any write before it.
+    await this.issues.reactWorking(job.ref, commentOf(job.input).id);
     const status = await this.runs.acceptRetry(job.lease, run);
     job.retryWritten = true;
     this.logger.log(
@@ -583,9 +634,17 @@ export class RouterService {
       status: routing.state.status,
       statusBeforeStop: run.statusBeforeStop as TaskStatus | null,
       approval: routing.state.approval,
+      working: () => this.working(job),
     });
     job.mark.step = waitingStep(routing.state.status, runLane(run));
     return outcome ?? null;
+  }
+
+  /** Spec 13 (BFW1, BFW4, plan FP6): the working sign, once per job; 🚀 on the event's own comment, when it has one. */
+  private async working(job: Job): Promise<void> {
+    if (job.workingShown) return;
+    job.workingShown = true;
+    await this.sign.on(targetOf(job), job.event, workingCommentOf(job.input));
   }
 
   /** The source of truth first, then its label (RLW5); the step a stop names follows the status (plan P3). */
@@ -675,6 +734,23 @@ function afterRetryWrite(error: unknown): ProviderError {
 }
 
 /** The `/retry` comment of a RETRY input (decide() replies only to one). */
+/** The issue a job's sign is about. */
+function targetOf(job: Job) {
+  return { lease: job.lease, ref: job.ref, tag: job.tag };
+}
+
+/** Spec 13 (BFW4): the comment that gets 🚀: a Grill answer, an `/approve`, a `/refresh`; label events have none. */
+function workingCommentOf(input: IssueInput): string | null {
+  switch (input.type) {
+    case 'COMMENT':
+    case 'APPROVE':
+    case 'REFRESH':
+      return input.comment.id;
+    default:
+      return null;
+  }
+}
+
 function commentOf(input: IssueInput): { id: string } {
   if (input.type !== 'RETRY')
     throw new Error(`a /retry reply needs a RETRY input, got ${input.type}`);

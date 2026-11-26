@@ -95,6 +95,8 @@ export class PlanHandler implements StepHandler {
     if (await this.store.writtenFrom(run.id, 'plan', spec.id)) return;
     const details = await this.issues.getTaskDetails(task.ref);
     const setup = await this.stepConfig.prepare('plan', details);
+    // Spec 13 (BFW1): the working sign, right before the model call.
+    await context.working();
     const result = await this.llm.call<string>({
       context: { task: task.ref, step: 'plan', lane: run.lane, runId: run.id },
       setup,

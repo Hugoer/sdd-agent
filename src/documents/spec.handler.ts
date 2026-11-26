@@ -95,6 +95,8 @@ export class SpecHandler implements StepHandler {
     const lane = documentLane(run.lane);
     const details = await this.issues.getTaskDetails(task.ref);
     const setup = await this.stepConfig.prepare('spec', details);
+    // Spec 13 (BFW1): the working sign, right before the model call.
+    await context.working();
     const result = await this.llm.call<string>({
       context: { task: task.ref, step: 'spec', lane, runId: run.id },
       setup,

@@ -133,6 +133,12 @@ describe('/retry without step handlers (spec 5, T16)', () => {
     const row = await deliver(t, retry(71, 7101));
 
     expect(row).toMatchObject({ status: 'DONE', attempts: 1 });
+    // Spec 13 (BF10, plan FP5): 🚀 on the accepted /retry, before its write and the status label.
+    expect(t.issues.reactionsOf(issue, '7101')).toEqual(['rocket']);
+    const methods = t.issues.calls.map(({ method }) => method);
+    expect(methods.indexOf('reactWorking')).toBeLessThan(
+      methods.indexOf('setStatusLabel'),
+    );
     expect(log.mock.calls.map(([message]) => String(message))).toContain(
       '#71 /retry accepted: run 1 back to draft',
     );

@@ -100,6 +100,8 @@ export class DocumentRefreshes {
               .filter(({ readers }) => readers.includes('own'))
               .map(({ path }) => path),
           };
+    // Spec 13 (BFW1): the working sign, right before the model call (`main` unmoved returned above: no sign).
+    await context.working();
     const result = await this.llm.call<RefreshOutput>({
       context: { task: task.ref, step: kind, lane: run.lane, runId: run.id },
       setup,

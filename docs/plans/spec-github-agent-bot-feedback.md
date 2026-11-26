@@ -410,7 +410,7 @@ a `PROCESSING` event → skipped; a GitHub failure → one line, the next task. 
 
 ### Phase 4: The working sign
 
-- [ ] **Task 9: The sign's service**
+- [x] **Task 9: The sign's service**
 
 **Description:** `WorkingSignService` (`src/workflow`): `on(target, eventId, commentId | null)` in FP6's order;
 `end(target, eventId)` (FP7: label off when the task's mark is this event, then the mark cleared; a GitHub failure →
@@ -434,7 +434,7 @@ returns whether this event holds it). FP10's lines.
 `src/events/events.service.ts`, `src/workflow/workflow.module.ts`, `test/working-sign.integration.spec.ts`.
 **Scope:** M.
 
-- [ ] **Task 10: The router's hooks; 🚀 on an accepted `/retry`**
+- [x] **Task 10: The router's hooks; 🚀 on an accepted `/retry`**
 
 **Description:** `StepContext.working()` (BFW1; `CancelContext` omits it), made per job from the event's comment
 (BFW4: `COMMENT`, `APPROVE`, `REFRESH`; none for the label events); `route()` runs `end` after `handle()` inside the
@@ -459,7 +459,7 @@ adds 🚀 to the `/retry` before its write (BF10, FP5).
 `src/workflow/workflow-event.processor.ts` (+ spec), `test/bot-feedback.integration.spec.ts`,
 `test/retry.integration.spec.ts` (one assertion). **Scope:** M.
 
-- [ ] **Task 11: The handlers call `working()`**
+- [x] **Task 11: The handlers call `working()`**
 
 **Description:** Right before each `LlmService.call()`: Grill Me's evaluation (`grill-evaluation.service.ts:115`),
 the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`document-refresh.ts:103`, after the
@@ -483,7 +483,7 @@ the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`
 
 ### Checkpoint 4: after T9–T11
 
-- [ ] The four commands green.
+- [x] The four commands green.
 - [ ] You review and commit (you may try the sign on the sandbox yourself with `npm run dev`).
 
 ### Phase 5: Invariants, docs, matrix

@@ -68,6 +68,7 @@ export class EventsService {
    * Spec 5 (RLW11, plan P8): `/retry` queues a stopped run's event again. Only an event that ended (FAILED,
    * IGNORED or DONE) changes; one PENDING or PROCESSING is left as it is. `lastError` is kept; the ignore
    * reason goes with the old ending. `tx`: the `/retry` transaction, so the restore and this commit together.
+   * Spec 13 (plan FP3): the working times are cleared, so the re-run's wait starts at its own first `working()`.
    */
   async requeue(
     eventId: string,
@@ -81,6 +82,8 @@ export class EventsService {
         availableAt: new Date(),
         processedAt: null,
         ignoreReason: null,
+        workingStartedAt: null,
+        workingEndedAt: null,
       },
     });
     this.logger.log(
@@ -106,6 +109,23 @@ export class EventsService {
     });
   }
 
+  /**
+   * Spec 13 (BFW8): the event's first `working()`; kept through the worker's retries (PostgreSQL's clock, as
+   * `received_at`).
+   */
+  async workingStarted(eventId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE webhook_events SET working_started_at = COALESCE(working_started_at, now())
+      WHERE id = ${eventId}::uuid`;
+  }
+
+  /** Spec 13 (BFW8): the event is finished for good; only an event that started working gets the time. */
+  async workingEnded(eventId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE webhook_events SET working_ended_at = now()
+      WHERE id = ${eventId}::uuid AND working_started_at IS NOT NULL`;
+  }
+
   /** One update that only matches a FAILED row, so two redeliveries at once queue it once. */
   private async requeueFailed(deliveryId: string): Promise<boolean> {
     const { count } = await this.prisma.webhookEvent.updateMany({
@@ -115,6 +135,9 @@ export class EventsService {
         attempts: 0,
         availableAt: new Date(),
         processedAt: null,
+        // Spec 13 (plan FP3).
+        workingStartedAt: null,
+        workingEndedAt: null,
       },
     });
     return count === 1;

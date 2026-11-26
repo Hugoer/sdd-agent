@@ -40,12 +40,18 @@ export interface StepContext {
   statusBeforeStop: TaskStatus | null;
   /** Spec 7 (plan P14): the gate's verdict on this event's `/approve`, when decide() read one. */
   approval: ApprovalVerdict | null;
+  /**
+   * Spec 13 (BFW1): called right before the event's first model call (later: the Coder's and the Quality Gate's
+   * loops). Shows the working sign: the mark, 🚀 on the event's comment, `bot: working`. A second call in the same
+   * job does nothing; the router takes the sign down when the event is finished for good.
+   */
+  working(): Promise<void>;
 }
 
 /** What a cancel hook is told (spec 6 plan P6), also when a later event posts the run-ended comment. */
 export interface CancelContext extends Omit<
   StepContext,
-  'op' | 'input' | 'status' | 'statusBeforeStop' | 'approval'
+  'op' | 'input' | 'status' | 'statusBeforeStop' | 'approval' | 'working'
 > {
   /** `cancelled`, or `replaced` with the new run's number and lane (spec 6 GM17). */
   end: RunEnd;

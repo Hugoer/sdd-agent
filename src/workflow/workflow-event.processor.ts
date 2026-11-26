@@ -26,9 +26,11 @@ export class WorkflowEventProcessor implements EventProcessor, OnModuleInit {
   /** An intake error passes through as it is (no router mark): the worker's rule, then a silent FAILED (IA9). */
   async process(event: WebhookEvent): Promise<ProcessResult> {
     const result = await this.intake.intake(event);
-    return result.outcome === 'accepted'
-      ? this.router.route(event, result.input)
-      : { status: 'IGNORED', reason: result.reason };
+    if (result.outcome === 'accepted')
+      return this.router.route(event, result.input);
+    // Spec 13 (plan FP7, review): intake runs again on every attempt; one after `working()` may end here.
+    await this.router.endOutsideRouter(event);
+    return { status: 'IGNORED', reason: result.reason };
   }
 
   /** Spec 13 (BFW10, plan FP13): the startup sweep, before the worker's first claim. */
