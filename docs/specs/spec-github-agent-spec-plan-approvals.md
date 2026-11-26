@@ -1437,7 +1437,10 @@ live; test once that it can fail, e.g. with a wrong issue list)
   2026-11-26: approved as `docs/specs/spec-github-agent-bot-feedback.md`. The Spec, Plan and refresh calls show the
   sign through `working()`; the Plan waits under `plan-review`; the waiting document by status (plan P15):
   `plan-review` → the Plan, `ready-for-dev` → the go-signal (`code-only`) or nothing; the gate answers in
-  `ready-for-dev` when nothing waits (BFW6).
+  `ready-for-dev` when nothing waits (BFW6). 2026-11-26, spec 13 plan (FP1): in `ready-for-dev` after every approval,
+  `/refresh` and `/restore` get their own reply ("comes too late: every approval of run N is in …", "has nothing to
+  restore: every approval of run N is in …"), worded like this spec's `executing` replies; every approve op returns
+  the `APPROVED` outcome (FP4) and decide() brings the step after it. Built 2026-11-27.
 
 ## Open questions
 

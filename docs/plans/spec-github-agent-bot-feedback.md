@@ -488,7 +488,7 @@ the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`
 
 ### Phase 5: Invariants, docs, matrix
 
-- [ ] **Task 12: The invariant script**
+- [x] **Task 12: The invariant script**
 
 **Description:** `scripts/bot-feedback-invariants.mjs` and its `.spec.mjs` (BFW14, FP22), read-only like spec 14's:
 `node --env-file-if-exists=.env scripts/bot-feedback-invariants.mjs <issue>…`. The four invariants as the spec
@@ -507,7 +507,7 @@ words them; the pure checks exported.
 
 **Dependencies:** T11. **Files:** the two script files. **Scope:** M.
 
-- [ ] **Task 13: The guide, `AGENTS.md`, the README, the status lines**
+- [x] **Task 13: The guide, `AGENTS.md`, the README, the status lines**
 
 **Description:** `docs/guides/setup-github-agent-local.md`: "Reference: labels" (18, the two new rows,
 `ready-for-dev`'s description), the startup lines (`2 created, 1 updated, 15 already present`; descriptions of

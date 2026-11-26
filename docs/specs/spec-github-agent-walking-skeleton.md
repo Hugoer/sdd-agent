@@ -15,7 +15,7 @@
 > the interview of 2026-11-09/10 (decisions W1–W9). Reference project for tooling:
 > `~/Projects/web-perf-app/web-perf-monorepo` (NestJS + Prisma 7 + Vitest + Docker).
 
-> **2026-11-26, spec 13 (`bot-feedback`, approved):** `webhook_events` gains `working_started_at` and `working_ended_at` (the wait people feel, BFW8); the worker awaits the processor's recovery hook (the startup sweep) after resetting interrupted events and before its first tick (BFW10). See `docs/specs/spec-github-agent-bot-feedback.md`.
+> **2026-11-26, spec 13 (`bot-feedback`, approved):** `webhook_events` gains `working_started_at` and `working_ended_at` (the wait people feel, BFW8); the worker awaits the processor's recovery hook (the startup sweep) after resetting interrupted events and before its first tick (BFW10). 2026-11-26, spec 13 plan (FP23, FP3): the first tick awaits the hook before its first claim (the webhook port opens at once), and a re-queue (`/retry`, the redelivery of a `FAILED` row) clears both working times. See `docs/specs/spec-github-agent-bot-feedback.md`.
 
 ## Objective
 

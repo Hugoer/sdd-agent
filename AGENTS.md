@@ -75,8 +75,17 @@ Grill Me → Spec → Plan → Coder → Quality Gate workflow, driven by issue 
   `.env.example`). `workflow.json` requires `protectedPaths` (`[]` is valid); `src/llm/protected-paths.ts` (the floor:
   `.github-agent/` and every step skill folder, then picomatch globs) waits for specs 9 and 10;
   `BOT_CONFIG_PATHS` and its coverage test. `node scripts/bot-data-protection-invariants.mjs <issues>` checks three
-  invariants. Spec 13 (`bot-feedback`) approved 2026-11-26, not built: 🚀 + a `bot: working` label while a model
-  call runs, `status: plan-review`. Next: spec 13's plan, then 8 (overview build order). Repo:
+  invariants. Spec 13 (`bot-feedback`) built 2026-11-27: the working sign. A handler calls `StepContext.working()`
+  right before its first model call (Grill Me's evaluation, the Spec, the Plan, the refresh): `WorkingSignService`
+  (`src/workflow`) sets the mark (`tasks.working_event_id`), puts 🚀 on the event's comment (`reactWorking`) and adds
+  `bot: working` (`setWorkingLabel`); the router takes it down when the event is finished for good (after `handle()`,
+  in `failed()` after the stop, and for an event that ends in intake on a later attempt), or the next event on the
+  issue does; an accepted `/retry` gets 🚀; Grill Me's 👀 removes the bot's 🚀. `StartupSweepService` runs from the
+  worker's recovery hook (`EventProcessor.recover?()`, the first tick, before the first claim): leftover labels and
+  status labels that differ. `status: plan-review` (a `full-sdd` Plan waits); `ready-for-dev` = every approval is in
+  (`code-only`'s go-signal still waits under it); the `APPROVED` step outcome; 18 labels, descriptions of bot-managed
+  ones kept up to date; `webhook_events.working_started_at`/`working_ended_at` (the wait). `node
+  scripts/bot-feedback-invariants.mjs <issues>` checks four invariants. Next: spec 8 (overview build order). Repo:
   `Hugoer/sdd-agent`; target (sandbox) repo: `Hugoer/sdd-agent-sandbox`.
 - **Setup:** `docs/guides/setup-github-agent-local.md`.
 

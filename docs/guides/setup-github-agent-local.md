@@ -27,6 +27,9 @@
 > **Updated:** 2026-11-24 for spec #14 (`docs/specs/spec-github-agent-up-to-date-approvals.md`): an `/approve` asks
 > first when `main` changed files the document read (the question, `before-question`, the method sentence of
 > `/refresh`), `APPROVAL_LARGE_CHANGE_FILES`, the new columns and a query in "Usage data", the invariant script.
+> **Updated:** 2026-11-27 for spec #13 (`docs/specs/spec-github-agent-bot-feedback.md`): the working sign (🚀 and
+> `bot: working`, "When the bot is working"), `status: plan-review`, `ready-for-dev` after every approval, 18 labels
+> with their descriptions kept up to date, the startup sweep, the wait in "Usage data", the invariant script.
 
 **End state:** you open an issue in your sandbox repo, and within a few seconds its webhook is stored, checked
 and accepted: `npm run db:events` shows the row `DONE`, the app log shows `accepted ISSUE_OPENED`, and the issue
@@ -420,7 +423,8 @@ npm run db:migrate   # applies the migrations
 
 **After pulling new code**, run `npm run db:migrate` again before `npm run dev`: a spec can add a column or a
 table (spec 2 added `external_ref` and filled it for the rows you already have; spec 4 added the
-`execution_logs` table; spec 5 added the `tasks` and `runs` tables; spec 6 the four Grill tables, "Usage data").
+`execution_logs` table; spec 5 added the `tasks` and `runs` tables; spec 6 the four Grill tables, "Usage data"; spec
+13 moved every `full-sdd` issue whose Plan waits to `plan-review`, and the next start fixes its label).
 Nothing is deleted.
 
 **Your data** lives in a named Docker volume and survives `npm run db:down` / `db:up`, `docker compose
@@ -444,13 +448,29 @@ URL exactly.
 
 **First start.** Before it listens, the app checks GitHub: it finds the App's installation on `TARGET_REPO`,
 checks its permissions, looks up the bot user and creates the bot labels that are missing. The first start
-creates the 16 labels of "Reference: labels"; later starts find them. (A sandbox set up before spec 4 gets the
-five model labels at its next start: `5 created, 11 already present`.) The app calls no model at startup.
+creates the 18 labels of "Reference: labels"; later starts find them. A `status: *` label or `bot: working` whose
+description differs from the bot's gets the bot's description back (never its colour or name; a label you assign is
+never touched). (A sandbox set up before spec 13 gets the two new labels and `ready-for-dev`'s new description at
+its next start: `2 created, 1 updated, 15 already present`.) The app calls no model at startup.
 
 ```text
-Labels on <you>/sdd-agent-sandbox: 16 created, 0 already present
+Labels on <you>/sdd-agent-sandbox: 18 created, 0 updated, 0 already present
 GitHub ready: <your-app>[bot] on <you>/sdd-agent-sandbox (installation <id>)
 ```
+
+Right after the `Webhook URL` line, before it takes its first event, the bot repairs what a crash left on GitHub
+(the startup sweep, spec 13): a `bot: working` label whose work ended, and a status label that differs from the
+database. One line per repair and one summary:
+
+```text
+#90 working off (startup sweep)
+#90 working label left for event <delivery> (pending)
+#91 status label repaired: plan-review
+startup sweep: 1 working label removed, 1 left for its event, 1 status label repaired, 0 skipped (lease held), 0 failed
+```
+
+"Left for its event": the work was interrupted and runs again now; it takes the label down when it ends. A GitHub
+failure is one line (`#90 startup sweep failed: …`) and never stops the app: the next event on that issue finishes it.
 
 If a check fails, the app prints one message and exits with code 1; the port is never opened. Fix the cause,
 then stop `npm run dev` (Ctrl+C) and start it again: it doesn't watch `.env`.
@@ -687,6 +707,17 @@ node --env-file-if-exists=.env scripts/bot-data-protection-invariants.mjs 79 80 
 Three invariants: no webhook payload, prompt, answer, Grill answer or document stored since then matches a secret
 pattern (it names the row and the kind, never the value); at most one 🔑 notice per text on the issues you name,
 each by the App; no `read_file` or `list_files` row gave a hidden path (`.env`, `CLAUDE.md`, `.github-agent/`, …).
+
+**Spec 13's invariant check**, with the app idle, over the issues you name (their labels, comments and each human
+comment's reactions with `gh`, and their rows):
+
+```sh
+node --env-file-if-exists=.env scripts/bot-feedback-invariants.mjs 90 91   # every issue number
+```
+
+Four invariants: no issue carries `bot: working` and no task has a mark; no comment has both the bot's 🚀 and 👀;
+every 🚀 by the bot is on a comment whose event called the model while its sign was on, or on an accepted `/retry`;
+no `full-sdd` issue shows `status: ready-for-dev` while its Plan waits for `/approve`.
 
 ## 11. Check the GitHub App with the smoke script
 
@@ -930,6 +961,10 @@ q "SELECT d.kind, a.result, count(*) AS questions, count(*) FILTER (WHERE EXISTS
   count(*) FILTER (WHERE d.approved_at > a.created_at) AS then_approved, \
   date_trunc('second', avg(d.approved_at - a.created_at)) AS avg_delay FROM document_actions a \
   JOIN task_documents d ON d.id = a.document_id WHERE a.action = 'approve-asked' GROUP BY d.kind, a.result ORDER BY 1, 2"
+# Spec 13: how long people wait for an answer that calls the model (from the sign on to its end, retries included)
+q "SELECT external_ref, event_name, action, attempts, working_started_at::time(0) AS started, \
+  round(extract(epoch FROM working_ended_at - working_started_at)) AS wait_s FROM webhook_events \
+  WHERE working_started_at IS NOT NULL ORDER BY received_at DESC LIMIT 10"
 ```
 
 ## When the bot asks questions
@@ -998,9 +1033,10 @@ what it read.
   bot was still writing it gets one reply saying so.
 - **`/approve`** (an Approver; the whole comment, spaces and case don't matter): in `full-sdd` the bot writes the
   **Plan** from the approved text, with the `plan` skill (one comment "**Plan v1** … from the approved Spec v1",
-  then `status: ready-for-dev`, which until spec 13 also means the Plan waits for `/approve`). In `spec-code`, and
-  for the Plan, the next step is the code: until spec 8 the run stops at `workspace` (step 9, "The `workspace`
-  stop"). `/approve please` gets a hint once; an `/approve` written before the document was posted, on a document
+  then `status: plan-review` while it waits for `/approve`). In `spec-code`, and for the Plan, every approval is in:
+  `status: ready-for-dev`, and the next step is the code: until spec 8 the run stops at `workspace` (step 9, "The
+  `workspace` stop"). In `ready-for-dev`, `/refresh` and `/restore` get one reply (every approval is in), and an
+  `/approve` gets "already approved". `/approve please` gets a hint once; an `/approve` written before the document was posted, on a document
   that is gone or empty, or where nothing waits, gets one reply saying why. Every reply links the comment it answers.
 - **When `main` changed files a document read**, its `/approve` doesn't count yet: the bot asks first, in one reply
   that names the files ("which it read", "which the approved Spec read"; a step skill's file names its skill), a
@@ -1100,6 +1136,30 @@ never by the model's judgment (spec 12). A sentence in the prompt is only an ext
   issue). A glob that matches nothing is allowed. `[]` protects only the floor.
 - **Where it is read:** `workflow.json` at the step's commit of `TARGET_BASE_BRANCH`, never the bot's branch: a
   change to `protectedPaths` counts only after a human merges it, and the floor protects the file itself.
+
+## When the bot is working
+
+When your action makes the bot call the model (minutes for a Spec or a Plan), it shows it within seconds of its
+turn, before the answer (spec 13):
+
+- **🚀 on your comment** (a Grill answer, `/approve`, `/refresh`) and **the label `bot: working`** on the issue, next
+  to the status label. A label you added (a `workflow:` label, `grill: skip`) has no comment: the label only.
+- **When the answer is posted** (questions, a Spec, a Plan, a refresh, or a stop comment) and the status label set,
+  `bot: working` comes off. The 🚀 stays as a record, except on a Grill answer the bot only read ("the rest later"):
+  there 👀 replaces it.
+- **An accepted `/retry`** gets 🚀 at once; the step it continues shows `bot: working` a few seconds later.
+- **No sign** for anything answered by a reply (nothing to approve, a near-miss `/approve`, the question when `main`
+  changed files a document read), a plain comment, or an event waiting behind another issue's work (one event at a
+  time: it shows when its turn comes).
+- **Through retries:** a brief Google failure is tried again 5 s, then 30 s later; the label stays on. After a final
+  failure, the stop comment and `status: needs-human` come first, then the label comes off.
+- **After a crash** the label stays on GitHub until the next start; the startup sweep (step 7) takes it down, or the
+  interrupted work runs again and takes it down when it ends.
+- **Removing `bot: working` by hand** stops nothing (the bot never reads the label); a retried attempt shows it again.
+  Adding it by hand is ignored (`other-label`).
+
+App log: `#90 working on (event <delivery>)`, then `#90 working off`. If GitHub can't be reached to remove it:
+`#90 working off failed: <message>`; the next event on the issue (or the next start) removes it.
 
 ## When an issue is in `needs-human`
 
@@ -1203,9 +1263,10 @@ The bot asks GitHub for the sender's role on the repo each time it processes an 
 
 ## Reference: labels
 
-The bot creates these 16 labels when it starts, if they're missing (names compared case-insensitively). Don't
-create them by hand. The bot never edits or deletes a label, so a color or description you change stays.
-`status: *` labels are set by the bot only; `workflow: *`, `grill: skip` and `model: max-*` by humans only, the
+The bot creates these 18 labels when it starts, if they're missing (names compared case-insensitively). Don't
+create them by hand. The bot never deletes a label and never changes a colour or a name, so a colour you change
+stays; since spec 13 it puts back the description of a `status: *` label or `bot: working` that differs.
+`status: *` labels and `bot: working` are set by the bot only; `workflow: *`, `grill: skip` and `model: max-*` by humans only, the
 model labels by Approvers only. A label never holds a model name: the models are in `workflow.json`.
 `grill: skip` on the issue when a run starts skips Grill Me; added while the bot is asking, it stops the
 questions, and the bot writes the Spec from the issue and the answers so far ("When the bot asks questions").
@@ -1215,10 +1276,12 @@ questions, and the bot writes the Spec from the issue and the answers so far ("W
 | `status: draft` | `ededed` | Bot-managed: not started. Add a workflow label to start. |
 | `status: grilling` | `fbca04` | Bot-managed: asking clarifying questions. |
 | `status: spec-review` | `c5def5` | Bot-managed: Spec posted, waiting for /approve. |
-| `status: ready-for-dev` | `0e8a16` | Bot-managed: waiting for /approve to start the Coder. |
+| `status: plan-review` | `bfd4f2` | Bot-managed: Plan posted, waiting for /approve. |
+| `status: ready-for-dev` | `0e8a16` | Bot-managed: approved and ready for the Coder; in code-only, waiting for /approve to start it. |
 | `status: executing` | `1d76db` | Bot-managed: the Coder is running. |
 | `status: in-review` | `5319e7` | Bot-managed: PR opened; Quality Gate and human review. |
 | `status: needs-human` | `b60205` | Bot-managed: stopped. Remove and re-add the workflow label to restart. |
+| `bot: working` | `d93f0b` | Bot-managed: the bot is working on this issue; removed when it ends. |
 | `workflow: full-sdd` | `0052cc` | Human-assigned: Grill Me → Spec → Plan → Coder → Quality Gate. |
 | `workflow: spec-code` | `0052cc` | Human-assigned: Grill Me → Spec → Coder → Quality Gate. |
 | `workflow: code-only` | `0052cc` | Human-assigned: Coder → Quality Gate, after /approve. |
