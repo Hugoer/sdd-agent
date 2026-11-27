@@ -1,6 +1,8 @@
 # Spec #13 — GitHub AI Agent: Bot Feedback
 
-> **Created:** 2026-11-26 · **Status:** approved 2026-11-26 (draft the same day). BF1–BF10 come from the interview of 2026-11-26 and were
+> **Created:** 2026-11-26 · **Status:** built and verified 2026-11-27 (the matrix on sandbox issues #90–#100; one
+> row, `#F`'s Wi-Fi outage, waits for the developer to toggle the Wi-Fi, written down with the run and the test that
+> cover it) · approved 2026-11-26 (draft the same day). BF1–BF10 come from the interview of 2026-11-26 and were
 > confirmed by the developer; BFW1–BFW15 were decided while writing (to review). A fresh-context review's fixes are
 > applied (marked "2026-11-26, review"); its one choice became BF10. In the write-time interview of 2026-11-26 the
 > developer changed BFW7 (label descriptions updated at startup) and BFW8 (the wait stored per event); the other BFW
@@ -530,37 +532,50 @@ from `webhook_events.received_at` to the `created_at` of the issue's `labeled bo
 …/issues/<n>/events`, and of the bot's 🚀, `…/reactions`).
 
 **The working sign** (`#A`, `full-sdd`)
-- [ ] Add `workflow: full-sdd` → `bot: working` within seconds, NO reaction anywhere; the questions posted; then
-  `bot: working` gone; `working_event_id` null.
-- [ ] Answer every question in one comment → 🚀 on it within seconds + `bot: working`; the Spec posted under
-  `status: spec-review`; then `bot: working` gone, 🚀 still there.
-- [ ] (`#B`, `full-sdd`, asking) Answer one question only, saying the rest comes later → 🚀 then 👀; at the end the
-  comment has 👀 only (NO 🚀 by the bot); `bot: working` gone.
-- [ ] `#A`: `/approve` the Spec → 🚀 + `bot: working` within seconds; the Plan posted; the status label `status:
-  plan-review` (NOT `ready-for-dev`); then `bot: working` gone.
-- [ ] `#A`: `/refresh` → 🚀 + `bot: working`; "still up to date" or v2; then gone. (2026-11-26, plan: with `main`
+- [x] Add `workflow: full-sdd` → `bot: working` within seconds, NO reaction anywhere; the questions posted; then `bot:
+  working` gone; `working_event_id` null. (2026-11-27, #92: the label event received 23:58:29, `bot: working`
+  23:58:32, the questions, the label gone 23:59:36; mark null.)
+- [x] Answer every question in one comment → 🚀 on it within seconds + `bot: working`; the Spec posted under `status:
+  spec-review`; then `bot: working` gone, 🚀 still there. (2026-11-27, #92: received 00:21:22, 🚀 and the label
+  00:21:26.)
+- [x] (`#B`, `full-sdd`, asking) Answer one question only, saying the rest comes later → 🚀 then 👀; at the end the
+  comment has 👀 only (NO 🚀 by the bot); `bot: working` gone. (2026-11-27, #93: the evaluation WAITING,
+  "acknowledgeComment … (🚀 removed)"; 👀 only at the end.)
+- [x] `#A`: `/approve` the Spec → 🚀 + `bot: working` within seconds; the Plan posted; the status label `status:
+  plan-review` (NOT `ready-for-dev`); then `bot: working` gone. (2026-11-27, #92: received 00:24:49, 🚀 00:24:54; Plan
+  v1; `status: plan-review`.)
+- [x] `#A`: `/refresh` → 🚀 + `bot: working`; "still up to date" or v2; then gone. (2026-11-26, plan: with `main`
   unmoved since the Plan, `/refresh` answers "nothing changed" with no model call and no sign, so the row first
-  commits a file no document read, `docs/bot-feedback-matrix.md`.)
-- [ ] `#A`: a plain comment while the Plan waits → NO 🚀, NO label (row 20).
-- [ ] The usage query (see "Usage data"): one row per event above that showed the sign, with a `wait_s`; NO row for
-  the plain comment.
+  commits a file no document read, `docs/bot-feedback-matrix.md`.) (2026-11-27, #92: after the commit of
+  `docs/bot-feedback-matrix.md`; received 00:26:20, 🚀 + label 00:26:26; "both still up to date"; the label gone
+  00:27:01.)
+- [x] `#A`: a plain comment while the Plan waits → NO 🚀, NO label (row 20). (2026-11-27, #92: `no-transition`, no
+  reaction, no working time.)
+- [x] The usage query (see "Usage data"): one row per event above that showed the sign, with a `wait_s`; NO row for
+  the plain comment. (2026-11-27: 13 rows on #92–#100, none for the plain comment, the `/retry` comments or #96; #95
+  counts from its first attempt, 890 s over 3 attempts, #99 80 s over 3.)
 
 **No sign without a model call**
-- [ ] `#B` while asking: `/approve` → spec 7's reply, NO 🚀, NO `bot: working` at any time (timeline).
-- [ ] An issue with no run: `/retry` → the reply, NO 🚀, NO label.
-- [ ] (`#C`, a Spec waiting) Push a change to a file it read, `/approve` → spec 14's question, NO 🚀, NO label.
+- [x] `#B` while asking: `/approve` → spec 7's reply, NO 🚀, NO `bot: working` at any time (timeline). (2026-11-27,
+  #93: spec 6's reply "There's nothing to approve yet …"; no label event after the partial answer's.)
+- [x] An issue with no run: `/retry` → the reply, NO 🚀, NO label. (2026-11-27, #100.)
+- [x] (`#C`, a Spec waiting) Push a change to a file it read, `/approve` → spec 14's question, NO 🚀, NO label.
+  (2026-11-27, #94: `eslint.config.mjs`, read only by its Spec and two waiting Plans that got no `/approve`;
+  `approve-asked`; put back after the matrix.)
 
 **The statuses**
-- [ ] `#A`: `/approve` the Plan → `status: ready-for-dev`, then the `workspace` stop: `status: needs-human`, the stop
+- [x] `#A`: `/approve` the Plan → `status: ready-for-dev`, then the `workspace` stop: `status: needs-human`, the stop
   comment; ~~`db:runs` "before stop"~~ the task query's `status_before_stop` (2026-11-26, plan) `ready-for-dev`; NO
-  sign.
-- [ ] (`#D`, `spec-code`) `/approve` the Spec → `ready-for-dev`, then the `workspace` stop; NO Plan.
-- [ ] (`#E`, `code-only`) Add the lane → "Ready to code" under `status: ready-for-dev`; `/approve` → the `workspace`
-  stop.
-- [ ] `#A` after the stop: `/retry` → 🚀 on the `/retry` (BF10), `status: ready-for-dev` again, the `/approve` runs
+  sign. (2026-11-27, #92: `ready-for-dev` 00:27:29, `needs-human` 00:27:31; no reaction on the `/approve`.)
+- [x] (`#D`, `spec-code`) `/approve` the Spec → `ready-for-dev`, then the `workspace` stop; NO Plan. (2026-11-27, #95.)
+- [x] (`#E`, `code-only`) Add the lane → "Ready to code" under `status: ready-for-dev`; `/approve` → the `workspace`
+  stop. (2026-11-27, #96.)
+- [x] `#A` after the stop: `/retry` → 🚀 on the `/retry` (BF10), `status: ready-for-dev` again, the `/approve` runs
   again → the same `workspace` stop; NO "already approved" reply; NO `bot: working` (2026-11-26, review; was a
-  `/refresh` row, which tests `needs-human`).
-- [ ] `#A` stopped: `/refresh` → spec 7's "nothing waits" reply (the approved Plan).
+  `/refresh` row, which tests `needs-human`). (2026-11-27, #92: received 00:27:45.8, 🚀 00:27:46; stop 2; no
+  `approve-refused` comment; no `bot: working` event after the refresh.)
+- [x] `#A` stopped: `/refresh` → spec 7's "nothing waits" reply (the approved Plan). (2026-11-27, #92: "has nothing to
+  refresh now: run 1 is stopped …".)
 
 **Retries, failures, crashes**
 - [ ] (`#F`, Spec waiting) Wi-Fi off right after `/approve` (the waiting script), back within ~20 s → the label stays
@@ -569,13 +584,20 @@ from `webhook_events.received_at` to the `created_at` of the issue's `labeled bo
   the worker retries 5 s, then 30 s after a failure, so with Wi-Fi back within ~20 s the Plan comes at attempt 2 or 3.
   The waiting script, in the plan's Checkpoint 5: it waits for `#F working on` after the `/approve`, says "Wi-Fi off",
   waits for `attempt 1/3 failed` (at most 60 s), says "Wi-Fi on", waits for `#F working off` and writes the issue
-  events, `attempts` and `wait_s` to a file.)
-- [ ] (`#G`) Break the `plan` model in `workflow.json` (one sandbox commit), `/approve` the Spec → 🚀 + label; the stop
-  comment; then `bot: working` gone; status `needs-human`. Fix the commit, `/retry` → 🚀 on the `/retry` within
-  seconds (BF10), ~~`plan-review`, then the label, the Plan, the label gone~~ (2026-11-26, plan: the stop came before
-  `plan-review` was set) `spec-review`, then the label, the Plan under `plan-review`, the label gone.
-- [ ] (`#H`) Kill the app (`kill -9`) while the Plan is written → the label stays on GitHub; restart → the sweep log
-  leaves it (event `PENDING`); the Plan posted; then the label gone.
+  events, `attempts` and `wait_s` to a file.) (2026-11-27: not run yet: it needs the developer to turn the Wi-Fi off
+  and on. #97 waits with its Spec for it. The same behaviour happened by itself on #95: the model gave no answer
+  twice, the label stayed on through both retries, `attempts` 3, `wait_s` 890 from the first attempt; and
+  `test/bot-feedback.integration.spec.ts` "a transient error after working() → the label stays …" covers it.)
+- [x] (`#G`) Break the `plan` model in `workflow.json` (one sandbox commit), `/approve` the Spec → 🚀 + label; the stop
+  comment; then `bot: working` gone; status `needs-human`. Fix the commit, `/retry` → 🚀 on the `/retry` within seconds
+  (BF10), ~~`plan-review`, then the label, the Plan, the label gone~~ (2026-11-26, plan: the stop came before
+  `plan-review` was set) `spec-review`, then the label, the Plan under `plan-review`, the label gone. (2026-11-27,
+  #98: `gemini-bot-feedback-missing`, `unknown-model`, `status_before_stop` `spec-review`; `/retry` received
+  00:30:05.6, 🚀 00:30:07, then the label 00:30:13, Plan v1 under `plan-review` 00:31:05, the label gone 00:31:07.)
+- [x] (`#H`) Kill the app (`kill -9`) while the Plan is written → the label stays on GitHub; restart → the sweep log
+  leaves it (event `PENDING`); the Plan posted; then the label gone. (2026-11-27, #99: `kill -9` with the label on and
+  the event `PROCESSING`; the next start: "reset 1 interrupted event(s)", "#99 working label left for event …
+  (pending)", "0 working labels removed, 1 left for its event"; Plan v1 under `plan-review`, the label gone.)
 - [x] Leftover: set a task's mark to a `DONE` event with SQL and add `bot: working` with `gh` → restart → the sweep
   removes it; `working_event_id` null; the log's summary line. (2026-11-27, Checkpoint 3, #90: "startup sweep: 1
   working label removed, 0 left for its event, 0 status labels repaired, 0 skipped (lease held), 0 failed".)
@@ -594,19 +616,23 @@ from `webhook_events.received_at` to the `created_at` of the issue's `labeled bo
   and restart → back to BF6's, "1 updated"; recolour it → the colour stays. (2026-11-26, Checkpoint 1: as written;
   "0 created, 1 updated, 17 already present" after the hand edit, "0 updated" after recolouring to `0e8a17`, which
   stayed; `0e8a16` put back; `npm run github:smoke -- --issue 91`: every line `PASS`.)
-- [ ] A person removes `bot: working` during work → NOT put back; the work ends normally. A person adds it to an idle
-  issue → `db:events` `IGNORED` `other-label`.
+- [x] A person removes `bot: working` during work → NOT put back; the work ends normally. A person adds it to an idle
+  issue → `db:events` `IGNORED` `other-label`. (2026-11-27, #95: removed by hand at 00:04:44 while the Spec was
+  written, NOT put back in that attempt; the sandbox's model then hung twice (300 s each, `provider-unavailable`), and
+  each retried attempt showed it again, as FP2 says; the third attempt posted the Spec and removed it. The person's
+  `unlabeled` event `IGNORED` `other-label`. Added by hand on #100 → `other-label`.)
 
 **Invariants** (`node scripts/bot-feedback-invariants.mjs <issues>`, with the app idle)
-- [ ] No issue carries `bot: working`, and no task has a mark.
-- [ ] No comment carries both 🚀 and 👀 by the bot.
-- [ ] Every 🚀 by the bot is on a comment whose event (`webhook_events`, by the comment id in its payload) has
+- [x] No issue carries `bot: working`, and no task has a mark. (2026-11-27: `node --env-file-if-exists=.env
+  scripts/bot-feedback-invariants.mjs 92 93 94 95 96 97 98 99 100`, all four passed: 43 comments, 62 model rows.)
+- [x] No comment carries both 🚀 and 👀 by the bot.
+- [x] Every 🚀 by the bot is on a comment whose event (`webhook_events`, by the comment id in its payload) has
   `execution_logs` rows of the same task ~~between its `received_at` and its `processed_at` (2026-11-26, review:
   `execution_logs` has no event id; one event at a time makes the window exact)~~ within its own `working_started_at`
   … `working_ended_at` (2026-11-26, plan FP24, confirmed: `execution_logs` has no event id, and an event's
   `received_at` … `processed_at` includes its wait behind another event of the issue, so a 🚀 wrongly put on the
   second comment of a burst would pass), or is an accepted `/retry` (BF10).
-- [ ] No `full-sdd` issue shows `status: ready-for-dev` while its current Plan isn't approved.
+- [x] No `full-sdd` issue shows `status: ready-for-dev` while its current Plan isn't approved.
 
 ## Success criteria
 

@@ -2,7 +2,8 @@
 
 > **Created:** 2026-11-26 · **Status:** draft 2026-11-26; fresh-context review 2026-11-26, its fixes with no choice
 > applied (see "Review"); FP1, FP2, FP23 (GitHub-visible) and FP3, FP24 (write-time) confirmed one at a time the same
-> day, all as recommended; approved 2026-11-26 (`f5a2bc4`); build started 2026-11-26
+> day, all as recommended; approved 2026-11-26 (`f5a2bc4`); built and verified 2026-11-27 (T0–T14; `#F`'s Wi-Fi row
+> waits for the developer, see the spec's matrix)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-feedback.md` (spec 13,
 > `bot-feedback`, approved 2026-11-26 in `cb27de3`) into ordered, verifiable tasks (skill
@@ -188,9 +189,9 @@ seed script", labels `grill: skip` and `workflow: full-sdd`), wait for Spec v1, 
 check `tasks.status = 'ready-for-dev'` for `#I` and its Plan's `approved_at` null; stop my instance.
 
 **Acceptance criteria:**
-- [ ] Every fix is in the spec and the overview, each marked "2026-11-26, plan"; the spec's status line names this
+- [x] Every fix is in the spec and the overview, each marked "2026-11-26, plan"; the spec's status line names this
   plan.
-- [ ] `#I` waits with Plan v1 under `status: ready-for-dev` (DB and label).
+- [x] `#I` waits with Plan v1 under `status: ready-for-dev` (DB and label).
 
 **Verification:** `git diff docs/specs` shows only those lines; the task query for `#I`.
 
@@ -206,11 +207,11 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 `plan`. The fake's label list. Nothing sets `plan-review` yet.
 
 **Acceptance criteria:**
-- [ ] An empty repo gets 18 labels; a repo with spec 4's 16 gets 2 created, 1 updated (`ready-for-dev`'s
+- [x] An empty repo gets 18 labels; a repo with spec 4's 16 gets 2 created, 1 updated (`ready-for-dev`'s
   description, `PATCH` with the description only); a recoloured `status: ready-for-dev` keeps its colour; a
   human label with a different description is never touched; nothing is deleted.
-- [ ] `removeLabel('bot: working')` is refused (spec 3 A4: not a human label).
-- [ ] Every row of "18 labels" and "`TaskStatus` gains `plan-review`" above passes.
+- [x] `removeLabel('bot: working')` is refused (spec 3 A4: not a human label).
+- [x] Every row of "18 labels" and "`TaskStatus` gains `plan-review`" above passes.
 
 **Verification:** `npx vitest run src/github src/workflow/stop-cause.spec.ts`; the four commands.
 
@@ -225,11 +226,11 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 (FP15) and `npm run github:smoke` (FP14). No caller yet.
 
 **Acceptance criteria:**
-- [ ] `reactWorking`: `POST …/reactions {content: 'rocket'}`, `201`/`200` fine, `404` skipped (a log line), other
+- [x] `reactWorking`: `POST …/reactions {content: 'rocket'}`, `201`/`200` fine, `404` skipped (a log line), other
   errors thrown with their kind; `setWorkingLabel(true)` adds `bot: working`, `false` removes it, `404` counts as
   removed.
-- [ ] `acknowledgeComment` adds 👀, then removes only the bot's own 🚀 (a person's 🚀 stays); no 🚀 → no `DELETE`.
-- [ ] Every row of "The port" above passes; the smoke's three new `PASS` lines in its unit test.
+- [x] `acknowledgeComment` adds 👀, then removes only the bot's own 🚀 (a person's 🚀 stays); no 🚀 → no `DELETE`.
+- [x] Every row of "The port" above passes; the smoke's three new `PASS` lines in its unit test.
 
 **Verification:** `npx vitest run src/github src/secret-scan test/fakes`; the four commands.
 
@@ -248,7 +249,7 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
   already present"; I recolour it to `0e8a17`, restart → the colour stays, "0 updated"; I put `0e8a16` back. I stop my
   instance and run `npm run github:smoke -- --issue <a sandbox test issue>`: every line `PASS`. Matrix row
   "Startup log" ticked.
-- [ ] You review and commit; you may run `npm run dev` again until T5.
+- [x] You review and commit; you may run `npm run dev` again until T5.
 
 ### Phase 2: The statuses and the migration
 
@@ -259,8 +260,8 @@ plan-review` and `bot: working`, `ready-for-dev`'s description becomes BF6's (BF
 `ready-for-dev` → the claim, no status yet). A pure refactor that T5 then changes in one place.
 
 **Acceptance criteria:**
-- [ ] Every integration suite passes unchanged (same comments, same statuses, same stops).
-- [ ] `decide.spec.ts`: rows 17–19 as one call each, and `APPROVED` per status and lane.
+- [x] Every integration suite passes unchanged (same comments, same statuses, same stops).
+- [x] `decide.spec.ts`: rows 17–19 as one call each, and `APPROVED` per status and lane.
 
 **Verification:** `npx vitest run src/workflow/decide.spec.ts`; the four commands.
 
@@ -276,11 +277,11 @@ waiting document names `lastApproved`; `NOTHING_WAITS` by status and lane with F
 paths for a waiting Plan stay until T5.
 
 **Acceptance criteria:**
-- [ ] `approval-check.spec.ts`: nothing waits in `ready-for-dev` → `done` when this event approved the run's last
+- [x] `approval-check.spec.ts`: nothing waits in `ready-for-dev` → `done` when this event approved the run's last
   approved document, else `already-approved` (also when this event approved only an earlier one, the Spec).
-- [ ] A `spec-code` run in `ready-for-dev`, `/approve` from another person → spec 7's "already approved" reply
+- [x] A `spec-code` run in `ready-for-dev`, `/approve` from another person → spec 7's "already approved" reply
   naming the Spec (today: the gate throws), in `test/bot-feedback.integration.spec.ts`.
-- [ ] Every row of "`plan-review` in `src/documents`" passes.
+- [x] Every row of "`plan-review` in `src/documents`" passes.
 
 **Verification:** `npx vitest run src/documents`; `npx vitest run -c vitest.integration.config.ts
 test/documents-store.integration.spec.ts test/bot-feedback.integration.spec.ts`; the four commands.
@@ -300,15 +301,15 @@ otherwise. `waiting('ready-for-dev')` → the go-signal only. The Spec refresh a
 under `plan-review` (`spec.handler.ts:183–188,273`, `plan.handler.ts:188`).
 
 **Acceptance criteria:**
-- [ ] `full-sdd`: Spec `/approve` → Plan v1 under `plan-review`; Plan `/approve` → `ready-for-dev`, then the
+- [x] `full-sdd`: Spec `/approve` → Plan v1 under `plan-review`; Plan `/approve` → `ready-for-dev`, then the
   `workspace` stop with `status_before_stop = 'ready-for-dev'`; `/retry` → `ready-for-dev`, the `/approve` runs again
   as `done` → the same stop, NO reply (BFW6's testable path).
-- [ ] `spec-code`: `/approve` → `ready-for-dev`, then the stop. `code-only`: unchanged (go-signal under
+- [x] `spec-code`: `/approve` → `ready-for-dev`, then the stop. `code-only`: unchanged (go-signal under
   `ready-for-dev`, `/approve` → the stop).
-- [ ] `ready-for-dev` after every approval: `/refresh`, `/restore` → FP1's replies; `/approve` by another person →
+- [x] `ready-for-dev` after every approval: `/refresh`, `/restore` → FP1's replies; `/approve` by another person →
   "already approved" naming the Plan (`full-sdd`) or the Spec (`spec-code`); a near-miss `/approve` → nothing (no
   waiting document); `plan-review`: rows 20, 32–34 as spec 7 had them in `ready-for-dev`.
-- [ ] Every row of "The router produces `plan-review`" passes.
+- [x] Every row of "The router produces `plan-review`" passes.
 
 **Verification:** `npx vitest run src/workflow src/documents`; the integration suites listed; the four commands.
 
@@ -328,11 +329,11 @@ edits; the source changes are a few lines each).
 seeded rows. At the end **you run `npm run db:migrate`** on the dev database (I tell you when).
 
 **Acceptance criteria:**
-- [ ] Seeded: `full-sdd` in `ready-for-dev` with an unapproved current Plan → `plan-review`; with an approved Plan →
+- [x] Seeded: `full-sdd` in `ready-for-dev` with an unapproved current Plan → `plan-review`; with an approved Plan →
   unchanged; with an unapproved Plan superseded by an approved one → unchanged; `code-only` and `spec-code` →
   unchanged; a stopped `full-sdd` run with `status_before_stop = 'ready-for-dev'` and an unapproved Plan →
   `plan-review`; `shown_status` never changed.
-- [ ] After your `npm run db:migrate`, `#I` reads `status = 'plan-review'`, `shown_status = 'ready-for-dev'`.
+- [x] After your `npm run db:migrate`, `#I` reads `status = 'plan-review'`, `shown_status = 'ready-for-dev'`.
 
 **Verification:** the new suite; `npx prisma migrate status` on the dev database after you migrate; the four
 commands.
@@ -343,7 +344,7 @@ commands.
 ### Checkpoint 2: after T3–T6
 
 - [x] The four commands green; the dev database migrated (I did, as you asked on 2026-11-26).
-- [ ] You review and commit. `npm run dev` may run again during T7, and must be stopped when T8 starts; leave `#I`
+- [x] You review and commit. `npm run dev` may run again during T7, and must be stopped when T8 starts; leave `#I`
   alone until Checkpoint 3 (its label still says `ready-for-dev` until the sweep runs).
 
 ### Phase 3: After a restart
@@ -356,7 +357,7 @@ throwing hook is one error line. `ManualEventsWorker` (test, no polling loop) aw
 first `drainOnce()` comes after the sweep. `src/events` still imports no feature module (BFW10).
 
 **Acceptance criteria:**
-- [ ] `events.worker.spec.ts`: the order reset → first tick → hook → first claim, the hook once (not on later
+- [x] `events.worker.spec.ts`: the order reset → first tick → hook → first claim, the hook once (not on later
   ticks); the bootstrap doesn't wait for the hook; a processor without `recover` starts as before; a throwing hook →
   one error line and the worker still claims.
 
@@ -375,13 +376,13 @@ a `PROCESSING` event → skipped; a GitHub failure → one line, the next task. 
 `TaskService.clearWorkingMark(lease, eventId)`. `WorkflowEventProcessor.recover()` calls it.
 
 **Acceptance criteria:**
-- [ ] `bot-feedback-recovery.integration.spec.ts` (booted with `keepData`): a mark on a `DONE`, `FAILED`, deleted
+- [x] `bot-feedback-recovery.integration.spec.ts` (booted with `keepData`): a mark on a `DONE`, `FAILED`, deleted
   event → label removed, mark null; on a `PENDING` event → left; a status differing → its label set and
   `shown_status` updated; `draft` with no label → nothing; a lease owned by a `PROCESSING` event → skipped; a lease
   owned by a `PENDING` event (after `kill -9`) → taken; `setWorkingLabel` failing for one task → one line, the other
   task still done; the summary line.
-- [ ] An empty database: no provider call besides `ensureLabels` (`github-startup.integration:17` unchanged).
-- [ ] With the polling worker (`startApp({ pollingWorker: true })`): the webhook endpoint answers while a sweep
+- [x] An empty database: no provider call besides `ensureLabels` (`github-startup.integration:17` unchanged).
+- [x] With the polling worker (`startApp({ pollingWorker: true })`): the webhook endpoint answers while a sweep
   whose `setStatusLabel` is held open runs; the stored event is claimed only after the sweep ends (FP23).
 
 **Verification:** the new suite; the four commands.
@@ -406,7 +407,7 @@ a `PROCESSING` event → skipped; a GitHub failure → one line, the next task. 
   4. **Migration, second half:** `/approve` on `#I`'s Plan → `status: ready-for-dev`, then the `workspace` stop
      (`needs-human`, the stop comment; the task query shows `status_before_stop = 'ready-for-dev'`). No sign exists yet.
   Stop my instance.
-- [ ] You review and commit.
+- [x] You review and commit.
 
 ### Phase 4: The working sign
 
@@ -421,12 +422,12 @@ so unchanged); `TaskService.markWorking(lease, eventId)` (set when empty or this
 returns whether this event holds it). FP10's lines.
 
 **Acceptance criteria:**
-- [ ] Integration (the service with the fake and the test database): on → mark, 🚀, label, in that order (a fake
+- [x] Integration (the service with the fake and the test database): on → mark, 🚀, label, in that order (a fake
   that fails each step in turn leaves: nothing; a mark only; a mark and 🚀); on twice → one label call each time the
   event holds the mark, 🚀 `200`; on while another unfinished event holds the mark → 🚀 only, the mark unchanged; end
   of the holder → label removed, mark null; end of a non-holder → nothing; end failing → the mark stays; pending on a
   finished holder → removed; on a `PENDING` holder → left.
-- [ ] `working_started_at` kept through a second `on`; `working_ended_at` written only for an event that started.
+- [x] `working_started_at` kept through a second `on`; `working_ended_at` written only for an event that started.
 
 **Verification:** `test/working-sign.integration.spec.ts` (new); the four commands.
 
@@ -443,13 +444,13 @@ the stop, also when there is none); `handle()` runs `pending` first among the pe
 adds 🚀 to the `/retry` before its write (BF10, FP5).
 
 **Acceptance criteria (in `test/bot-feedback.integration.spec.ts`, scripted handlers that call `context.working()`):**
-- [ ] A handler calling `working()` twice → one mark, one 🚀, one label on; the label off after the status label and
+- [x] A handler calling `working()` twice → one mark, one 🚀, one label on; the label off after the status label and
   the handler's comment; mark null.
-- [ ] A transient error after `working()` → the label stays, the retried attempt ends it (one removal); a permanent
+- [x] A transient error after `working()` → the label stays, the retried attempt ends it (one removal); a permanent
   error → the stop comment and `needs-human` first, then the label off.
-- [ ] An attempt after `working()` that fails in intake (`getAccessLevel` failing three times → `FAILED`, no router
+- [x] An attempt after `working()` that fails in intake (`getAccessLevel` failing three times → `FAILED`, no router
   mark), or that intake ignores on its retry → the label off, mark null (review).
-- [ ] The next event on the issue removes a label the holder left (its removal failed); a `/retry` accepted → 🚀 on
+- [x] The next event on the issue removes a label the holder left (its removal failed); a `/retry` accepted → 🚀 on
   it before `setStatusLabel`; refused → no 🚀; a reply-only path (`documents` reply, `/approve` while grilling) → no
   sign.
 
@@ -466,14 +467,14 @@ the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`
 "nothing changed" return, so that reply shows no sign). Grill Me's 👀 already removes the 🚀 (T2).
 
 **Acceptance criteria (`test/bot-feedback.integration.spec.ts`, real handlers, scripted model):**
-- [ ] The label on and off, no reaction, for a run start (Grill's first evaluation; with `grill: skip`, the Spec);
+- [x] The label on and off, no reaction, for a run start (Grill's first evaluation; with `grill: skip`, the Spec);
   🚀 + label for a Grill answer, `/approve` → Plan, `/refresh` with `main` moved; `grill: skip` added while asking →
   the label only.
-- [ ] A Grill answer that waits → 👀 and NO 🚀 at the end (BF8); a burst of three answers → 🚀 on the event's
+- [x] A Grill answer that waits → 👀 and NO 🚀 at the end (BF8); a burst of three answers → 🚀 on the event's
   comment only.
-- [ ] NO sign: `/refresh` with `main` unmoved, spec 14's question, an `/approve` that is refused, the last
+- [x] NO sign: `/refresh` with `main` unmoved, spec 14's question, an `/approve` that is refused, the last
   `/approve` (the `workspace` stop), a step-config stop (before the call), a plain comment.
-- [ ] `webhook_events`: both times set for each event that showed the sign, null for the others.
+- [x] `webhook_events`: both times set for each event that showed the sign, null for the others.
 
 **Verification:** the suite; the four commands.
 
@@ -484,7 +485,7 @@ the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`
 ### Checkpoint 4: after T9–T11
 
 - [x] The four commands green.
-- [ ] You review and commit (you may try the sign on the sandbox yourself with `npm run dev`).
+- [x] You review and commit (you may try the sign on the sandbox yourself with `npm run dev`).
 
 ### Phase 5: Invariants, docs, matrix
 
@@ -495,12 +496,12 @@ the Spec (`spec.handler.ts:97`), the Plan (`plan.handler.ts:97`), the refresh (`
 words them; the pure checks exported.
 
 **Acceptance criteria:**
-- [ ] Each check has a passing fixture and a failing one in the `.spec.mjs`: a `bot: working` label on a given
+- [x] Each check has a passing fixture and a failing one in the `.spec.mjs`: a `bot: working` label on a given
   issue, a task with a mark; a comment with the bot's 🚀 and 👀; a 🚀 on a comment whose event has no `execution_logs`
   row in its own working window (FP24), including the review's overlap: a second Grill answer whose arrival and end
   span the first answer's model rows but which never started working, which must fail (and one on an accepted `/retry`, which passes; one on a refused `/retry`, which fails); a
   `full-sdd` issue labelled `ready-for-dev` with an unapproved current Plan.
-- [ ] A live run that must fail: I set one task's `working_event_id` with SQL (a `DONE` event, no GitHub change),
+- [x] A live run that must fail: I set one task's `working_event_id` with SQL (a `DONE` event, no GitHub change),
   the script exits 1 naming invariant 1; I clear it, the script exits 0 on `#I`.
 
 **Verification:** `npm test` (the `.spec.mjs` runs with the unit suite); the live run.
@@ -518,15 +519,17 @@ means …"). This repo's `AGENTS.md` (State) and the README's built list. Check 
 (applied at approval) still match FP1–FP3.
 
 **Acceptance criteria:**
-- [ ] `grep -n -e "16 labels" -e "16 created" -e "until spec 13" -e "waiting for /approve to start the Coder"
+- [x] `grep -n -e "16 labels" -e "16 created" -e "until spec 13" -e "waiting for /approve to start the Coder"
   docs/guides/setup-github-agent-local.md README.md` finds nothing.
-- [ ] The guide names every log line of FP10 a developer may see.
+- [x] The guide names every log line of FP10 a developer may see.
 
 **Verification:** read-through; the grep.
 
 **Dependencies:** T12. **Files:** the guide, `AGENTS.md`, `README.md`. **Scope:** S (docs).
 
-- [ ] **Task 14: The verification matrix**
+- [x] **Task 14: The verification matrix** (2026-11-27: `#A`–`#J` are #92–#100; the sandbox's model hung on #95,
+  so one commit switched `workflow.json` to `gemini-4-hydrogen` and one switched it back after; step 10 (`#F`, Wi-Fi)
+  waits for the developer)
 
 **Description:** I run every row I can (build, my instance on port 3000 with the dev database and your tunnel, SQL,
 log grep, tests); the sandbox GitHub steps with `gh` as you, on `Hugoer/sdd-agent-sandbox` only, once you say so
@@ -593,8 +596,9 @@ spec's and this plan's status lines say "built and verified 2026-…".
 
 ### Checkpoint 5: complete
 
-- [ ] Every matrix row and invariant passes; the sandbox's `main` has the same files as before the matrix.
-- [ ] You commit.
+- [x] Every matrix row and invariant passes, except `#F`'s Wi-Fi row (written down: it needs the developer at the
+  Mac); the sandbox's `main` has the same files as before the matrix (compare `7716245…main`: 0 files).
+- [x] You commit.
 
 ## Review (fresh context, 2026-11-26)
 
