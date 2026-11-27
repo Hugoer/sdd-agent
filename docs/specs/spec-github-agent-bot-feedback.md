@@ -1,8 +1,8 @@
 # Spec #13 — GitHub AI Agent: Bot Feedback
 
 > **Created:** 2026-11-26 · **Status:** built and verified 2026-11-27 (the matrix on sandbox issues #90–#100; one
-> row, `#F`'s Wi-Fi outage, waits for the developer to toggle the Wi-Fi, written down with the run and the test that
-> cover it) · approved 2026-11-26 (draft the same day). BF1–BF10 come from the interview of 2026-11-26 and were
+> row, `#F`'s Wi-Fi outage, ran on 2026-11-27 but the call in flight survived it, so its retry part is written down
+> with the run and the test that cover it) · approved 2026-11-26 (draft the same day). BF1–BF10 come from the interview of 2026-11-26 and were
 > confirmed by the developer; BFW1–BFW15 were decided while writing (to review). A fresh-context review's fixes are
 > applied (marked "2026-11-26, review"); its one choice became BF10. In the write-time interview of 2026-11-26 the
 > developer changed BFW7 (label descriptions updated at startup) and BFW8 (the wait stored per event); the other BFW
@@ -584,9 +584,11 @@ from `webhook_events.received_at` to the `created_at` of the issue's `labeled bo
   the worker retries 5 s, then 30 s after a failure, so with Wi-Fi back within ~20 s the Plan comes at attempt 2 or 3.
   The waiting script, in the plan's Checkpoint 5: it waits for `#F working on` after the `/approve`, says "Wi-Fi off",
   waits for `attempt 1/3 failed` (at most 60 s), says "Wi-Fi on", waits for `#F working off` and writes the issue
-  events, `attempts` and `wait_s` to a file.) (2026-11-27: not run yet: it needs the developer to turn the Wi-Fi off
-  and on. #97 waits with its Spec for it. The same behaviour happened by itself on #95: the model gave no answer
-  twice, the label stayed on through both retries, `attempts` 3, `wait_s` 890 from the first attempt; and
+  events, `attempts` and `wait_s` to a file.) (2026-11-27 12:29 UTC, #97, the waiting script: the Wi-Fi off from the
+  "working on" line for about 60 s; the Plan request in flight (93 s) survived the outage, so no attempt failed:
+  `attempts` 1, ONE `bot: working` added and ONE removed, the Plan posted under `plan-review`, `wait_s` 240. The
+  retry part isn't shown on the sandbox. It happened by itself on #95: the model gave no answer twice, the label
+  stayed on through both retries, `attempts` 3, `wait_s` 890 from the first attempt; and
   `test/bot-feedback.integration.spec.ts` "a transient error after working() → the label stays …" covers it.)
 - [x] (`#G`) Break the `plan` model in `workflow.json` (one sandbox commit), `/approve` the Spec → 🚀 + label; the stop
   comment; then `bot: working` gone; status `needs-human`. Fix the commit, `/retry` → 🚀 on the `/retry` within seconds

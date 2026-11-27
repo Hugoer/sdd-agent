@@ -2,8 +2,8 @@
 
 > **Created:** 2026-11-26 · **Status:** draft 2026-11-26; fresh-context review 2026-11-26, its fixes with no choice
 > applied (see "Review"); FP1, FP2, FP23 (GitHub-visible) and FP3, FP24 (write-time) confirmed one at a time the same
-> day, all as recommended; approved 2026-11-26 (`f5a2bc4`); built and verified 2026-11-27 (T0–T14; `#F`'s Wi-Fi row
-> waits for the developer, see the spec's matrix)
+> day, all as recommended; approved 2026-11-26 (`f5a2bc4`); built and verified 2026-11-27 (T0–T14; `#F`'s Wi-Fi row ran,
+> the call in flight survived the outage: see the spec's matrix)
 >
 > **Why this file exists:** turns the approved spec `docs/specs/spec-github-agent-bot-feedback.md` (spec 13,
 > `bot-feedback`, approved 2026-11-26 in `cb27de3`) into ordered, verifiable tasks (skill
@@ -529,7 +529,7 @@ means …"). This repo's `AGENTS.md` (State) and the README's built list. Check 
 
 - [x] **Task 14: The verification matrix** (2026-11-27: `#A`–`#J` are #92–#100; the sandbox's model hung on #95,
   so one commit switched `workflow.json` to `gemini-4-hydrogen` and one switched it back after; step 10 (`#F`, Wi-Fi)
-  waits for the developer)
+  ran at 12:29 UTC: the in-flight call survived, so its retry part is written down)
 
 **Description:** I run every row I can (build, my instance on port 3000 with the dev database and your tunnel, SQL,
 log grep, tests); the sandbox GitHub steps with `gh` as you, on `Hugoer/sdd-agent-sandbox` only, once you say so
@@ -596,8 +596,8 @@ spec's and this plan's status lines say "built and verified 2026-…".
 
 ### Checkpoint 5: complete
 
-- [x] Every matrix row and invariant passes, except `#F`'s Wi-Fi row (written down: it needs the developer at the
-  Mac); the sandbox's `main` has the same files as before the matrix (compare `7716245…main`: 0 files).
+- [x] Every matrix row and invariant passes, except `#F`'s Wi-Fi row (the call in flight survived the outage: written
+  down with #95's run and the integration test); the sandbox's `main` has the same files as before the matrix (compare `7716245…main`: 0 files).
 - [x] You commit.
 
 ## Review (fresh context, 2026-11-26)
